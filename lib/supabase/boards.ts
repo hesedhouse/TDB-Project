@@ -51,10 +51,12 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
     }
   }
 
-  // 2) 없으면 생성. id는 넣지 않음(DB 자동 생성). keyword, name만 넣음.
+  // 2) 없으면 생성. id는 넣지 않음(DB 자동 생성). keyword, name, title 동일 값으로 넣어 제약 충돌 방지.
+  const displayTitle = `#${normalizedKeyword}`
   const insertPayload = {
     keyword: normalizedKeyword,
-    name: `#${normalizedKeyword}`,
+    name: displayTitle,
+    title: displayTitle,
     expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
   }
   const { data: inserted, error: insertErr } = await supabase

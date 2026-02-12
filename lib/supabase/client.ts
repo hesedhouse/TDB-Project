@@ -3,8 +3,8 @@ import { createClient as createSupabaseClient, type SupabaseClient } from '@supa
 let supabaseInstance: SupabaseClient | null = null
 
 /**
- * Supabase env는 반드시 .env.local 에만 정의해 사용합니다.
- * Next.js가 프로젝트 루트의 .env.local 을 자동 로드하며, .env.example 은 참조하지 않습니다.
+ * Supabase API 키는 .env.local 에만 정의하고, 여기서는 Next.js가 로드한 process.env 만 사용합니다.
+ * .env.example 은 참조하지 않습니다. (No API key found 시: 루트 .env.local 확인 후 dev 서버 재시작)
  */
 function getSupabaseEnv(): { url: string; anonKey: string } | null {
   const url = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim()
