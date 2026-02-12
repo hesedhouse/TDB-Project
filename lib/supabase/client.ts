@@ -3,22 +3,49 @@ import { createClient as createSupabaseClient, type SupabaseClient } from '@supa
 let supabaseInstance: SupabaseClient | null = null
 
 /**
- * Supabase 클라이언트 싱글톤. 앱 전체에서 한 인스턴스만 사용해 "Multiple GoTrueClient" 경고를 방지합니다.
+ * Next.js는 프로젝트 루트의 .env.local 을 자동 로드합니다.
+ * 코드에서는 .env.example 을 참조하지 않고, process.env.NEXT_PUBLIC_* 만 사용합니다.
+ */
+function getSupabaseEnv(): { url: string; anonKey: string } | null {
+  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim()
+  const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '').trim()
+  const hasUrl = url.length > 0
+  const hasKey = anonKey.length > 0
+  if (!hasUrl || !hasKey) {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      console.warn(
+        '[Supabase] env 누락: NEXT_PUBLIC_SUPABASE_URL 또는 NEXT_PUBLIC_SUPABASE_ANON_KEY 가 비어 있습니다.',
+        { hasUrl, hasKey }
+      )
+      console.warn('[Supabase] 프로젝트 루트의 .env.local 에 값을 넣고 dev 서버를 재시작하세요.')
+    }
+    return null
+  }
+  return { url, anonKey }
+}
+
+/**
+ * Supabase 클라이언트 싱글톤.
+ * - .env.local 의 URL·anon key 가 있어야 하며, 없으면 null 반환 (No API key found 방지).
  */
 export function createClient(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anonKey) return null
+  const env = getSupabaseEnv()
+  if (!env) {
+    supabaseInstance = null
+    return null
+  }
   if (supabaseInstance) return supabaseInstance
-  supabaseInstance = createSupabaseClient(url, anonKey)
+  supabaseInstance = createSupabaseClient(env.url, env.anonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  })
   return supabaseInstance
 }
 
 export function isSupabaseConfigured(): boolean {
-  return !!(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  )
+  return getSupabaseEnv() !== null
 }
 
 /** Supabase boards.id 등 UUID 컬럼 형식 검증 (400 에러 방지) */

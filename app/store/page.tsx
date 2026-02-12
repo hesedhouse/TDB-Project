@@ -10,7 +10,7 @@ import { PaymentCurrency, PaymentPayMethod } from '@portone/browser-sdk/v2'
 const PRICE_PER_ONE = 120
 const PRESET_OPTIONS = [1, 10, 100, 1000, 10000]
 
-// 포트원 V2 (토스페이먼츠 테스트). .env로 덮어쓸 수 있음.
+// 포트원 V2 결제 (최종). .env 로 덮어쓸 수 있음.
 const STORE_ID =
   process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? 'store-c88c91a8-6c3c-4df1-a69c-6b08e7169521'
 const CHANNEL_KEY =
