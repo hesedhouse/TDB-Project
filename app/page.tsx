@@ -24,6 +24,11 @@ export default function Home() {
   const handleEntryComplete = (character: number, nickname: string) => {
     setUserCharacter(character)
     setUserNickname(nickname)
+    if (typeof window !== 'undefined' && nickname.trim()) {
+      try {
+        window.localStorage.setItem('tdb-user-nickname', nickname.trim())
+      } catch {}
+    }
     setCurrentView('feed')
   }
 

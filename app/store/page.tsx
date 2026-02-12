@@ -9,6 +9,8 @@ import { PaymentCurrency, PaymentPayMethod } from '@portone/browser-sdk/v2'
 
 const PRICE_PER_ONE = 120
 const PRESET_OPTIONS = [1, 10, 100, 1000, 10000]
+/** 모래시계 1개당 연장 시간(분). UI 문구용. */
+const EXTEND_MINUTES_PER_HOURGLASS = 30
 
 // 포트원 V2 결제 (최종). .env 로 덮어쓸 수 있음.
 const STORE_ID =
@@ -28,6 +30,13 @@ export default function StorePage() {
 
   const customNum = Math.max(0, Math.floor(Number(customQty) || 0))
   const customTotal = customNum * PRICE_PER_ONE
+
+  // 충전 완료 토스트는 잠깐 보여준 뒤 자동 제거
+  useEffect(() => {
+    if (toast !== '충전 완료!') return
+    const t = setTimeout(() => setToast(null), 2500)
+    return () => clearTimeout(t)
+  }, [toast])
 
   const handlePurchase = async (qty: number) => {
     if (qty < 1 || processing) return
@@ -94,32 +103,44 @@ export default function StorePage() {
 
       <main className="px-4 py-6 sm:py-8 max-w-2xl mx-auto">
         <p className="text-gray-400 text-sm text-center mb-8">
-          모래시계로 방 수명을 연장할 수 있어요. (1개 = 1시간 연장)
+          모래시계로 방 수명을 연장할 수 있어요. (1개 = {EXTEND_MINUTES_PER_HOURGLASS}분 연장)
         </p>
 
         {/* 프리셋 카드 */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
           {PRESET_OPTIONS.map((qty) => {
             const total = qty * PRICE_PER_ONE
+            const isPremium = qty >= 100
             return (
               <motion.div
                 key={qty}
-                className="rounded-2xl border border-amber-500/30 bg-white/[0.04] p-4 sm:p-5 flex flex-col"
+                className={`rounded-2xl border bg-white/[0.04] p-4 sm:p-5 flex flex-col min-h-[160px] justify-between items-stretch ${
+                  isPremium
+                    ? 'border-amber-400/50 shadow-[0_0_24px_rgba(251,191,36,0.2)]'
+                    : 'border-amber-500/30'
+                }`}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                <div className="flex items-center justify-center gap-1.5 mb-2">
-                  <span className="text-2xl" aria-hidden>⏳</span>
-                  <span className="font-bold text-lg text-white">× {qty}</span>
+                <div className="flex flex-col items-center justify-center flex-1 min-h-0">
+                  <div className="flex items-center justify-center gap-1.5 mb-2">
+                    <span className="text-2xl" aria-hidden>⏳</span>
+                    <span className="font-bold text-lg text-white">× {qty}</span>
+                  </div>
+                  <p
+                    className="text-amber-400 font-bold mb-4 whitespace-nowrap tabular-nums w-full text-center overflow-hidden min-w-0"
+                    style={{ fontSize: 'clamp(0.875rem, 3.5vw, 1.875rem)' }}
+                  >
+                    {total.toLocaleString()}원
+                  </p>
                 </div>
-                <p className="text-2xl sm:text-3xl font-bold text-amber-400 mb-4">
-                  {total.toLocaleString()}원
-                </p>
                 <motion.button
                   type="button"
                   onClick={() => handlePurchase(qty)}
                   disabled={processing}
-                  className="mt-auto w-full py-2.5 rounded-xl font-semibold bg-amber-500/20 text-amber-400 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-2.5 rounded-xl font-semibold bg-amber-500/20 text-amber-400 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.98 }}
                 >
                   구매하기
                 </motion.button>
@@ -132,7 +153,7 @@ export default function StorePage() {
         <div className="rounded-2xl border border-amber-500/30 bg-white/[0.04] p-5 sm:p-6">
           <h2 className="text-base font-semibold text-amber-400/90 mb-4">직접 입력</h2>
           <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-end">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <label htmlFor="custom-qty" className="block text-xs text-gray-400 mb-1">
                 수량
               </label>
@@ -147,9 +168,13 @@ export default function StorePage() {
                 className="w-full px-4 py-3 rounded-xl bg-black/30 border border-amber-500/30 text-white placeholder-gray-500 focus:border-amber-400 focus:outline-none text-lg tabular-nums"
               />
             </div>
-            <div className="sm:w-40">
+            <div className="sm:w-40 flex flex-col justify-center min-h-[52px]">
               <p className="text-xs text-gray-400 mb-1">결제 금액</p>
-              <p className="text-xl sm:text-2xl font-bold text-amber-400 tabular-nums">
+              <p
+                className={`text-xl sm:text-2xl font-bold tabular-nums transition-colors ${
+                  customNum >= 1 ? 'text-neon-orange' : 'text-amber-400'
+                }`}
+              >
                 {customTotal.toLocaleString()}원
               </p>
             </div>
@@ -158,6 +183,8 @@ export default function StorePage() {
               onClick={() => handlePurchase(customNum)}
               disabled={customNum < 1 || processing}
               className="py-3 px-6 rounded-xl font-semibold bg-amber-500/20 text-amber-400 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              whileHover={customNum >= 1 && !processing ? { y: -2 } : {}}
+              whileTap={{ scale: 0.98 }}
             >
               구매하기
             </motion.button>
@@ -168,7 +195,7 @@ export default function StorePage() {
       <AnimatePresence>
         {toast && (
           <motion.div
-            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 glass-strong px-5 py-3 rounded-2xl text-amber-400 font-semibold text-center border border-amber-400/40 safe-bottom"
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 glass-strong px-5 py-3 rounded-xl text-amber-400 font-semibold text-center border border-amber-400/40 safe-bottom shadow-lg"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 5 }}

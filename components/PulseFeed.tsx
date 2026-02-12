@@ -8,7 +8,8 @@ import type { Post, Board } from '@/lib/mockData'
 import { isSupabaseConfigured, isValidUuid } from '@/lib/supabase/client'
 import { useBoardChat } from '@/lib/supabase/useBoardChat'
 import { uploadChatImage } from '@/lib/supabase/storage'
-import { extendBoardExpiry } from '@/lib/supabase/boards'
+import { extendBoardExpiry, EXTEND_MS_PER_HOURGLASS } from '@/lib/supabase/boards'
+import { recordContribution, getTopContributors, subscribeToContributions, type TopContributor } from '@/lib/supabase/contributions'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
 import { shareBoard } from '@/lib/shareBoard'
 import type { Message } from '@/lib/supabase/types'
@@ -50,6 +51,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   const [timerLabel, setTimerLabel] = useState('0:00:00')
   const [isUnderOneMinute, setIsUnderOneMinute] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
+  const [topContributors, setTopContributors] = useState<TopContributor[]>([])
   const feedEndRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -141,6 +143,16 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
       setBoardExpiresAtOverride(newExpiresAt)
       setShowHourglassToast(true)
       setTimeout(() => setShowHourglassToast(false), 3000)
+      const minutesPerHourglass = Math.round(EXTEND_MS_PER_HOURGLASS / (60 * 1000))
+      let displayName = ''
+      if (typeof window !== 'undefined') {
+        try {
+          displayName = window.localStorage.getItem('tdb-user-nickname') ?? ''
+        } catch {}
+      }
+      const name = (displayName || '').trim() || '익명의 수호자'
+      await recordContribution(boardId, name, minutesPerHourglass)
+      getTopContributors(boardId).then(setTopContributors)
     } finally {
       setExtendingHourglass(false)
     }
@@ -196,6 +208,16 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     }, 2500)
     return () => clearTimeout(t)
   }, [isExpired, onBack])
+
+  // 명예의 전당 TOP 3 조회 + Realtime 구독
+  useEffect(() => {
+    if (!useSupabaseWithUuid) return
+    getTopContributors(boardId).then(setTopContributors)
+    const unsubscribe = subscribeToContributions(boardId, () => {
+      getTopContributors(boardId).then(setTopContributors)
+    })
+    return unsubscribe
+  }, [useSupabaseWithUuid, boardId])
 
   // 하트를 받으면 게시판 수명 연장
   useEffect(() => {
@@ -369,7 +391,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.25 }}
           >
-            시간의 모래가 채워졌습니다! (+1시간)
+            시간의 모래가 채워졌습니다! (+30분)
           </motion.div>
         )}
         {showShareToast && (
@@ -462,7 +484,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
                 whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.03 } : {}}
                 whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.98 } : {}}
               >
-                {extendingHourglass ? '연장 중…' : '⏳ 모래시계 채우기 (+1시간)'}
+                {extendingHourglass ? '연장 중…' : '⏳ 모래시계 채우기 (+30분)'}
               </motion.button>
             )}
             {showLifespanExtended && (
@@ -476,6 +498,24 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
               </motion.div>
             )}
           </div>
+          {useSupabaseWithUuid && topContributors.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-amber-500/20">
+              <p className="text-xs text-amber-400/80 mb-1.5">명예의 전당 TOP 3</p>
+              <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-300">
+                {topContributors.map((c) => (
+                  <li key={`${c.rank}-${c.user_display_name}`} className="flex items-center gap-1.5">
+                    <span aria-hidden>
+                      {c.rank === 1 ? '👑' : c.rank === 2 ? '🥈' : '🥉'}
+                    </span>
+                    <span className="font-medium text-white truncate max-w-[100px]" title={c.user_display_name}>
+                      {c.user_display_name}
+                    </span>
+                    <span className="text-amber-400/90 tabular-nums">+{c.total_minutes}분</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 
