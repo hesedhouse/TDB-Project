@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import DotCharacter from './DotCharacter'
 import { mockBoards, mockPosts, getTimeProgress, extendBoardLifespan, formatRemainingTimer } from '@/lib/mockData'
 import type { Post, Board } from '@/lib/mockData'
-import { isSupabaseConfigured } from '@/lib/supabase/client'
+import { isSupabaseConfigured, isValidUuid } from '@/lib/supabase/client'
 import { useBoardChat } from '@/lib/supabase/useBoardChat'
 import { uploadChatImage } from '@/lib/supabase/storage'
 import { extendBoardExpiry } from '@/lib/supabase/boards'
@@ -30,6 +30,8 @@ type SortType = 'latest' | 'popular'
 
 export default function PulseFeed({ boardId, userCharacter, userNickname, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
   const useSupabase = isSupabaseConfigured()
+  /** Supabase 사용 시 반드시 UUID인 경우만 API 호출 (400 에러 방지) */
+  const useSupabaseWithUuid = useSupabase && isValidUuid(boardId)
 
   const [sortType, setSortType] = useState<SortType>('latest')
   const [posts, setPosts] = useState<Post[]>(mockPosts.filter(p => p.boardId === boardId))
@@ -71,19 +73,19 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   const { messages, send, toggleHeart, sending } = useBoardChat(boardId, {
     userCharacter,
     userNickname,
-    enabled: useSupabase,
+    enabled: useSupabaseWithUuid,
   })
 
   const handleSendMessage = useCallback(async () => {
-    if ((!chatInput.trim()) || sending || uploadingImage || !useSupabase) return
+    if ((!chatInput.trim()) || sending || uploadingImage || !useSupabaseWithUuid) return
     await send(chatInput)
     setChatInput('')
-  }, [chatInput, sending, uploadingImage, useSupabase, send])
+  }, [chatInput, sending, uploadingImage, useSupabaseWithUuid, send])
 
   const handlePhotoSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
-      if (!file || !useSupabase || sending || uploadingImage) return
+      if (!file || !useSupabaseWithUuid || sending || uploadingImage) return
       if (!file.type.startsWith('image/')) return
       e.target.value = ''
       setUploadingImage(true)
@@ -92,12 +94,12 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
       if (imageUrl) await send(chatInput.trim(), imageUrl)
       if (chatInput.trim()) setChatInput('')
     },
-    [useSupabase, boardId, send, sending, uploadingImage, chatInput]
+    [useSupabaseWithUuid, boardId, send, sending, uploadingImage, chatInput]
   )
 
   const handleMessageHeart = useCallback(
     async (messageId: string) => {
-      if (!useSupabase) return
+      if (!useSupabaseWithUuid) return
       const isHearted = heartedIds.has(messageId)
       setHeartAnimations((prev) => new Set([...prev, messageId]))
       const result = await toggleHeart(messageId, isHearted)
@@ -118,11 +120,11 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
         })
       }
     },
-    [useSupabase, toggleHeart, heartedIds]
+    [useSupabaseWithUuid, toggleHeart, heartedIds]
   )
 
   const handleHourglassExtend = useCallback(async () => {
-    if (extendingHourglass || !useSupabase) return
+    if (extendingHourglass || !useSupabaseWithUuid || !isValidUuid(boardId)) return
     const current = getHourglasses()
     if (current <= 0) {
       setHourglassesState(0)
@@ -142,13 +144,13 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     } finally {
       setExtendingHourglass(false)
     }
-  }, [extendingHourglass, useSupabase, boardId])
+  }, [extendingHourglass, useSupabaseWithUuid, boardId])
 
   // 스레드처럼 새 메시지 시 부드럽게 맨 아래로 스크롤
   useEffect(() => {
-    if (!useSupabase || !listRef.current) return
+    if (!useSupabaseWithUuid || !listRef.current) return
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [useSupabase, messages.length])
+  }, [useSupabaseWithUuid, messages.length])
 
   // 초 단위 타이머 + 프로그레스 (1초마다 갱신, unmount 시 clearInterval)
   useEffect(() => {
@@ -416,7 +418,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
             >
               {timerLabel} 남음
             </motion.span>
-            {useSupabase && (
+            {useSupabaseWithUuid && (
               <motion.button
                 type="button"
                 onClick={handleHourglassExtend}
@@ -470,8 +472,8 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
         </motion.button>
       </div>
 
-      {/* 실시간 채팅 (Supabase 연동 시) */}
-      {useSupabase && (
+      {/* 실시간 채팅 (Supabase 연동 시, UUID 보드만) */}
+      {useSupabaseWithUuid && (
         <>
           <div
             ref={listRef}

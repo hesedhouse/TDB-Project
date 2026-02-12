@@ -1,4 +1,5 @@
 import { createClient } from './client'
+import { isValidUuid } from './client'
 
 const ONE_HOUR_MS = 60 * 60 * 1000
 
@@ -60,6 +61,10 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
  * (PromiseLike 타입 이슈 방지를 위해 모든 비동기 호출은 await로 처리합니다.)
  */
 export async function extendBoardExpiry(boardId: string): Promise<Date | null> {
+  if (!isValidUuid(boardId)) {
+    console.error('extendBoardExpiry: boardId must be a valid UUID', boardId)
+    return null
+  }
   const supabase = createClient()
   if (!supabase) return null
 
