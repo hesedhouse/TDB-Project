@@ -17,9 +17,8 @@ export type Board = BoardRow
 
 /**
  * 방 제목(키워드)으로 방을 조회하고, 없으면 새로 생성 후 반환합니다.
- * - 검색은 keyword 컬럼만 사용. id는 검색/입력하지 않음.
- * - DB에는 name 컬럼 사용 (title 아님). 400 나면 boards_migration_add_name.sql 실행.
- * - 반환 타입: Board | null
+ * - DB 컬럼: id(uuid), keyword(text), name(text), expires_at(timestamptz), created_at(timestamptz)
+ * - 검색은 keyword만 사용. id는 검색/입력하지 않음.
  */
 export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardRow | null> {
   const supabase = createClient()
@@ -28,10 +27,11 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
   const normalizedKeyword = keyword.trim()
   if (!normalizedKeyword) return null
 
-  // 1) keyword 컬럼으로만 조회 (id 사용 금지). 컬럼명은 name 통일.
+  // 1) keyword 컬럼으로만 조회 (DB에 keyword, name 컬럼이 있어야 함)
+  const selectColumns = 'id, keyword, name, expires_at, created_at' as const
   const { data: existing, error: selectErr } = await supabase
     .from('boards')
-    .select('id, keyword, name, expires_at, created_at')
+    .select(selectColumns)
     .eq('keyword', normalizedKeyword)
     .maybeSingle()
 
@@ -40,19 +40,26 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
     return null
   }
 
-  if (existing) {
-    return existing as BoardRow
+  if (existing != null) {
+    return {
+      id: existing.id,
+      keyword: existing.keyword,
+      name: existing.name ?? null,
+      expires_at: existing.expires_at,
+      created_at: existing.created_at,
+    }
   }
 
-  // 2) 새 방 생성 시 id는 넣지 않음 → DB가 UUID 자동 생성. name 컬럼 사용.
+  // 2) 없으면 생성. id는 넣지 않음(DB 자동 생성). keyword, name만 넣음.
+  const insertPayload = {
+    keyword: normalizedKeyword,
+    name: `#${normalizedKeyword}`,
+    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  }
   const { data: inserted, error: insertErr } = await supabase
     .from('boards')
-    .insert({
-      keyword: normalizedKeyword,
-      name: `#${normalizedKeyword}`,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    })
-    .select('id, keyword, name, expires_at, created_at')
+    .insert(insertPayload)
+    .select(selectColumns)
     .single()
 
   if (insertErr) {
@@ -60,7 +67,14 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
     return null
   }
 
-  return (inserted as BoardRow) ?? null
+  if (inserted == null) return null
+  return {
+    id: inserted.id,
+    keyword: inserted.keyword,
+    name: inserted.name ?? null,
+    expires_at: inserted.expires_at,
+    created_at: inserted.created_at,
+  }
 }
 
 /**
@@ -77,11 +91,17 @@ export async function getBoardById(id: string): Promise<BoardRow | null> {
     .eq('id', id)
     .maybeSingle()
 
-  if (error) {
-    console.error('getBoardById error:', error)
+  if (error || data == null) {
+    if (error) console.error('getBoardById error:', error)
     return null
   }
-  return data != null ? (data as BoardRow) : null
+  return {
+    id: data.id,
+    keyword: data.keyword,
+    name: data.name ?? null,
+    expires_at: data.expires_at,
+    created_at: data.created_at,
+  }
 }
 
 /**

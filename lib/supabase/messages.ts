@@ -60,7 +60,7 @@ export async function decrementHeart(messageId: string): Promise<number | null> 
   return result
 }
 
-/** messages.heart_count 를 delta만큼 변경 (한 번의 조회·한 번의 업데이트). 반환 타입을 Promise로 명확히 함. */
+/** messages.heart_count 를 delta만큼 변경. 반환: 갱신된 heart_count 또는 null. */
 async function updateHeartCount(
   messageId: string,
   delta: number
@@ -79,9 +79,8 @@ async function updateHeartCount(
     return null
   }
 
-  const row = fetchResult.data
-  const current = row.heart_count ?? 0
-  const newCount = Math.max(0, current + delta)
+  const current: number = Number(fetchResult.data.heart_count) || 0
+  const newCount: number = Math.max(0, current + delta)
 
   const updateResult = await supabase
     .from('messages')
@@ -95,9 +94,8 @@ async function updateHeartCount(
     return null
   }
 
-  const updated = updateResult.data
-  const value = updated?.heart_count ?? newCount
-  return typeof value === 'number' ? value : null
+  const next: number = Number(updateResult.data?.heart_count) ?? newCount
+  return Number.isFinite(next) ? next : null
 }
 
 export function subscribeMessages(

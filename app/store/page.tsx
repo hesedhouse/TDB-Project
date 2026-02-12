@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getHourglasses, setHourglasses } from '@/lib/hourglass'
@@ -18,7 +17,6 @@ const CHANNEL_KEY =
   process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? 'channel-key-5d85fadf-b4c1-4ead-a5b9-aae3f2fe1a6f'
 
 export default function StorePage() {
-  const router = useRouter()
   const [hourglasses, setHourglassesState] = useState(0)
   const [customQty, setCustomQty] = useState<string>('')
   const [toast, setToast] = useState<string | null>(null)
@@ -58,7 +56,7 @@ export default function StorePage() {
       setHourglasses(next)
       setHourglassesState(next)
       setCustomQty('')
-      setToast('모래시계 충전 완료!')
+      setToast('충전 완료!')
     } catch (e) {
       const msg =
         e instanceof Error
