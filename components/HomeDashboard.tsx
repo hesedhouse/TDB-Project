@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import DotCharacter from './DotCharacter'
 import { mockBoards, mockUser, getRemainingTime, getTrendKeywords, filterActiveBoards } from '@/lib/mockData'
@@ -11,12 +12,14 @@ interface HomeDashboardProps {
 }
 
 export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState('')
   const [trendKeywords] = useState<string[]>(getTrendKeywords())
   const [featuredKeywords, setFeaturedKeywords] = useState<Set<string>>(new Set(['맛집', '데이트', '카페']))
   const [userBoards] = useState<Board[]>(filterActiveBoards(mockBoards.slice(0, 2)))
   const [liveBoards] = useState<Board[]>(filterActiveBoards(mockBoards))
   const [warpingBoardId, setWarpingBoardId] = useState<string | null>(null)
+  const [warpingKeyword, setWarpingKeyword] = useState<string | null>(null)
 
   // 더블클릭 감지
   const [lastClickTime, setLastClickTime] = useState<{ [key: string]: number }>({})
@@ -40,6 +43,15 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
       onEnterBoard(boardId)
       setWarpingBoardId(null)
     }, 600)
+  }
+
+  const handleKeywordClick = (keyword: string) => {
+    setWarpingKeyword(keyword)
+    // 짧은 워프 연출 후 상세 페이지로 이동
+    setTimeout(() => {
+      router.push(`/board/${encodeURIComponent(keyword)}`)
+      setWarpingKeyword(null)
+    }, 500)
   }
 
   return (
@@ -98,6 +110,7 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
                   top: `${baseY}%`,
                 }}
                 initial={{ opacity: 0, scale: 0 }}
+                onClick={() => handleKeywordClick(keyword)}
                 animate={{
                   opacity: isFeatured ? [0.8, 1, 0.8] : [0.5, 0.7, 0.5],
                   scale: isFeatured ? [1, 1.15, 1] : [1, 1.05, 1],
@@ -121,11 +134,42 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
                   repeat: Infinity,
                   ease: 'easeInOut',
                 }}
-                whileHover={{ scale: 1.4, zIndex: 10, transition: { duration: 0.2 } }}
+                whileHover={{
+                  scale: 1.4,
+                  zIndex: 10,
+                  boxShadow: '0 0 24px rgba(255,95,0,0.9)',
+                  transition: { duration: 0.18 },
+                }}
               >
                 <span className={`text-xs sm:text-sm font-medium ${isFeatured ? 'text-neon-orange' : 'text-white/90'}`}>
                   #{keyword}
                 </span>
+                {/* 클릭 시 픽셀 파티클 효과 */}
+                <AnimatePresence>
+                  {warpingKeyword === keyword && (
+                    <>
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <motion.span
+                          key={i}
+                          className="absolute w-1.5 h-1.5 bg-neon-orange rounded-sm"
+                          style={{
+                            left: '50%',
+                            top: '50%',
+                          }}
+                          initial={{ opacity: 0.9, scale: 0 }}
+                          animate={{
+                            opacity: [0.9, 0],
+                            scale: [0, 1.6],
+                            x: Math.cos((i * Math.PI * 2) / 6) * 18,
+                            y: Math.sin((i * Math.PI * 2) / 6) * 18,
+                          }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.45, ease: 'easeOut' }}
+                        />
+                      ))}
+                    </>
+                  )}
+                </AnimatePresence>
               </motion.div>
             )
           })}
