@@ -8,6 +8,8 @@ import type { Post, Board } from '@/lib/mockData'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { useBoardChat } from '@/lib/supabase/useBoardChat'
 import { uploadChatImage } from '@/lib/supabase/storage'
+import { extendBoardExpiry } from '@/lib/supabase/boards'
+import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
 import type { Message } from '@/lib/supabase/types'
 
 interface PulseFeedProps {
@@ -31,9 +33,17 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   const [heartAnimations, setHeartAnimations] = useState<Set<string>>(new Set())
   const [chatInput, setChatInput] = useState('')
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [hourglasses, setHourglassesState] = useState(0)
+  const [boardExpiresAtOverride, setBoardExpiresAtOverride] = useState<Date | null>(null)
+  const [showHourglassToast, setShowHourglassToast] = useState(false)
+  const [extendingHourglass, setExtendingHourglass] = useState(false)
   const feedEndRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setHourglassesState(getHourglasses())
+  }, [])
 
   const HEARTED_STORAGE_KEY = 'tdb-hearted'
 
@@ -100,6 +110,22 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     [useSupabase, toggleHeart, heartedIds]
   )
 
+  const handleHourglassExtend = useCallback(async () => {
+    if (hourglasses <= 0 || extendingHourglass || !useSupabase) return
+    setExtendingHourglass(true)
+    const newExpiresAt = await extendBoardExpiry(boardId)
+    setExtendingHourglass(false)
+    if (newExpiresAt == null) return
+    setHourglassesState((prev) => {
+      const next = Math.max(0, prev - 1)
+      persistHourglasses(next)
+      return next
+    })
+    setBoardExpiresAtOverride(newExpiresAt)
+    setShowHourglassToast(true)
+    setTimeout(() => setShowHourglassToast(false), 3000)
+  }, [hourglasses, extendingHourglass, useSupabase, boardId])
+
   // 스레드처럼 새 메시지 시 부드럽게 맨 아래로 스크롤
   useEffect(() => {
     if (!useSupabase || !listRef.current) return
@@ -110,16 +136,15 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     const targetBoard = board ?? (useSupabase ? { createdAt: new Date(), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } : null)
     if (!targetBoard) return
 
+    const effectiveExpiresAt = boardExpiresAtOverride ?? targetBoard.expiresAt
     const updateProgress = () => {
-      const newProgress = getTimeProgress(targetBoard.createdAt, targetBoard.expiresAt)
-      setProgress(newProgress)
+      setProgress(getTimeProgress(targetBoard.createdAt, effectiveExpiresAt))
     }
 
     updateProgress()
-    const interval = setInterval(updateProgress, 60000) // 1분마다 업데이트
-
+    const interval = setInterval(updateProgress, 60000)
     return () => clearInterval(interval)
-  }, [board, useSupabase])
+  }, [board, useSupabase, boardExpiresAtOverride])
 
   // 하트를 받으면 게시판 수명 연장
   useEffect(() => {
@@ -234,10 +259,25 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     )
   }
 
-  const { days, hours, minutes } = getRemainingTime(displayBoard.expiresAt)
+  const effectiveExpiresAt = boardExpiresAtOverride ?? displayBoard.expiresAt
+  const { days, hours, minutes } = getRemainingTime(effectiveExpiresAt)
 
   return (
     <div className="min-h-screen bg-midnight-black text-white safe-bottom">
+      <AnimatePresence>
+        {showHourglassToast && (
+          <motion.div
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 glass-strong px-5 py-3 rounded-2xl text-neon-orange font-bold text-center shadow-lg border border-neon-orange/40"
+            initial={{ opacity: 0, y: -12, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={{ duration: 0.25 }}
+          >
+            ⏳ 모래가 채워졌습니다!
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Top Bar with Progress */}
       <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top">
         <div className="px-3 py-3 sm:p-4">
@@ -249,7 +289,10 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
               ← 뒤로
             </button>
             <h1 className="text-base sm:text-xl font-bold truncate">{displayBoard.name}</h1>
-            <div className="w-8" />
+            <div className="text-sm text-amber-400/90 flex items-center gap-1 flex-shrink-0">
+              <span>⏳</span>
+              <span>보유 모래시계: {hourglasses}개</span>
+            </div>
           </div>
           
           {/* Progress Bar */}
@@ -263,8 +306,20 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
             />
           </div>
           
-          <div className="text-xs text-neon-orange mt-2 text-center relative">
-            {days}일 {hours}시간 {minutes}분 남음
+          <div className="text-xs text-neon-orange mt-2 text-center relative flex flex-col sm:flex-row items-center justify-center gap-2">
+            <span>{days}일 {hours}시간 {minutes}분 남음</span>
+            {useSupabase && (
+              <motion.button
+                type="button"
+                onClick={handleHourglassExtend}
+                disabled={hourglasses <= 0 || extendingHourglass}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.03 } : {}}
+                whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.98 } : {}}
+              >
+                {extendingHourglass ? '연장 중…' : '⏳ 모래시계 채우기 (+1시간)'}
+              </motion.button>
+            )}
             {showLifespanExtended && (
               <motion.div
                 className="absolute -top-8 left-1/2 transform -translate-x-1/2 glass-strong px-4 py-2 rounded-full text-neon-orange font-bold"

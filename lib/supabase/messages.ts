@@ -59,36 +59,40 @@ export async function decrementHeart(messageId: string): Promise<number | null> 
 }
 
 /** messages.heart_count 를 delta만큼 변경 (한 번의 조회·한 번의 업데이트) */
-function updateHeartCount(messageId: string, delta: number): Promise<number | null> {
+async function updateHeartCount(
+  messageId: string,
+  delta: number
+): Promise<number | null> {
   const supabase = createClient()
-  if (!supabase) return Promise.resolve(null)
+  if (!supabase) return null
 
-  return supabase
+  const { data: row, error: fetchErr } = await supabase
     .from('messages')
     .select('heart_count')
     .eq('id', messageId)
     .single()
-    .then(({ data: row, error: fetchErr }) => {
-      if (fetchErr || row == null) {
-        console.error('updateHeartCount fetch error:', fetchErr)
-        return null
-      }
-      const current = row.heart_count ?? 0
-      const newCount = Math.max(0, current + delta)
-      return supabase
-        .from('messages')
-        .update({ heart_count: newCount })
-        .eq('id', messageId)
-        .select('heart_count')
-        .single()
-        .then(({ data: updated, error: updateErr }) => {
-          if (updateErr) {
-            console.error('updateHeartCount update error:', updateErr)
-            return null
-          }
-          return (updated?.heart_count ?? newCount) as number
-        })
-    })
+
+  if (fetchErr || row == null) {
+    console.error('updateHeartCount fetch error:', fetchErr)
+    return null
+  }
+
+  const current = row.heart_count ?? 0
+  const newCount = Math.max(0, current + delta)
+
+  const { data: updated, error: updateErr } = await supabase
+    .from('messages')
+    .update({ heart_count: newCount })
+    .eq('id', messageId)
+    .select('heart_count')
+    .single()
+
+  if (updateErr) {
+    console.error('updateHeartCount update error:', updateErr)
+    return null
+  }
+
+  return (updated?.heart_count ?? newCount) as number
 }
 
 export function subscribeMessages(
