@@ -201,8 +201,8 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           </motion.button>
         </div>
         
-        {/* 플로팅 태그: boards + trending_keywords 혼합, #단어만 표시. 와이드 전폭 배치 + GPU transform */}
-        <div className="relative h-56 sm:h-64 overflow-hidden rounded-2xl bg-black/20">
+        {/* 플로팅 태그: 위치는 left/top %(컨테이너 기준), 떠다니는 움직임만 transform(px)으로 GPU 가속 */}
+        <div className="relative h-56 sm:h-64 rounded-2xl bg-black/20 overflow-hidden" style={{ contain: 'layout' }}>
           <AnimatePresence initial={false}>
             {floatingTags.map((tag, index) => {
               const { word } = tag
@@ -210,19 +210,18 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
               const delay = index * 0.15
               const cols = 10
               const rows = Math.max(1, Math.ceil(floatingTags.length / cols))
-              const padH = 5
-              const padV = 6
-              const usableW = 100 - padH * 2
-              const usableH = 100 - padV * 2
-              const baseX = padH + (index % cols) * (usableW / cols) + (index * 7) % 4
-              const baseY = padV + Math.floor(index / cols) * (usableH / rows) + (index * 11) % 6
+              const rangeMax = 90
+              const stepX = rangeMax / cols
+              const stepY = rows > 0 ? rangeMax / rows : rangeMax
+              const baseX = (index % cols) * stepX + (index * 7) % 5
+              const baseY = Math.floor(index / cols) * stepY + (index * 11) % 6
               return (
                 <motion.div
                   key={`tag-${index}-${word}`}
-                  className="absolute left-0 top-0 w-0 h-0"
+                  className="absolute w-0 h-0"
                   style={{
-                    transform: `translate3d(${baseX}%, ${baseY}%, 0)`,
-                    willChange: 'transform',
+                    left: `${baseX}%`,
+                    top: `${baseY}%`,
                   }}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -230,7 +229,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                   transition={{ duration: 2.5 }}
                 >
                   <motion.div
-                    className={`glass rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none ${
+                    className={`glass rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none whitespace-nowrap ${
                       isFeatured ? 'neon-glow border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.8)]' : ''
                     }`}
                     style={{ willChange: 'transform', transform: 'translate3d(0,0,0)' }}
@@ -241,15 +240,15 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                       scale: isFeatured ? [1, 1.15, 1] : [1, 1.05, 1],
                       x: [
                         0,
-                        Math.sin(index * 0.7) * 12,
-                        Math.cos(index * 0.5) * 10,
-                        Math.sin(index * 0.3) * 6,
+                        Math.sin(index * 0.7) * 18,
+                        Math.cos(index * 0.5) * 14,
+                        Math.sin(index * 0.3) * 10,
                         0,
                       ],
                       y: [
                         0,
-                        -18 + Math.sin(index * 0.5) * 8,
-                        -10 + Math.cos(index * 0.3) * 6,
+                        -22 + Math.sin(index * 0.5) * 12,
+                        -12 + Math.cos(index * 0.3) * 8,
                         0,
                         0,
                       ],
