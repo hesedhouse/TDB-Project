@@ -250,7 +250,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                 >
                   <motion.div
                     className={`glass rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none whitespace-nowrap ${
-                      isFeatured ? 'neon-glow border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.8)]' : ''
+                      isFeatured ? 'floating-tag-glow border-2 border-neon-orange' : 'floating-tag-soft'
                     }`}
                     style={{ willChange: 'transform', transform: 'translate3d(0,0,0)' }}
                     initial={{ opacity: 0, scale: 0 }}
@@ -282,11 +282,11 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                     whileHover={{
                       scale: 1.4,
                       zIndex: 10,
-                      boxShadow: '0 0 24px rgba(255,95,0,0.9)',
+                      boxShadow: '0 0 32px rgba(255,95,0,0.45), 0 0 56px rgba(255,95,0,0.2)',
                       transition: { duration: 0.18 },
                     }}
                   >
-                <span className={`text-xs sm:text-sm font-medium ${isFeatured ? 'text-neon-orange' : 'text-white/90'}`}>
+                <span className={`floating-tag-text text-xs sm:text-sm font-medium ${isFeatured ? 'text-neon-orange' : 'text-white/90'}`}>
                   #{word}
                 </span>
                 {/* 클릭 시 픽셀 파티클 효과 */}

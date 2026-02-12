@@ -55,6 +55,68 @@
                 0 0 20px rgba(255, 95, 0, 0.3),
                 0 0 30px rgba(255, 95, 0, 0.2);
   }
+
+  /* 플로팅 태그: 글로우가 단어 정중앙에서 타원형으로 퍼지도록 */
+  .floating-tag-glow {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 24px rgba(255, 95, 0, 0.35),
+                0 0 40px rgba(255, 95, 0, 0.2),
+                0 0 56px rgba(255, 95, 0, 0.12);
+  }
+  .floating-tag-glow::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 100%;
+    height: 100%;
+    transform: translate(-50%, -50%);
+    border-radius: inherit;
+    background: radial-gradient(
+      ellipse 90% 60% at 50% 50%,
+      rgba(255, 95, 0, 0.2) 0%,
+      rgba(255, 95, 0, 0.06) 45%,
+      transparent 70%
+    );
+    pointer-events: none;
+  }
+  .floating-tag-glow .floating-tag-text {
+    position: relative;
+    z-index: 1;
+    text-shadow: 0 0 12px rgba(255, 95, 0, 0.5),
+                 0 0 24px rgba(255, 95, 0, 0.25);
+  }
+  /* 일반 플로팅 태그도 은은한 중앙 글로우 + 텍스트 빛 */
+  .floating-tag-soft {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .floating-tag-soft::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 100%;
+    height: 100%;
+    transform: translate(-50%, -50%);
+    border-radius: inherit;
+    background: radial-gradient(
+      ellipse 85% 55% at 50% 50%,
+      rgba(255, 255, 255, 0.08) 0%,
+      transparent 65%
+    );
+    pointer-events: none;
+  }
+  .floating-tag-soft .floating-tag-text {
+    position: relative;
+    z-index: 1;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.15);
+  }
   
   .pixel-art {
     image-rendering: pixelated;
