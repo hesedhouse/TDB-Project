@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -9,18 +9,31 @@ import DotCharacter from './DotCharacter'
 import { mockBoards, getTrendKeywords, filterActiveBoards, formatRemainingTimer } from '@/lib/mockData'
 import { getHourglasses } from '@/lib/hourglass'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { getOrCreateBoardByKeyword } from '@/lib/supabase/boards'
+import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
+import { useTick } from '@/lib/TickContext'
 import type { Board } from '@/lib/mockData'
+
+/** 1초마다 갱신되는 남은 시간 라벨 (context만 구독해 리스트 전체 리렌더 방지) */
+const BoardTimeLabel = memo(function BoardTimeLabel({ expiresAt }: { expiresAt: Date }) {
+  useTick()
+  const date = expiresAt instanceof Date ? expiresAt : new Date(expiresAt)
+  const { label } = formatRemainingTimer(date)
+  return <span className="font-mono tabular-nums text-neon-orange">{label}</span>
+})
 
 interface HomeDashboardProps {
   onEnterBoard: (boardId: string) => void
 }
 
-export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
+function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const router = useRouter()
   const useSupabase = isSupabaseConfigured()
   const [searchQuery, setSearchQuery] = useState('')
-  const [trendKeywords] = useState<string[]>(getTrendKeywords())
+  const [floatingTags, setFloatingTags] = useState<FloatingTag[]>(() =>
+    getTrendKeywords().map((word) => ({ word, source: 'board' as const }))
+  )
   const [featuredKeywords, setFeaturedKeywords] = useState<Set<string>>(new Set(['맛집', '데이트', '카페']))
   const [userBoards] = useState<Board[]>(filterActiveBoards(mockBoards.slice(0, 2)))
   const [liveBoards] = useState<Board[]>(filterActiveBoards(mockBoards))
@@ -28,17 +41,47 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
   const [warpingKeyword, setWarpingKeyword] = useState<string | null>(null)
   const [hourglasses, setHourglasses] = useState(0)
   const [creatingRoom, setCreatingRoom] = useState(false)
-  const [, setTick] = useState(0)
 
   useEffect(() => {
     setHourglasses(getHourglasses())
   }, [])
 
-  // 메인 화면 남은 시간 실시간 갱신 (1초마다)
+  // 초기 플로팅 태그: boards + trending_keywords 혼합 (Supabase 사용 시)
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1000)
-    return () => clearInterval(id)
-  }, [])
+    if (!useSupabase) return
+    getFloatingTags().then((tags) => {
+      if (tags.length > 0) setFloatingTags(tags)
+    })
+  }, [useSupabase])
+
+  // Supabase Realtime: 새 방 생성 시 태그 하나를 새 키워드로 교체
+  useEffect(() => {
+    if (!useSupabase) return
+    const supabase = createClient()
+    if (!supabase) return
+    const channel = supabase
+      .channel('home-boards-insert')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'boards' },
+        (payload) => {
+          const row = payload.new as { keyword?: string; name?: string }
+          const raw = (row?.keyword ?? row?.name ?? '').toString().trim().replace(/^#/, '')
+          if (!raw) return
+          setFloatingTags((prev) => {
+            if (prev.length === 0) return [{ word: raw, source: 'board' }]
+            const next = [...prev]
+            const idx = Math.floor(Math.random() * next.length)
+            next[idx] = { word: raw, source: 'board' }
+            return next
+          })
+        }
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [useSupabase])
 
   const getBoardKeyword = (board: Board) => board.trendKeywords?.[0] ?? board.name ?? board.id
 
@@ -57,6 +100,7 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
     }, 600)
   }
 
+  /** 유행어/방 태그 클릭 → 해당 검색어로 방 만들기(입장) 페이지로 이동 */
   const handleKeywordClick = (keyword: string) => {
     setWarpingKeyword(keyword)
     setTimeout(() => {
@@ -157,68 +201,78 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
           </motion.button>
         </div>
         
-        {/* Trend Keywords Bubbles - 비눗방울처럼 느릿하게 유영 */}
+        {/* 플로팅 태그: boards + trending_keywords 혼합, #단어만 표시. 와이드 전폭 배치 + GPU transform */}
         <div className="relative h-56 sm:h-64 overflow-hidden rounded-2xl bg-black/20">
-          {trendKeywords.map((keyword, index) => {
-            const isFeatured = featuredKeywords.has(keyword)
-            const delay = index * 0.15
-            // 더 자연스러운 랜덤 위치 분산
-            const baseX = 15 + (index % 6) * 14 + Math.random() * 5
-            const baseY = 15 + Math.floor(index / 6) * 25 + Math.random() * 10
-            
-            return (
-              <motion.div
-                key={keyword}
-                className="absolute left-0 top-0 w-0 h-0"
-                style={{
-                  transform: `translate3d(${baseX}%, ${baseY}%, 0)`,
-                  willChange: 'transform',
-                }}
-              >
+          <AnimatePresence initial={false}>
+            {floatingTags.map((tag, index) => {
+              const { word } = tag
+              const isFeatured = featuredKeywords.has(word)
+              const delay = index * 0.15
+              const cols = 10
+              const rows = Math.max(1, Math.ceil(floatingTags.length / cols))
+              const padH = 5
+              const padV = 6
+              const usableW = 100 - padH * 2
+              const usableH = 100 - padV * 2
+              const baseX = padH + (index % cols) * (usableW / cols) + (index * 7) % 4
+              const baseY = padV + Math.floor(index / cols) * (usableH / rows) + (index * 11) % 6
+              return (
                 <motion.div
-                  className={`glass rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none ${
-                    isFeatured ? 'neon-glow border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.8)]' : ''
-                  }`}
-                  style={{ willChange: 'transform' }}
-                  initial={{ opacity: 0, scale: 0 }}
-                  onClick={() => handleKeywordClick(keyword)}
-                  animate={{
-                    opacity: isFeatured ? [0.8, 1, 0.8] : [0.5, 0.7, 0.5],
-                    scale: isFeatured ? [1, 1.15, 1] : [1, 1.05, 1],
-                    x: [
-                      0,
-                      Math.sin(index * 0.7) * 20,
-                      Math.cos(index * 0.5) * 15,
-                      Math.sin(index * 0.3) * 10,
-                      0,
-                    ],
-                    y: [
-                      0,
-                      -30 + Math.sin(index * 0.5) * 15,
-                      -15 + Math.cos(index * 0.3) * 10,
-                      0,
-                      0,
-                    ],
+                  key={`tag-${index}-${word}`}
+                  className="absolute left-0 top-0 w-0 h-0"
+                  style={{
+                    transform: `translate3d(${baseX}%, ${baseY}%, 0)`,
+                    willChange: 'transform',
                   }}
-                  transition={{
-                    duration: 8 + index * 0.3,
-                    delay,
-                    repeat: Infinity,
-                    ease: 'easeInOut',
-                  }}
-                  whileHover={{
-                    scale: 1.4,
-                    zIndex: 10,
-                    boxShadow: '0 0 24px rgba(255,95,0,0.9)',
-                    transition: { duration: 0.18 },
-                  }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, transition: { duration: 2 } }}
+                  transition={{ duration: 2.5 }}
                 >
+                  <motion.div
+                    className={`glass rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none ${
+                      isFeatured ? 'neon-glow border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.8)]' : ''
+                    }`}
+                    style={{ willChange: 'transform', transform: 'translate3d(0,0,0)' }}
+                    initial={{ opacity: 0, scale: 0 }}
+                    onClick={() => handleKeywordClick(word)}
+                    animate={{
+                      opacity: isFeatured ? [0.8, 1, 0.8] : [0.5, 0.7, 0.5],
+                      scale: isFeatured ? [1, 1.15, 1] : [1, 1.05, 1],
+                      x: [
+                        0,
+                        Math.sin(index * 0.7) * 12,
+                        Math.cos(index * 0.5) * 10,
+                        Math.sin(index * 0.3) * 6,
+                        0,
+                      ],
+                      y: [
+                        0,
+                        -18 + Math.sin(index * 0.5) * 8,
+                        -10 + Math.cos(index * 0.3) * 6,
+                        0,
+                        0,
+                      ],
+                    }}
+                    transition={{
+                      duration: 8 + index * 0.3,
+                      delay,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                    }}
+                    whileHover={{
+                      scale: 1.4,
+                      zIndex: 10,
+                      boxShadow: '0 0 24px rgba(255,95,0,0.9)',
+                      transition: { duration: 0.18 },
+                    }}
+                  >
                 <span className={`text-xs sm:text-sm font-medium ${isFeatured ? 'text-neon-orange' : 'text-white/90'}`}>
-                  #{keyword}
+                  #{word}
                 </span>
                 {/* 클릭 시 픽셀 파티클 효과 */}
                 <AnimatePresence>
-                  {warpingKeyword === keyword && (
+                  {warpingKeyword === word && (
                     <>
                       {Array.from({ length: 6 }).map((_, i) => (
                         <motion.span
@@ -242,10 +296,11 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
                     </>
                   )}
                 </AnimatePresence>
+                  </motion.div>
                 </motion.div>
-              </motion.div>
-            )
-          })}
+              )
+            })}
+          </AnimatePresence>
         </div>
       </section>
 
@@ -258,7 +313,6 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
         <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide relative">
           {userBoards.map((board) => {
             const expiresAt = board.expiresAt instanceof Date ? board.expiresAt : new Date(board.expiresAt)
-            const { label: timeLabel } = formatRemainingTimer(expiresAt)
             const isWarping = warpingBoardId === board.id
             return (
               <motion.div
@@ -318,8 +372,8 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
                   <DotCharacter characterId={0} size={32} />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm truncate text-blue-400">{displayBoardName(board.name)}</div>
-                    <div className="text-xs font-mono tabular-nums text-neon-orange">
-                      {timeLabel}
+                    <div className="text-xs">
+                      <BoardTimeLabel expiresAt={expiresAt} />
                     </div>
                   </div>
                 </div>
@@ -341,7 +395,6 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
         <div className="space-y-3">
           {liveBoards.map((board) => {
             const expiresAt = board.expiresAt instanceof Date ? board.expiresAt : new Date(board.expiresAt)
-            const { label: timeLabel } = formatRemainingTimer(expiresAt)
             return (
               <motion.div
                 key={board.id}
@@ -364,8 +417,8 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
                   <div className="flex items-center gap-3 text-sm shrink-0 order-2">
                     <span className="text-gray-400" title="하트">❤️ {board.heartCount}</span>
                     <span className="text-gray-400" title="인원">👥 {board.memberCount}</span>
-                    <span className="font-mono tabular-nums text-neon-orange text-xs sm:text-sm whitespace-nowrap">
-                      {timeLabel}
+                    <span className="text-xs sm:text-sm whitespace-nowrap">
+                      <BoardTimeLabel expiresAt={expiresAt} />
                     </span>
                   </div>
                   {board.featured && (
@@ -382,3 +435,5 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
     </div>
   )
 }
+
+export default memo(HomeDashboardInner)

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import { TickProvider } from '@/lib/TickContext'
 import HomeDashboard from '@/components/HomeDashboard'
 import EntryGate from '@/components/EntryGate'
 import PulseFeed from '@/components/PulseFeed'
@@ -11,7 +12,7 @@ export default function Home() {
   const [userCharacter, setUserCharacter] = useState<number>(0)
   const [userNickname, setUserNickname] = useState<string>('')
 
-  const handleEnterBoard = (boardId: string) => {
+  const handleEnterBoard = useCallback((boardId: string) => {
     if (!userNickname) {
       setSelectedBoard(boardId)
       setCurrentView('entry')
@@ -19,7 +20,7 @@ export default function Home() {
       setSelectedBoard(boardId)
       setCurrentView('feed')
     }
-  }
+  }, [])
 
   const handleEntryComplete = (character: number, nickname: string) => {
     setUserCharacter(character)
@@ -40,7 +41,9 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-midnight-black pt-16">
       {currentView === 'home' && (
-        <HomeDashboard onEnterBoard={handleEnterBoard} />
+        <TickProvider>
+          <HomeDashboard onEnterBoard={handleEnterBoard} />
+        </TickProvider>
       )}
       {currentView === 'entry' && selectedBoard && (
         <EntryGate

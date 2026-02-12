@@ -16,7 +16,7 @@
 ### 1. Home Dashboard
 - TDB 로고 및 하트 잔액 표시
 - 트렌드 키워드 버블 애니메이션
-- Warp Zone: 참여 중인 방 (더블클릭으로 워프)
+- Warp Zone: 참여 중인 방 (클릭으로 입장)
 - Live Boards: 활발한 게시판 리스트
 
 ### 2. Entry Gate
