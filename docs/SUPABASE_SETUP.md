@@ -83,9 +83,16 @@ alter publication supabase_realtime add table public.messages;
 
 1. **Storage** → **New bucket** → 이름 `tdb-images` 생성
 2. 버킷 설정에서 **Public bucket** 을 켜서 업로드된 이미지 URL이 브라우저에서 보이게 합니다.
-3. **Policies**에서 anon이 `tdb-images`에 **upload** 할 수 있도록 정책 추가 (또는 Supabase가 제안하는 기본 정책 사용).
+3. **SQL Editor**에서 아래 정책 실행 (누구나 업로드·조회 가능):
 
-이미 버킷을 만들었다면 **Storage** → `tdb-images` → **Configuration** 에서 Public 여부만 확인하면 됩니다.
+```sql
+CREATE POLICY "Public Access"
+ON storage.objects FOR ALL
+USING ( bucket_id = 'tdb-images' )
+WITH CHECK ( bucket_id = 'tdb-images' );
+```
+
+또는 프로젝트의 `supabase/storage_tdb_images_policy.sql` 파일 내용을 복사해 실행하면 됩니다.
 
 ## 6. 동작 확인
 
