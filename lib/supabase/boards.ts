@@ -55,6 +55,27 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
 }
 
 /**
+ * UUID로 방을 조회합니다. (URL이 /board/[uuid] 일 때 사용)
+ */
+export async function getBoardById(id: string): Promise<BoardRow | null> {
+  if (!isValidUuid(id)) return null
+  const supabase = createClient()
+  if (!supabase) return null
+
+  const { data, error } = await supabase
+    .from('boards')
+    .select('id, keyword, name, expires_at, created_at')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error) {
+    console.error('getBoardById error:', error)
+    return null
+  }
+  return (data as BoardRow) ?? null
+}
+
+/**
  * 해당 방의 expires_at을 현재 저장된 값에서 정확히 1시간 뒤로 업데이트합니다.
  * boardId는 boards.id (UUID)를 넣어야 합니다.
  * 갱신된 expires_at을 반환하며, 실패 시 null을 반환합니다.

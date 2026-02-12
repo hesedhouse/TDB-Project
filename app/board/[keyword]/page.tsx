@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import PulseFeed from '@/components/PulseFeed'
 import { mockBoards } from '@/lib/mockData'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
-import { getOrCreateBoardByKeyword, type BoardRow } from '@/lib/supabase/boards'
+import { getOrCreateBoardByKeyword, getBoardById, type BoardRow } from '@/lib/supabase/boards'
+import { isValidUuid } from '@/lib/supabase/client'
 
 interface BoardByKeywordPageProps {
   params: { keyword: string }
@@ -36,14 +37,17 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     }
   }, [matchedBoard])
 
-  // Supabase 사용 시 항상 키워드로 보드 조회/생성 → UUID 사용 (matchedBoard 무시)
+  // Supabase 사용 시: URL이 UUID면 getBoardById, 아니면 키워드로 조회/생성
   useEffect(() => {
     if (!useSupabase) {
       setBoardLoading(false)
       return
     }
     let cancelled = false
-    getOrCreateBoardByKeyword(decodedKeyword).then((row) => {
+    const load = isValidUuid(decodedKeyword)
+      ? getBoardById(decodedKeyword)
+      : getOrCreateBoardByKeyword(decodedKeyword)
+    load.then((row) => {
       if (!cancelled && row) setSupabaseBoard(row)
       setBoardLoading(false)
     })

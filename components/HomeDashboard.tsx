@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowRight } from 'lucide-react'
 import DotCharacter from './DotCharacter'
 import { mockBoards, getRemainingTime, getTrendKeywords, filterActiveBoards } from '@/lib/mockData'
 import { getHourglasses } from '@/lib/hourglass'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
+import { getOrCreateBoardByKeyword } from '@/lib/supabase/boards'
 import type { Board } from '@/lib/mockData'
 
 interface HomeDashboardProps {
@@ -25,6 +27,7 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
   const [warpingBoardId, setWarpingBoardId] = useState<string | null>(null)
   const [warpingKeyword, setWarpingKeyword] = useState<string | null>(null)
   const [hourglasses, setHourglasses] = useState(0)
+  const [creatingRoom, setCreatingRoom] = useState(false)
 
   useEffect(() => {
     setHourglasses(getHourglasses())
@@ -61,12 +64,33 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
 
   const handleKeywordClick = (keyword: string) => {
     setWarpingKeyword(keyword)
-    // 짧은 워프 연출 후 상세 페이지로 이동
     setTimeout(() => {
       router.push(`/board/${encodeURIComponent(keyword)}`)
       setWarpingKeyword(null)
     }, 500)
   }
+
+  /** 방 만들기/시작하기: 입력값을 키워드로 보드 조회·생성 후 해당 방(UUID URL)으로 이동 */
+  const handleCreateOrEnterRoom = useCallback(async () => {
+    const keyword = searchQuery.trim()
+    if (!keyword) return
+    if (creatingRoom) return
+    if (!useSupabase) {
+      router.push(`/board/${encodeURIComponent(keyword)}`)
+      return
+    }
+    setCreatingRoom(true)
+    try {
+      const board = await getOrCreateBoardByKeyword(keyword)
+      if (board) {
+        router.push(`/board/${board.id}`)
+      } else {
+        setCreatingRoom(false)
+      }
+    } catch {
+      setCreatingRoom(false)
+    }
+  }, [searchQuery, creatingRoom, useSupabase, router])
 
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom">
@@ -97,16 +121,45 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
         </Link>
       </header>
 
-      {/* Discovery Section */}
+      {/* Discovery Section - 방 제목 입력 + 시작하기 */}
       <section className="mb-7 relative">
-        <div className="relative z-10 mb-5">
+        <div className="relative z-10 mb-5 flex flex-col sm:flex-row gap-3">
           <input
             type="text"
-            placeholder="검색..."
+            placeholder="방 제목을 입력하세요"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-5 py-3.5 sm:px-6 sm:py-4 rounded-2xl glass-strong border-2 border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm sm:text-base"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreateOrEnterRoom()
+            }}
+            disabled={creatingRoom}
+            className="flex-1 w-full px-5 py-3.5 sm:px-6 sm:py-4 rounded-2xl glass-strong border-2 border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm sm:text-base disabled:opacity-60"
+            aria-label="방 제목 입력"
           />
+          <motion.button
+            type="button"
+            onClick={handleCreateOrEnterRoom}
+            disabled={creatingRoom || !searchQuery.trim()}
+            className="flex items-center justify-center gap-2 px-5 py-3.5 sm:px-6 sm:py-4 rounded-2xl font-semibold text-sm sm:text-base bg-neon-orange text-white border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.4)] hover:shadow-[0_0_24px_rgba(255,95,0,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-shadow min-w-[7rem] sm:min-w-[8rem]"
+            whileHover={!creatingRoom && searchQuery.trim() ? { scale: 1.02 } : {}}
+            whileTap={!creatingRoom && searchQuery.trim() ? { scale: 0.98 } : {}}
+          >
+            {creatingRoom ? (
+              <>
+                <motion.span
+                  className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                />
+                <span>방 만드는 중...</span>
+              </>
+            ) : (
+              <>
+                <span>시작하기</span>
+                <ArrowRight className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} />
+              </>
+            )}
+          </motion.button>
         </div>
         
         {/* Trend Keywords Bubbles - 비눗방울처럼 느릿하게 유영 */}
