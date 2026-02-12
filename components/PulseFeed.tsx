@@ -1,10 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import DotCharacter from './DotCharacter'
 import { mockBoards, mockPosts, getTimeProgress, getRemainingTime, extendBoardLifespan } from '@/lib/mockData'
 import type { Post, Board } from '@/lib/mockData'
+import { isSupabaseConfigured } from '@/lib/supabase/client'
+import { useBoardChat } from '@/lib/supabase/useBoardChat'
+import { uploadChatImage } from '@/lib/supabase/storage'
+import type { Message } from '@/lib/supabase/types'
 
 interface PulseFeedProps {
   boardId: string
@@ -16,6 +20,8 @@ interface PulseFeedProps {
 type SortType = 'latest' | 'popular'
 
 export default function PulseFeed({ boardId, userCharacter, userNickname, onBack }: PulseFeedProps) {
+  const useSupabase = isSupabaseConfigured()
+
   const [sortType, setSortType] = useState<SortType>('latest')
   const [posts, setPosts] = useState<Post[]>(mockPosts.filter(p => p.boardId === boardId))
   const [progress, setProgress] = useState(100)
@@ -23,12 +29,65 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   const [board, setBoard] = useState<Board | undefined>(mockBoards.find(b => b.id === boardId))
   const [showLifespanExtended, setShowLifespanExtended] = useState(false)
   const [heartAnimations, setHeartAnimations] = useState<Set<string>>(new Set())
+  const [chatInput, setChatInput] = useState('')
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const feedEndRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const { messages, send, addHeart, sending } = useBoardChat(boardId, {
+    userCharacter,
+    userNickname,
+    enabled: useSupabase,
+  })
+
+  const handleSendMessage = useCallback(async () => {
+    if ((!chatInput.trim()) || sending || uploadingImage || !useSupabase) return
+    await send(chatInput)
+    setChatInput('')
+  }, [chatInput, sending, uploadingImage, useSupabase, send])
+
+  const handlePhotoSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file || !useSupabase || sending || uploadingImage) return
+      if (!file.type.startsWith('image/')) return
+      e.target.value = ''
+      setUploadingImage(true)
+      const imageUrl = await uploadChatImage(file, boardId)
+      setUploadingImage(false)
+      if (imageUrl) await send(chatInput.trim(), imageUrl)
+      if (chatInput.trim()) setChatInput('')
+    },
+    [useSupabase, boardId, send, sending, uploadingImage, chatInput]
+  )
+
+  const handleMessageHeart = useCallback(
+    async (messageId: string) => {
+      if (!useSupabase) return
+      setHeartAnimations((prev) => new Set([...prev, messageId]))
+      setTimeout(() => setHeartAnimations((prev) => {
+        const next = new Set(prev)
+        next.delete(messageId)
+        return next
+      }), 500)
+      await addHeart(messageId)
+    },
+    [useSupabase, addHeart]
+  )
+
+  // 스레드처럼 새 메시지 시 부드럽게 맨 아래로 스크롤
+  useEffect(() => {
+    if (!useSupabase || !listRef.current) return
+    feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [useSupabase, messages.length])
 
   useEffect(() => {
-    if (!board) return
+    const targetBoard = board ?? (useSupabase ? { createdAt: new Date(), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } : null)
+    if (!targetBoard) return
 
     const updateProgress = () => {
-      const newProgress = getTimeProgress(board.createdAt, board.expiresAt)
+      const newProgress = getTimeProgress(targetBoard.createdAt, targetBoard.expiresAt)
       setProgress(newProgress)
     }
 
@@ -36,7 +95,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     const interval = setInterval(updateProgress, 60000) // 1분마다 업데이트
 
     return () => clearInterval(interval)
-  }, [board])
+  }, [board, useSupabase])
 
   // 하트를 받으면 게시판 수명 연장
   useEffect(() => {
@@ -142,7 +201,8 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     return `${days}일 전`
   }
 
-  if (!board) {
+  const displayBoard = board ?? (useSupabase ? { name: `#${boardId}`, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createdAt: new Date() } : null)
+  if (!displayBoard) {
     return (
       <div className="min-h-screen bg-midnight-black flex items-center justify-center">
         <p className="text-gray-400">게시판을 찾을 수 없습니다.</p>
@@ -150,7 +210,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     )
   }
 
-  const { days, hours, minutes } = getRemainingTime(board.expiresAt)
+  const { days, hours, minutes } = getRemainingTime(displayBoard.expiresAt)
 
   return (
     <div className="min-h-screen bg-midnight-black text-white safe-bottom">
@@ -164,7 +224,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
             >
               ← 뒤로
             </button>
-            <h1 className="text-base sm:text-xl font-bold truncate">{board.name}</h1>
+            <h1 className="text-base sm:text-xl font-bold truncate">{displayBoard.name}</h1>
             <div className="w-8" />
           </div>
           
@@ -223,7 +283,169 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
         </motion.button>
       </div>
 
-      {/* Feed - 왼쪽 정렬 말풍선 스타일 */}
+      {/* 실시간 채팅 (Supabase 연동 시) */}
+      {useSupabase && (
+        <>
+          <div
+            ref={listRef}
+            className="px-3 py-4 sm:p-4 space-y-3 pb-28 sm:pb-24 overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-hide"
+          >
+            {[...messages]
+              .sort((a, b) =>
+                sortType === 'popular'
+                  ? b.heartCount - a.heartCount
+                  : a.createdAt.getTime() - b.createdAt.getTime()
+              )
+              .map((msg) => {
+                const isMine =
+                  msg.authorNickname === userNickname &&
+                  msg.authorCharacter === userCharacter
+                return (
+                  <motion.div
+                    key={msg.id}
+                    className={`flex gap-2 ${isMine ? 'flex-row-reverse' : ''}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25 }}
+                  >
+                    {!isMine && (
+                      <div className="flex-shrink-0 pt-0.5">
+                        <DotCharacter characterId={msg.authorCharacter} size={36} />
+                      </div>
+                    )}
+                    <div
+                      className={`flex flex-col max-w-[85%] sm:max-w-[75%] ${isMine ? 'items-end' : 'items-start'}`}
+                    >
+                      {!isMine && (
+                        <span className="text-xs text-gray-400 mb-0.5">
+                          {msg.authorNickname}
+                        </span>
+                      )}
+                      <div
+                        className={`rounded-2xl px-4 py-2.5 glass-strong ${
+                          isMine
+                            ? 'bg-neon-orange/20 border-neon-orange/40'
+                            : 'border-white/10'
+                        }`}
+                      >
+                        {msg.imageUrl && (
+                          <a
+                            href={msg.imageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block mb-2 rounded-xl overflow-hidden border border-white/10 focus:outline-none focus:ring-2 focus:ring-neon-orange/50"
+                          >
+                            <motion.img
+                              src={msg.imageUrl}
+                              alt=""
+                              className="w-full max-w-[280px] sm:max-w-[320px] h-auto max-h-[240px] object-cover"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              transition={{ duration: 0.2 }}
+                            />
+                          </a>
+                        )}
+                        {(msg.content?.trim() ?? '') !== '' && (
+                          <p className="text-sm sm:text-base text-white/95 whitespace-pre-wrap break-words">
+                            {msg.content}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-end gap-1.5 mt-2">
+                          <motion.button
+                            type="button"
+                            onClick={() => handleMessageHeart(msg.id)}
+                            className="flex items-center gap-1 text-neon-orange/90 hover:text-neon-orange text-xs"
+                            whileTap={{ scale: 0.9 }}
+                          >
+                            <motion.span
+                              animate={
+                                heartAnimations.has(msg.id)
+                                  ? { scale: [1, 1.3, 1] }
+                                  : {}
+                              }
+                              transition={{ duration: 0.3 }}
+                            >
+                              ❤️
+                            </motion.span>
+                            <span className="font-semibold">{msg.heartCount}</span>
+                          </motion.button>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-gray-500 mt-0.5">
+                        {formatTimeAgo(msg.createdAt)}
+                      </span>
+                    </div>
+                    {isMine && (
+                      <div className="flex-shrink-0 pt-0.5">
+                        <DotCharacter characterId={msg.authorCharacter} size={36} />
+                      </div>
+                    )}
+                  </motion.div>
+                )
+              })}
+            <div ref={feedEndRef} />
+          </div>
+
+          {/* 하단 메시지 입력 */}
+          <div className="fixed bottom-0 left-0 right-0 glass-strong border-t border-neon-orange/20 safe-bottom px-3 py-3 sm:px-4 sm:py-3">
+            <div className="app-shell mx-auto flex gap-2 items-end">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoSelect}
+              />
+              <motion.button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending || uploadingImage}
+                className="flex-shrink-0 w-12 h-12 rounded-2xl glass border border-neon-orange/30 flex items-center justify-center text-neon-orange hover:bg-neon-orange/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={!(sending || uploadingImage) ? { scale: 1.05 } : {}}
+                whileTap={!(sending || uploadingImage) ? { scale: 0.95 } : {}}
+                title="사진 추가"
+              >
+                {uploadingImage ? (
+                  <span className="text-lg animate-pulse">⏳</span>
+                ) : (
+                  <span className="text-xl">📷</span>
+                )}
+              </motion.button>
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSendMessage()
+                  }
+                }}
+                placeholder="메시지 입력..."
+                className="flex-1 min-w-0 px-4 py-3 rounded-2xl glass border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm sm:text-base"
+                maxLength={500}
+              />
+              <motion.button
+                type="button"
+                onClick={handleSendMessage}
+                disabled={!chatInput.trim() || sending}
+                className="flex-shrink-0 w-12 h-12 rounded-2xl bg-neon-orange text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={!sending ? { scale: 1.05 } : {}}
+                whileTap={!sending ? { scale: 0.95 } : {}}
+              >
+                {sending ? (
+                  <span className="text-lg">⏳</span>
+                ) : (
+                  <span className="text-lg">➤</span>
+                )}
+              </motion.button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Feed - 왼쪽 정렬 말풍선 스타일 (Supabase 미사용 시 목업) */}
+      {!useSupabase && (
       <div className="px-3 py-4 sm:p-4 space-y-4 pb-24 sm:pb-20">
         <AnimatePresence>
           {sortedPosts.map((post) => (
@@ -380,6 +602,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }

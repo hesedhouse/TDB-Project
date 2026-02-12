@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import PulseFeed from '@/components/PulseFeed'
 import { mockBoards } from '@/lib/mockData'
+import { isSupabaseConfigured } from '@/lib/supabase/client'
 
 interface BoardByKeywordPageProps {
   params: { keyword: string }
@@ -14,6 +15,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   const router = useRouter()
   const decodedKeyword = decodeURIComponent(params.keyword)
   const [showToast, setShowToast] = useState(false)
+  const useSupabase = isSupabaseConfigured()
 
   const matchedBoard = useMemo(() => {
     const keyword = decodedKeyword
@@ -32,7 +34,6 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   }, [matchedBoard])
 
   if (matchedBoard) {
-    // 기존 게시판과 연결되는 경우 PulseFeed 재사용
     return (
       <div className="min-h-screen bg-midnight-black text-white">
         <PulseFeed
@@ -45,10 +46,35 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     )
   }
 
-  // 존재하지 않는 키워드인 경우: 새 떴다방 생성 + 빈 게시판 화면
+  // 새 키워드 방: Supabase 연동 시 실시간 채팅으로 입장, 아니면 빈 화면
+  if (useSupabase) {
+    return (
+      <div className="min-h-screen bg-midnight-black text-white">
+        <AnimatePresence>
+          {showToast && (
+            <motion.div
+              className="fixed top-4 left-1/2 -translate-x-1/2 z-50 glass-strong px-4 py-2 rounded-full text-sm text-neon-orange neon-glow"
+              initial={{ opacity: 0, y: -10, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.9 }}
+              transition={{ duration: 0.25 }}
+            >
+              새로운 떴다방이 생성되었습니다!
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <PulseFeed
+          boardId={decodedKeyword}
+          userCharacter={0}
+          userNickname="게스트"
+          onBack={() => router.push('/')}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-midnight-black text-white safe-bottom">
-      {/* Toast 알림 */}
       <AnimatePresence>
         {showToast && (
           <motion.div
@@ -63,7 +89,6 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
         )}
       </AnimatePresence>
 
-      {/* 상단 바 */}
       <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top">
         <div className="px-3 py-3 sm:p-4 flex items-center justify-between gap-2">
           <button
@@ -78,8 +103,6 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
           </div>
           <div className="w-12" />
         </div>
-
-        {/* 네온 오렌지 프로그레스 바 (처음은 100%) */}
         <div className="px-3 pb-3 sm:px-4 sm:pb-4">
           <div className="relative h-1 bg-gray-800 rounded-full overflow-hidden">
             <motion.div
@@ -95,14 +118,13 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
         </div>
       </div>
 
-      {/* 빈 피드 영역 */}
       <div className="px-3 py-6 sm:p-6 space-y-6">
         <div className="glass-strong rounded-3xl p-5 text-center">
           <p className="text-sm sm:text-base text-gray-200 mb-2">
             아직 이 키워드로 남겨진 글이 없어요.
           </p>
           <p className="text-xs sm:text-sm text-gray-500">
-            첫 번째 말풍선의 주인이 되어보세요.
+            실시간 채팅을 쓰려면 Supabase를 설정해 주세요. (docs/SUPABASE_SETUP.md)
           </p>
         </div>
       </div>

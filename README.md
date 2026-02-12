@@ -9,6 +9,7 @@
 - **Tailwind CSS** - 스타일링
 - **Framer Motion** - 애니메이션
 - **date-fns** - 날짜 처리
+- **Supabase** - 실시간 채팅(메시지 저장, Realtime, 하트 반영)
 
 ## 주요 기능
 
@@ -31,6 +32,7 @@
 - 유튜브/인스타 링크 썸네일
 - 하트 인터랙션 (더블탭/길게 누르기)
 - 하트를 받으면 게시판 수명 연장
+- **Supabase 연동 시**: 실시간 채팅, 내 메시지(오른쪽)/남 메시지(왼쪽), 하단 입력창, 하트 DB 반영
 
 ## 디자인 테마
 
@@ -54,6 +56,15 @@ npm start
 
 브라우저에서 [http://localhost:3000](http://localhost:3000)을 열어 확인하세요.
 
+### Supabase 실시간 채팅 (선택)
+
+실시간 대화 기능을 쓰려면 Supabase 프로젝트를 만들고 환경 변수를 설정한 뒤, `messages` 테이블과 Realtime을 설정해야 합니다.
+
+1. **환경 변수**: `.env.example`을 참고해 `.env.local`에 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` 추가
+2. **DB 및 Realtime**: [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md)에 안내된 SQL로 테이블·RLS·Realtime 설정
+
+설정이 없으면 기존 목업 피드만 동작합니다.
+
 ## 프로젝트 구조
 
 ```
@@ -71,6 +82,12 @@ components/
 lib/
   mockData.ts         # Mock 데이터 및 유틸리티
   nicknames.ts        # 랜덤 닉네임 생성
+  supabase/
+    client.ts         # Supabase 브라우저 클라이언트
+    types.ts          # Message 타입
+    messages.ts       # 메시지 조회/전송/하트/Realtime 구독
+docs/
+  SUPABASE_SETUP.md   # Supabase 테이블·RLS·Realtime 설정 가이드
 ```
 
 ## 주요 특징
