@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Hourglass } from 'lucide-react'
 import DotCharacter from './DotCharacter'
 import { mockBoards, getRemainingTime, getTrendKeywords, filterActiveBoards } from '@/lib/mockData'
 import { getHourglasses } from '@/lib/hourglass'
@@ -84,7 +83,7 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
           role="status"
           aria-label={`보유 모래시계 ${hourglasses}개`}
         >
-          <Hourglass className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 text-amber-400" strokeWidth={2} />
+          <span className="text-lg sm:text-xl leading-none flex-shrink-0" aria-hidden>⏳</span>
           <span className="font-semibold text-sm sm:text-base tabular-nums text-white">{hourglasses}</span>
         </div>
       </header>

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Hourglass } from 'lucide-react'
 import DotCharacter from './DotCharacter'
 import { mockBoards, mockPosts, getTimeProgress, extendBoardLifespan, formatRemainingTimer } from '@/lib/mockData'
 import type { Post, Board } from '@/lib/mockData'
@@ -378,7 +377,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
               </svg>
             </motion.button>
             <div className="text-sm text-amber-400 flex items-center gap-1.5 flex-shrink-0">
-              <Hourglass className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
+              <span className="text-base leading-none flex-shrink-0" aria-hidden>⏳</span>
               <span>보유 모래시계: {hourglasses}개</span>
             </div>
           </div>
