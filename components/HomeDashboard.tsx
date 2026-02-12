@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Hourglass } from 'lucide-react'
 import DotCharacter from './DotCharacter'
-import { mockBoards, mockUser, getRemainingTime, getTrendKeywords, filterActiveBoards } from '@/lib/mockData'
+import { mockBoards, getRemainingTime, getTrendKeywords, filterActiveBoards } from '@/lib/mockData'
+import { getHourglasses } from '@/lib/hourglass'
 import type { Board } from '@/lib/mockData'
 
 interface HomeDashboardProps {
@@ -20,6 +22,11 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
   const [liveBoards] = useState<Board[]>(filterActiveBoards(mockBoards))
   const [warpingBoardId, setWarpingBoardId] = useState<string | null>(null)
   const [warpingKeyword, setWarpingKeyword] = useState<string | null>(null)
+  const [hourglasses, setHourglasses] = useState(0)
+
+  useEffect(() => {
+    setHourglasses(getHourglasses())
+  }, [])
 
   // 더블클릭 감지
   const [lastClickTime, setLastClickTime] = useState<{ [key: string]: number }>({})
@@ -72,9 +79,9 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
           </motion.div>
           <span className="text-xs sm:text-sm text-gray-400">떴다방</span>
         </div>
-        <div className="flex items-center gap-2 glass px-3 py-2 sm:px-4 rounded-full">
-          <span className="text-neon-orange text-lg sm:text-xl">❤️</span>
-          <span className="font-semibold text-sm sm:text-base">{mockUser.heartBalance}</span>
+        <div className="flex items-center gap-2 glass px-3 py-2 sm:px-4 rounded-full text-amber-400">
+          <Hourglass className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" strokeWidth={2} />
+          <span className="font-semibold text-sm sm:text-base">보유 모래시계: {hourglasses}개</span>
         </div>
       </header>
 

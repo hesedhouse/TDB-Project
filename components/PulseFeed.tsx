@@ -2,14 +2,16 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Hourglass } from 'lucide-react'
 import DotCharacter from './DotCharacter'
-import { mockBoards, mockPosts, getTimeProgress, getRemainingTime, extendBoardLifespan } from '@/lib/mockData'
+import { mockBoards, mockPosts, getTimeProgress, extendBoardLifespan, formatRemainingTimer } from '@/lib/mockData'
 import type { Post, Board } from '@/lib/mockData'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { useBoardChat } from '@/lib/supabase/useBoardChat'
 import { uploadChatImage } from '@/lib/supabase/storage'
 import { extendBoardExpiry } from '@/lib/supabase/boards'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
+import { shareBoard } from '@/lib/shareBoard'
 import type { Message } from '@/lib/supabase/types'
 
 interface PulseFeedProps {
@@ -36,7 +38,11 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   const [hourglasses, setHourglassesState] = useState(0)
   const [boardExpiresAtOverride, setBoardExpiresAtOverride] = useState<Date | null>(null)
   const [showHourglassToast, setShowHourglassToast] = useState(false)
+  const [showShareToast, setShowShareToast] = useState(false)
   const [extendingHourglass, setExtendingHourglass] = useState(false)
+  const [timerLabel, setTimerLabel] = useState('0:00:00')
+  const [isUnderOneMinute, setIsUnderOneMinute] = useState(false)
+  const [isExpired, setIsExpired] = useState(false)
   const feedEndRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -132,19 +138,48 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [useSupabase, messages.length])
 
+  // 초 단위 타이머 + 프로그레스 (1초마다 갱신, unmount 시 clearInterval)
   useEffect(() => {
     const targetBoard = board ?? (useSupabase ? { createdAt: new Date(), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } : null)
-    if (!targetBoard) return
+    const effectiveExpiresAt: Date | undefined = boardExpiresAtOverride ?? targetBoard?.expiresAt
+    if (!targetBoard || !effectiveExpiresAt) return
 
-    const effectiveExpiresAt = boardExpiresAtOverride ?? targetBoard.expiresAt
-    const updateProgress = () => {
-      setProgress(getTimeProgress(targetBoard.createdAt, effectiveExpiresAt))
+    const createdAt = targetBoard.createdAt instanceof Date ? targetBoard.createdAt : new Date(targetBoard.createdAt)
+    const expiresAt = effectiveExpiresAt instanceof Date ? effectiveExpiresAt : new Date(effectiveExpiresAt)
+
+    const tick = (): void => {
+      const { label, remainingMs, isUnderOneMinute: under } = formatRemainingTimer(expiresAt)
+      setTimerLabel(label)
+      setIsUnderOneMinute(under)
+      setProgress(getTimeProgress(createdAt, expiresAt))
+      if (remainingMs <= 0) {
+        setIsExpired(true)
+      }
     }
 
-    updateProgress()
-    const interval = setInterval(updateProgress, 60000)
-    return () => clearInterval(interval)
+    tick()
+    const intervalId = setInterval(() => {
+      const { remainingMs, ...rest } = formatRemainingTimer(expiresAt)
+      setTimerLabel(rest.label)
+      setIsUnderOneMinute(rest.isUnderOneMinute)
+      setProgress(getTimeProgress(createdAt, expiresAt))
+      if (remainingMs <= 0) {
+        setIsExpired(true)
+        clearInterval(intervalId)
+      }
+    }, 1000)
+
+    return () => clearInterval(intervalId)
   }, [board, useSupabase, boardExpiresAtOverride])
+
+  // 만료 시 "폭파" 메시지 후 메인으로
+  useEffect(() => {
+    if (!isExpired) return
+    const t = setTimeout(() => {
+      onBack()
+    }, 2500)
+    return () => clearTimeout(t)
+  }, [isExpired, onBack])
 
   // 하트를 받으면 게시판 수명 연장
   useEffect(() => {
@@ -260,11 +295,36 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   }
 
   const effectiveExpiresAt = boardExpiresAtOverride ?? displayBoard.expiresAt
-  const { days, hours, minutes } = getRemainingTime(effectiveExpiresAt)
+
+  const handleShare = useCallback(async () => {
+    const result = await shareBoard(boardId, displayBoard.name)
+    if (result === 'copied') {
+      setShowShareToast(true)
+      setTimeout(() => setShowShareToast(false), 2500)
+    }
+  }, [boardId, displayBoard.name])
 
   return (
     <div className="min-h-screen bg-midnight-black text-white safe-bottom">
       <AnimatePresence>
+        {isExpired && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 px-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.p
+              className="text-xl sm:text-2xl font-bold text-red-500 text-center mb-2"
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', damping: 20 }}
+            >
+              이 방은 폭파되었습니다!
+            </motion.p>
+            <p className="text-sm text-gray-400">잠시 후 메인으로 이동합니다.</p>
+          </motion.div>
+        )}
         {showHourglassToast && (
           <motion.div
             className="fixed top-20 left-1/2 -translate-x-1/2 z-50 glass-strong px-5 py-3 rounded-2xl text-neon-orange font-bold text-center shadow-lg border border-neon-orange/40"
@@ -274,6 +334,17 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
             transition={{ duration: 0.25 }}
           >
             ⏳ 모래가 채워졌습니다!
+          </motion.div>
+        )}
+        {showShareToast && (
+          <motion.div
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 glass-strong px-5 py-3 rounded-2xl text-white font-bold text-center shadow-lg border border-neon-orange/40"
+            initial={{ opacity: 0, y: -12, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={{ duration: 0.25 }}
+          >
+            링크가 클립보드에 복사되었습니다!
           </motion.div>
         )}
       </AnimatePresence>
@@ -288,9 +359,26 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
             >
               ← 뒤로
             </button>
-            <h1 className="text-base sm:text-xl font-bold truncate">{displayBoard.name}</h1>
-            <div className="text-sm text-amber-400/90 flex items-center gap-1 flex-shrink-0">
-              <span>⏳</span>
+            <h1 className="text-base sm:text-xl font-bold truncate flex-1 min-w-0">{displayBoard.name}</h1>
+            <motion.button
+              type="button"
+              onClick={handleShare}
+              className="flex-shrink-0 p-2 rounded-xl glass border border-neon-orange/30 text-neon-orange hover:bg-neon-orange/10 transition-colors"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              title="공유하기"
+              aria-label="공유하기"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+            </motion.button>
+            <div className="text-sm text-amber-400 flex items-center gap-1.5 flex-shrink-0">
+              <Hourglass className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
               <span>보유 모래시계: {hourglasses}개</span>
             </div>
           </div>
@@ -307,7 +395,13 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
           </div>
           
           <div className="text-xs text-neon-orange mt-2 text-center relative flex flex-col sm:flex-row items-center justify-center gap-2">
-            <span>{days}일 {hours}시간 {minutes}분 남음</span>
+            <motion.span
+              className={isUnderOneMinute ? 'text-red-500 font-bold' : ''}
+              animate={isUnderOneMinute ? { scale: [1, 1.04, 1] } : {}}
+              transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              {timerLabel} 남음
+            </motion.span>
             {useSupabase && (
               <motion.button
                 type="button"

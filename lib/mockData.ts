@@ -178,19 +178,45 @@ export const mockUser: User = {
 }
 
 // 유틸리티 함수
-export function getRemainingTime(expiresAt: Date): { days: number; hours: number; minutes: number } {
+export function getRemainingTime(expiresAt: Date): { days: number; hours: number; minutes: number; seconds?: number } {
   const now = new Date()
   const diff = expiresAt.getTime() - now.getTime()
   
   if (diff <= 0) {
-    return { days: 0, hours: 0, minutes: 0 }
+    return { days: 0, hours: 0, minutes: 0, seconds: 0 }
   }
   
   const days = Math.floor(diff / (1000 * 60 * 60 * 24))
   const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000)
   
-  return { days, hours, minutes }
+  return { days, hours, minutes, seconds }
+}
+
+/** 남은 시간을 HH:mm:ss 또는 N일 HH:mm:ss 로 포맷 (초 단위). 만료 시 { label: '0:00:00', remainingMs: 0, isUnderOneMinute: true } */
+export function formatRemainingTimer(expiresAt: Date): {
+  label: string
+  remainingMs: number
+  isUnderOneMinute: boolean
+} {
+  const now = new Date()
+  const remainingMs = Math.max(0, expiresAt.getTime() - now.getTime())
+  const totalSeconds = Math.floor(remainingMs / 1000)
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  const label =
+    days > 0
+      ? `${days}일 ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+      : `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+  return {
+    label,
+    remainingMs,
+    isUnderOneMinute: totalSeconds < 60,
+  }
 }
 
 export function getTimeProgress(createdAt: Date, expiresAt: Date): number {
