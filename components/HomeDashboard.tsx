@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 import DotCharacter from './DotCharacter'
-import { mockBoards, getRemainingTime, getTrendKeywords, filterActiveBoards } from '@/lib/mockData'
+import { mockBoards, getTrendKeywords, filterActiveBoards, formatRemainingTimer } from '@/lib/mockData'
 import { getHourglasses } from '@/lib/hourglass'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { getOrCreateBoardByKeyword } from '@/lib/supabase/boards'
@@ -28,27 +28,22 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
   const [warpingKeyword, setWarpingKeyword] = useState<string | null>(null)
   const [hourglasses, setHourglasses] = useState(0)
   const [creatingRoom, setCreatingRoom] = useState(false)
+  const [, setTick] = useState(0)
 
   useEffect(() => {
     setHourglasses(getHourglasses())
   }, [])
 
-  // 더블클릭 감지
-  const [lastClickTime, setLastClickTime] = useState<{ [key: string]: number }>({})
+  // 메인 화면 남은 시간 실시간 갱신 (1초마다)
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const getBoardKeyword = (board: Board) => board.trendKeywords?.[0] ?? board.name ?? board.id
 
-  const handleBoardClick = (board: Board) => {
-    const now = Date.now()
-    const boardId = board.id
-    const lastClick = lastClickTime[boardId] || 0
-
-    if (now - lastClick < 300) {
-      handleWarp(board)
-    } else {
-      setLastClickTime({ ...lastClickTime, [boardId]: now })
-    }
-  }
+  /** 해시태그 없으면 앞에 # 붙여서 표시 (방 내부와 통일) */
+  const displayBoardName = (name: string) => (name.startsWith('#') ? name : `#${name}`)
 
   const handleWarp = (board: Board) => {
     setWarpingBoardId(board.id)
@@ -256,13 +251,14 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
         </h2>
         <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide relative">
           {userBoards.map((board) => {
-            const { days, hours } = getRemainingTime(board.expiresAt)
+            const expiresAt = board.expiresAt instanceof Date ? board.expiresAt : new Date(board.expiresAt)
+            const { label: timeLabel } = formatRemainingTimer(expiresAt)
             const isWarping = warpingBoardId === board.id
             return (
               <motion.div
                 key={board.id}
-                className="flex-shrink-0 glass-strong rounded-2xl p-4 w-[78vw] max-w-[22rem] sm:w-80 cursor-pointer relative"
-                onClick={() => handleBoardClick(board)}
+                className="flex-shrink-0 glass-strong rounded-2xl p-4 w-[78vw] max-w-[22rem] sm:w-80 cursor-pointer relative border border-white/10 shadow-lg shadow-black/20"
+                onClick={() => handleWarp(board)}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 animate={isWarping ? {
@@ -315,14 +311,14 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
                 <div className="flex items-center gap-3 mb-3">
                   <DotCharacter characterId={0} size={32} />
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate">{board.name}</div>
-                    <div className="text-xs text-gray-400">
-                      {days}일 {hours}시간
+                    <div className="font-semibold text-sm truncate text-blue-400">{displayBoardName(board.name)}</div>
+                    <div className="text-xs text-gray-400 font-mono tabular-nums">
+                      {timeLabel}
                     </div>
                   </div>
                 </div>
                 <div className="text-xs text-neon-orange">
-                  더블클릭으로 이동
+                  클릭하여 입장
                 </div>
               </motion.div>
             )
@@ -338,11 +334,12 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
         </h2>
         <div className="space-y-3">
           {liveBoards.map((board) => {
-            const { days, hours } = getRemainingTime(board.expiresAt)
+            const expiresAt = board.expiresAt instanceof Date ? board.expiresAt : new Date(board.expiresAt)
+            const { label: timeLabel } = formatRemainingTimer(expiresAt)
             return (
               <motion.div
                 key={board.id}
-                className="glass-strong rounded-2xl p-4 cursor-pointer"
+                className="glass-strong rounded-2xl p-4 cursor-pointer border border-white/10 shadow-lg shadow-black/20 hover:border-amber-500/20 transition-colors"
                 onClick={() => {
                   if (useSupabase) {
                     router.push(`/board/${encodeURIComponent(getBoardKeyword(board))}`)
@@ -353,25 +350,23 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <h3 className="font-bold text-lg mb-1">{board.name}</h3>
-                    <p className="text-sm text-gray-400 mb-2">{board.description}</p>
+                <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+                  <div className="flex-1 min-w-0 order-1">
+                    <h3 className="font-bold text-lg text-blue-400 truncate">{displayBoardName(board.name)}</h3>
+                    <p className="text-sm text-gray-400 mt-0.5 truncate">{board.description}</p>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm shrink-0 order-2">
+                    <span className="text-gray-400" title="하트">❤️ {board.heartCount}</span>
+                    <span className="text-gray-400" title="인원">👥 {board.memberCount}</span>
+                    <span className="font-mono tabular-nums text-neon-orange text-xs sm:text-sm whitespace-nowrap">
+                      {timeLabel}
+                    </span>
                   </div>
                   {board.featured && (
-                    <span className="text-neon-orange text-xs px-2 py-1 glass rounded-full">
+                    <span className="text-neon-orange text-xs px-2 py-1 glass rounded-full shrink-0 order-3">
                       Featured
                     </span>
                   )}
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-4 text-gray-400">
-                    <span>❤️ {board.heartCount}</span>
-                    <span>👥 {board.memberCount}</span>
-                  </div>
-                  <div className="text-neon-orange">
-                    {days}일 {hours}시간 남음
-                  </div>
                 </div>
               </motion.div>
             )
