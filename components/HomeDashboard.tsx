@@ -79,9 +79,13 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
           </motion.div>
           <span className="text-xs sm:text-sm text-gray-400">떴다방</span>
         </div>
-        <div className="flex items-center gap-2 glass px-3 py-2 sm:px-4 rounded-full text-amber-400">
-          <Hourglass className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" strokeWidth={2} />
-          <span className="font-semibold text-sm sm:text-base">보유 모래시계: {hourglasses}개</span>
+        <div
+          className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 sm:py-2 rounded-full bg-white/[0.06] border border-white/10 min-w-0"
+          role="status"
+          aria-label={`보유 모래시계 ${hourglasses}개`}
+        >
+          <Hourglass className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 text-amber-400" strokeWidth={2} />
+          <span className="font-semibold text-sm sm:text-base tabular-nums text-white">{hourglasses}</span>
         </div>
       </header>
 
