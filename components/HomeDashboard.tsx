@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import DotCharacter from './DotCharacter'
 import { mockBoards, getRemainingTime, getTrendKeywords, filterActiveBoards } from '@/lib/mockData'
@@ -78,14 +79,15 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
           </motion.div>
           <span className="text-xs sm:text-sm text-gray-400">떴다방</span>
         </div>
-        <div
-          className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 sm:py-2 rounded-full bg-white/[0.06] border border-white/10 min-w-0"
+        <Link
+          href="/store"
+          className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 sm:py-2 rounded-full bg-white/[0.06] border border-white/10 min-w-0 hover:border-amber-500/30 transition-colors"
           role="status"
-          aria-label={`보유 모래시계 ${hourglasses}개`}
+          aria-label={`보유 모래시계 ${hourglasses}개, 상점으로 이동`}
         >
           <span className="text-lg sm:text-xl leading-none flex-shrink-0" aria-hidden>⏳</span>
           <span className="font-semibold text-sm sm:text-base tabular-nums text-white">{hourglasses}</span>
-        </div>
+        </Link>
       </header>
 
       {/* Discovery Section */}
