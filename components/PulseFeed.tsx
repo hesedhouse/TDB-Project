@@ -302,6 +302,26 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   }
 
   const displayBoard = board ?? (useSupabase ? { name: initialBoardName ?? `#${boardId}`, expiresAt: initialExpiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createdAt: initialCreatedAt ?? new Date() } : null)
+
+  /** 방 제목(name)에서 # 포함 구간을 파란색 해시태그로 렌더 */
+  const renderBoardNameWithHashtag = (name: string) => {
+    const parts = name.split('#')
+    if (parts.length <= 1) return name
+    const nodes: React.ReactNode[] = [parts[0]]
+    for (let i = 1; i < parts.length; i++) {
+      const segment = parts[i]
+      const word = segment.split(/\s/)[0] || segment
+      const rest = segment.slice(word.length)
+      nodes.push(
+        <span key={i} className="text-blue-400 font-semibold">
+          #{word}
+        </span>
+      )
+      if (rest) nodes.push(rest)
+    }
+    return nodes
+  }
+
   if (!displayBoard) {
     return (
       <div className="min-h-screen bg-midnight-black flex items-center justify-center">
@@ -375,7 +395,9 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
             >
               ← 뒤로
             </button>
-            <h1 className="text-base sm:text-xl font-bold truncate flex-1 min-w-0">{displayBoard.name}</h1>
+            <h1 className="text-base sm:text-xl font-bold truncate flex-1 min-w-0 flex items-center gap-0.5 flex-wrap">
+              {renderBoardNameWithHashtag(displayBoard.name)}
+            </h1>
             <motion.button
               type="button"
               onClick={handleShare}

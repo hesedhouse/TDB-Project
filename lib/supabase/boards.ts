@@ -16,9 +16,10 @@ export type BoardRow = {
 export type Board = BoardRow
 
 /**
- * 방 제목(키워드)으로 방을 조회하고, 없으면 새로 생성 후 반환합니다.
- * - DB 컬럼: id(uuid), keyword(text), name(text), expires_at(timestamptz), created_at(timestamptz)
- * - 검색은 keyword만 사용. id는 검색/입력하지 않음.
+ * 방 조회·생성은 모두 keyword 컬럼 기준. id는 사용하지 않음.
+ * - 조회: .eq('keyword', normalizedKeyword) 만 사용.
+ * - 생성: insert 시 id 미포함 → DB의 gen_random_uuid() 자동 생성 (invalid uuid 방지).
+ * - DB 컬럼: id(uuid), keyword(text), name(text), expires_at, created_at
  */
 export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardRow | null> {
   const supabase = createClient()
