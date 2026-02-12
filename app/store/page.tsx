@@ -58,8 +58,7 @@ export default function StorePage() {
       setHourglasses(next)
       setHourglassesState(next)
       setCustomQty('')
-      setToast('결제가 완료되었습니다! 모래시계가 충전되었습니다.')
-      setTimeout(() => router.push('/'), 1800)
+      setToast('모래시계 충전 완료!')
     } catch (e) {
       const msg =
         e instanceof Error

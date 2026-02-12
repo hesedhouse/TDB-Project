@@ -6,18 +6,27 @@ import { motion, AnimatePresence } from 'framer-motion'
 import PulseFeed from '@/components/PulseFeed'
 import { mockBoards } from '@/lib/mockData'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
-import { getOrCreateBoardByKeyword, getBoardById, type BoardRow } from '@/lib/supabase/boards'
+import { getOrCreateBoardByKeyword, getBoardById, type Board, type BoardRow } from '@/lib/supabase/boards'
 import { isValidUuid } from '@/lib/supabase/client'
 
 interface BoardByKeywordPageProps {
   params: { keyword: string }
 }
 
+/** #PUBG 등 특수문자 포함 키워드를 URL에서 안전하게 디코딩 */
+function safeDecodeKeyword(raw: string): string {
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+}
+
 export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) {
   const router = useRouter()
-  const decodedKeyword = decodeURIComponent(params.keyword)
+  const decodedKeyword = safeDecodeKeyword(params.keyword ?? '')
   const [showToast, setShowToast] = useState(false)
-  const [supabaseBoard, setSupabaseBoard] = useState<BoardRow | null>(null)
+  const [supabaseBoard, setSupabaseBoard] = useState<Board | null>(null)
   const [boardLoading, setBoardLoading] = useState(true)
   const useSupabase = isSupabaseConfigured()
 
@@ -44,10 +53,10 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
       return
     }
     let cancelled = false
-    const load = isValidUuid(decodedKeyword)
+    const load: Promise<Board | null> = isValidUuid(decodedKeyword)
       ? getBoardById(decodedKeyword)
       : getOrCreateBoardByKeyword(decodedKeyword)
-    load.then((row) => {
+    load.then((row: Board | null) => {
       if (!cancelled && row) setSupabaseBoard(row)
       setBoardLoading(false)
     })

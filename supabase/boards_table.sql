@@ -14,6 +14,7 @@ create table if not exists public.boards (
 );
 
 comment on column public.boards.keyword is '방 제목/키워드 (한글 등). 검색은 이 컬럼으로만 수행.';
+comment on column public.boards.name is '방 표시명. name만 사용 (title 아님). Schema Mismatch 400 방지.';
 comment on column public.boards.id is 'UUID 자동 생성. 직접 지정 금지.';
 
 alter table public.boards enable row level security;

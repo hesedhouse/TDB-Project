@@ -3,7 +3,7 @@ import { isValidUuid } from './client'
 
 const ONE_HOUR_MS = 60 * 60 * 1000
 
-/** Supabase boards 행: id는 UUID */
+/** Supabase boards 행: id는 UUID, 검색은 keyword만 사용. 컬럼은 name으로 통일 (title 사용 안 함) */
 export type BoardRow = {
   id: string
   keyword: string
@@ -12,11 +12,14 @@ export type BoardRow = {
   created_at: string
 }
 
+/** BoardRow 별칭 (Board | null 리턴 타입용) */
+export type Board = BoardRow
+
 /**
  * 방 제목(키워드)으로 방을 조회하고, 없으면 새로 생성 후 반환합니다.
- * - 검색은 반드시 keyword 컬럼만 사용합니다. id는 절대 검색/입력하지 않습니다.
- * - id는 Supabase gen_random_uuid()로 자동 생성되며, insert 시 id를 넣지 않습니다.
- * (한글 등 모든 방 제목 지원, UUID 형식 에러 원천 차단)
+ * - 검색은 keyword 컬럼만 사용. id는 검색/입력하지 않음.
+ * - DB에는 name 컬럼 사용 (title 아님). 400 나면 boards_migration_add_name.sql 실행.
+ * - 반환 타입: Board | null
  */
 export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardRow | null> {
   const supabase = createClient()
@@ -25,7 +28,7 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
   const normalizedKeyword = keyword.trim()
   if (!normalizedKeyword) return null
 
-  // 1) keyword 컬럼으로만 조회 (id 사용 금지)
+  // 1) keyword 컬럼으로만 조회 (id 사용 금지). 컬럼명은 name 통일.
   const { data: existing, error: selectErr } = await supabase
     .from('boards')
     .select('id, keyword, name, expires_at, created_at')
@@ -41,7 +44,7 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
     return existing as BoardRow
   }
 
-  // 2) 새 방 생성 시 id는 넣지 않음 → DB가 UUID 자동 생성
+  // 2) 새 방 생성 시 id는 넣지 않음 → DB가 UUID 자동 생성. name 컬럼 사용.
   const { data: inserted, error: insertErr } = await supabase
     .from('boards')
     .insert({
@@ -57,11 +60,11 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
     return null
   }
 
-  return inserted as BoardRow
+  return (inserted as BoardRow) ?? null
 }
 
 /**
- * UUID로 방을 조회합니다. (URL이 /board/[uuid] 일 때 사용)
+ * UUID로 방을 조회합니다. (URL이 /board/[uuid] 일 때 사용). 반환: Board | null
  */
 export async function getBoardById(id: string): Promise<BoardRow | null> {
   if (!isValidUuid(id)) return null
@@ -78,7 +81,7 @@ export async function getBoardById(id: string): Promise<BoardRow | null> {
     console.error('getBoardById error:', error)
     return null
   }
-  return (data as BoardRow) ?? null
+  return data != null ? (data as BoardRow) : null
 }
 
 /**
