@@ -76,6 +76,7 @@ export async function extendBoardExpiry(boardId: string): Promise<Date | null> {
 
   const current = row.expires_at
   const currentDate = typeof current === 'string' ? new Date(current) : current
+  // 정확히 1시간(3600초) 연장
   const newExpiresAt = new Date(currentDate.getTime() + ONE_HOUR_MS)
 
   const { error: updateErr } = await supabase

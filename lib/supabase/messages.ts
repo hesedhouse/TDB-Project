@@ -50,15 +50,17 @@ export async function sendMessage(params: {
 
 /** 하트 수 1 증가. 반환: 갱신된 heart_count */
 export async function incrementHeart(messageId: string): Promise<number | null> {
-  return updateHeartCount(messageId, 1)
+  const result = await updateHeartCount(messageId, 1)
+  return result
 }
 
 /** 하트 수 1 감소 (최소 0). 반환: 갱신된 heart_count */
 export async function decrementHeart(messageId: string): Promise<number | null> {
-  return updateHeartCount(messageId, -1)
+  const result = await updateHeartCount(messageId, -1)
+  return result
 }
 
-/** messages.heart_count 를 delta만큼 변경 (한 번의 조회·한 번의 업데이트) */
+/** messages.heart_count 를 delta만큼 변경 (한 번의 조회·한 번의 업데이트). 반환 타입을 Promise로 명확히 함. */
 async function updateHeartCount(
   messageId: string,
   delta: number
@@ -66,33 +68,36 @@ async function updateHeartCount(
   const supabase = createClient()
   if (!supabase) return null
 
-  const { data: row, error: fetchErr } = await supabase
+  const fetchResult = await supabase
     .from('messages')
     .select('heart_count')
     .eq('id', messageId)
     .single()
 
-  if (fetchErr || row == null) {
-    console.error('updateHeartCount fetch error:', fetchErr)
+  if (fetchResult.error || fetchResult.data == null) {
+    console.error('updateHeartCount fetch error:', fetchResult.error)
     return null
   }
 
+  const row = fetchResult.data
   const current = row.heart_count ?? 0
   const newCount = Math.max(0, current + delta)
 
-  const { data: updated, error: updateErr } = await supabase
+  const updateResult = await supabase
     .from('messages')
     .update({ heart_count: newCount })
     .eq('id', messageId)
     .select('heart_count')
     .single()
 
-  if (updateErr) {
-    console.error('updateHeartCount update error:', updateErr)
+  if (updateResult.error) {
+    console.error('updateHeartCount update error:', updateResult.error)
     return null
   }
 
-  return (updated?.heart_count ?? newCount) as number
+  const updated = updateResult.data
+  const value = updated?.heart_count ?? newCount
+  return typeof value === 'number' ? value : null
 }
 
 export function subscribeMessages(

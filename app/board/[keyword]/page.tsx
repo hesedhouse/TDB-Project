@@ -36,9 +36,9 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     }
   }, [matchedBoard])
 
-  // Supabase 사용 시 키워드로 보드 조회/생성 (UUID 사용)
+  // Supabase 사용 시 항상 키워드로 보드 조회/생성 → UUID 사용 (matchedBoard 무시)
   useEffect(() => {
-    if (!useSupabase || matchedBoard) {
+    if (!useSupabase) {
       setBoardLoading(false)
       return
     }
@@ -48,9 +48,10 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
       setBoardLoading(false)
     })
     return () => { cancelled = true }
-  }, [useSupabase, decodedKeyword, matchedBoard])
+  }, [useSupabase, decodedKeyword])
 
-  if (matchedBoard) {
+  // Supabase 미사용 시에만 목(mock) 보드 ID 사용
+  if (!useSupabase && matchedBoard) {
     return (
       <div className="min-h-screen bg-midnight-black text-white">
         <PulseFeed
@@ -63,7 +64,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     )
   }
 
-  // 새 키워드 방: Supabase 연동 시 UUID 보드 조회/생성 후 PulseFeed에 전달
+  // Supabase 연동 시: 항상 UUID 보드 조회/생성 후 PulseFeed에 전달
   if (useSupabase) {
     if (boardLoading) {
       return (
