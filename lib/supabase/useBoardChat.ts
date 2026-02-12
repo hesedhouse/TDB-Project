@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { fetchMessages, sendMessage, incrementHeart, subscribeMessages } from './messages'
+import { fetchMessages, sendMessage, incrementHeart, decrementHeart, subscribeMessages } from './messages'
 import type { Message } from './types'
 
 /**
@@ -71,18 +71,25 @@ export function useBoardChat(
     [boardId, userCharacter, userNickname, sending]
   )
 
-  const addHeart = useCallback(async (messageId: string) => {
-    const newCount = await incrementHeart(messageId)
-    if (newCount != null) {
+  /** 하트 토글: 이미 누른 메시지면 -1, 아니면 +1. 반환값으로 UI(빨간 하트 등) 갱신용 */
+  const toggleHeart = useCallback(
+    async (
+      messageId: string,
+      isCurrentlyHearted: boolean
+    ): Promise<{ newCount: number; isHearted: boolean } | null> => {
+      const newCount = isCurrentlyHearted
+        ? await decrementHeart(messageId)
+        : await incrementHeart(messageId)
+      if (newCount == null) return null
       setMessages((prev) =>
         prev.map((m) =>
           m.id === messageId ? { ...m, heartCount: newCount } : m
         )
       )
-      return newCount
-    }
-    return null
-  }, [])
+      return { newCount, isHearted: !isCurrentlyHearted }
+    },
+    []
+  )
 
-  return { messages, send, addHeart, sending }
+  return { messages, send, toggleHeart, sending }
 }

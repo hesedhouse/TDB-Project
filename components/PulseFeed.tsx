@@ -35,7 +35,19 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   const listRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { messages, send, addHeart, sending } = useBoardChat(boardId, {
+  const HEARTED_STORAGE_KEY = 'tdb-hearted'
+
+  const [heartedIds, setHeartedIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const raw = localStorage.getItem(HEARTED_STORAGE_KEY)
+      return new Set((raw ? JSON.parse(raw) : []) as string[])
+    } catch {
+      return new Set()
+    }
+  })
+
+  const { messages, send, toggleHeart, sending } = useBoardChat(boardId, {
     userCharacter,
     userNickname,
     enabled: useSupabase,
@@ -65,15 +77,27 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   const handleMessageHeart = useCallback(
     async (messageId: string) => {
       if (!useSupabase) return
+      const isHearted = heartedIds.has(messageId)
       setHeartAnimations((prev) => new Set([...prev, messageId]))
+      const result = await toggleHeart(messageId, isHearted)
       setTimeout(() => setHeartAnimations((prev) => {
         const next = new Set(prev)
         next.delete(messageId)
         return next
-      }), 500)
-      await addHeart(messageId)
+      }), 400)
+      if (result) {
+        setHeartedIds((prev) => {
+          const next = new Set(prev)
+          if (result.isHearted) next.add(messageId)
+          else next.delete(messageId)
+          try {
+            localStorage.setItem(HEARTED_STORAGE_KEY, JSON.stringify([...next]))
+          } catch (_) {}
+          return next
+        })
+      }
     },
-    [useSupabase, addHeart]
+    [useSupabase, toggleHeart, heartedIds]
   )
 
   // 스레드처럼 새 메시지 시 부드럽게 맨 아래로 스크롤
@@ -354,7 +378,11 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
                           <motion.button
                             type="button"
                             onClick={() => handleMessageHeart(msg.id)}
-                            className="flex items-center gap-1 text-neon-orange/90 hover:text-neon-orange text-xs"
+                            className={`flex items-center gap-1 text-xs ${
+                              heartedIds.has(msg.id)
+                                ? 'text-red-500 hover:text-red-400'
+                                : 'text-neon-orange/90 hover:text-neon-orange'
+                            }`}
                             whileTap={{ scale: 0.9 }}
                           >
                             <motion.span

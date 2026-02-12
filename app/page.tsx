@@ -33,7 +33,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-midnight-black">
+    <main className="min-h-screen bg-midnight-black pt-16">
       {currentView === 'home' && (
         <HomeDashboard onEnterBoard={handleEnterBoard} />
       )}

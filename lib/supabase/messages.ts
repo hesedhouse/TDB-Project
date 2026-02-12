@@ -48,32 +48,47 @@ export async function sendMessage(params: {
   return dbMessageToMessage(data as DbMessage)
 }
 
+/** 하트 수 1 증가. 반환: 갱신된 heart_count */
 export async function incrementHeart(messageId: string): Promise<number | null> {
-  const supabase = createClient()
-  if (!supabase) return null
+  return updateHeartCount(messageId, 1)
+}
 
-  const { data: row, error: fetchErr } = await supabase
+/** 하트 수 1 감소 (최소 0). 반환: 갱신된 heart_count */
+export async function decrementHeart(messageId: string): Promise<number | null> {
+  return updateHeartCount(messageId, -1)
+}
+
+/** messages.heart_count 를 delta만큼 변경 (한 번의 조회·한 번의 업데이트) */
+function updateHeartCount(messageId: string, delta: number): Promise<number | null> {
+  const supabase = createClient()
+  if (!supabase) return Promise.resolve(null)
+
+  return supabase
     .from('messages')
     .select('heart_count')
     .eq('id', messageId)
     .single()
-
-  if (fetchErr || row == null) {
-    console.error('incrementHeart fetch error:', fetchErr)
-    return null
-  }
-
-  const newCount = (row.heart_count ?? 0) + 1
-  const { error: updateErr } = await supabase
-    .from('messages')
-    .update({ heart_count: newCount })
-    .eq('id', messageId)
-
-  if (updateErr) {
-    console.error('incrementHeart update error:', updateErr)
-    return null
-  }
-  return newCount
+    .then(({ data: row, error: fetchErr }) => {
+      if (fetchErr || row == null) {
+        console.error('updateHeartCount fetch error:', fetchErr)
+        return null
+      }
+      const current = row.heart_count ?? 0
+      const newCount = Math.max(0, current + delta)
+      return supabase
+        .from('messages')
+        .update({ heart_count: newCount })
+        .eq('id', messageId)
+        .select('heart_count')
+        .single()
+        .then(({ data: updated, error: updateErr }) => {
+          if (updateErr) {
+            console.error('updateHeartCount update error:', updateErr)
+            return null
+          }
+          return (updated?.heart_count ?? newCount) as number
+        })
+    })
 }
 
 export function subscribeMessages(
