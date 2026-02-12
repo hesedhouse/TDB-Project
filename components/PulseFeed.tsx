@@ -432,13 +432,26 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
             />
           </div>
           
-          <div className="text-xs text-neon-orange mt-2 text-center relative flex flex-col sm:flex-row items-center justify-center gap-2">
+          <div className="text-neon-orange mt-2 text-center relative flex flex-col sm:flex-row items-center justify-center gap-2 min-w-0 overflow-hidden">
             <motion.span
-              className={isUnderOneMinute ? 'text-red-500 font-bold' : ''}
+              className={`inline-flex items-baseline gap-1 shrink min-w-0 whitespace-nowrap ${isUnderOneMinute ? 'text-red-500 font-bold' : ''}`}
+              style={{
+                fontSize:
+                  timerLabel.length > 18
+                    ? '0.5rem'
+                    : timerLabel.length > 14
+                      ? '0.6rem'
+                      : timerLabel.length > 11
+                        ? '0.65rem'
+                        : 'clamp(0.5rem, 2.5vw, 0.75rem)',
+              }}
               animate={isUnderOneMinute ? { scale: [1, 1.04, 1] } : {}}
               transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
             >
-              {timerLabel} 남음
+              <span className="font-mono tabular-nums text-left" aria-label="남은 시간">
+                {timerLabel}
+              </span>
+              <span>남음</span>
             </motion.span>
             {useSupabaseWithUuid && (
               <motion.button
