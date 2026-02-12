@@ -116,20 +116,27 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   )
 
   const handleHourglassExtend = useCallback(async () => {
-    if (hourglasses <= 0 || extendingHourglass || !useSupabase) return
+    if (extendingHourglass || !useSupabase) return
+    const current = getHourglasses()
+    if (current <= 0) {
+      setHourglassesState(0)
+      alert('모래시계가 부족합니다!')
+      return
+    }
     setExtendingHourglass(true)
-    const newExpiresAt = await extendBoardExpiry(boardId)
-    setExtendingHourglass(false)
-    if (newExpiresAt == null) return
-    setHourglassesState((prev) => {
-      const next = Math.max(0, prev - 1)
+    try {
+      const newExpiresAt = await extendBoardExpiry(boardId)
+      if (newExpiresAt == null) return
+      const next = Math.max(0, current - 1)
       persistHourglasses(next)
-      return next
-    })
-    setBoardExpiresAtOverride(newExpiresAt)
-    setShowHourglassToast(true)
-    setTimeout(() => setShowHourglassToast(false), 3000)
-  }, [hourglasses, extendingHourglass, useSupabase, boardId])
+      setHourglassesState(next)
+      setBoardExpiresAtOverride(newExpiresAt)
+      setShowHourglassToast(true)
+      setTimeout(() => setShowHourglassToast(false), 3000)
+    } finally {
+      setExtendingHourglass(false)
+    }
+  }, [extendingHourglass, useSupabase, boardId])
 
   // 스레드처럼 새 메시지 시 부드럽게 맨 아래로 스크롤
   useEffect(() => {
@@ -326,13 +333,13 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
         )}
         {showHourglassToast && (
           <motion.div
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 glass-strong px-5 py-3 rounded-2xl text-neon-orange font-bold text-center shadow-lg border border-neon-orange/40"
-            initial={{ opacity: 0, y: -12, scale: 0.95 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 glass-strong px-5 py-3 rounded-2xl text-neon-orange font-bold text-center shadow-lg border border-neon-orange/40 safe-bottom"
+            initial={{ opacity: 0, y: 12, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.25 }}
           >
-            ⏳ 모래가 채워졌습니다!
+            시간의 모래가 채워졌습니다! (+1시간)
           </motion.div>
         )}
         {showShareToast && (

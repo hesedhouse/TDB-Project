@@ -4,9 +4,14 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getHourglasses, setHourglasses } from '@/lib/hourglass'
+import { requestPayment } from '@portone/browser-sdk/v2'
+import { PaymentCurrency, PaymentPayMethod } from '@portone/browser-sdk/v2'
 
 const PRICE_PER_ONE = 120
 const PRESET_OPTIONS = [1, 10, 100, 1000, 10000]
+
+const STORE_ID = process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? ''
+const CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? ''
 
 export default function StorePage() {
   const [hourglasses, setHourglassesState] = useState(0)
@@ -21,18 +26,40 @@ export default function StorePage() {
   const customNum = Math.max(0, Math.floor(Number(customQty) || 0))
   const customTotal = customNum * PRICE_PER_ONE
 
-  const handlePurchase = (qty: number) => {
+  const handlePurchase = async (qty: number) => {
     if (qty < 1 || processing) return
+    if (!STORE_ID || !CHANNEL_KEY) {
+      setToast('결제 설정이 없습니다. 상점 ID와 채널 키를 설정해 주세요.')
+      return
+    }
+    const totalAmount = qty * PRICE_PER_ONE
     setProcessing(true)
-    setToast('결제창으로 연결됩니다...')
-    setTimeout(() => {
+    setToast('결제창을 여는 중...')
+    try {
+      const response = await requestPayment({
+        storeId: STORE_ID,
+        channelKey: CHANNEL_KEY,
+        paymentId: `tdb-${Date.now()}-${crypto.randomUUID()}`,
+        orderName: `모래시계 ${qty}개`,
+        totalAmount,
+        currency: PaymentCurrency.KRW,
+        payMethod: PaymentPayMethod.CARD,
+      })
+      if (response?.code != null) {
+        setToast(response.message ?? '결제에 실패했어요.')
+        return
+      }
       const next = getHourglasses() + qty
       setHourglasses(next)
       setHourglassesState(next)
-      setToast(null)
-      setProcessing(false)
+      setToast('결제 완료! 모래시계가 충전되었어요.')
       setCustomQty('')
-    }, 1000)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '결제 요청 중 오류가 났어요.'
+      setToast(msg)
+    } finally {
+      setProcessing(false)
+    }
   }
 
   return (

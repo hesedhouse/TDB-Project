@@ -3,8 +3,9 @@ import { createClient } from './client'
 const ONE_HOUR_MS = 60 * 60 * 1000
 
 /**
- * 해당 방의 expires_at을 1시간 연장하고, 갱신된 expires_at을 반환합니다.
- * Supabase `boards` 테이블에 id, expires_at 컬럼이 있어야 합니다.
+ * 해당 방의 expires_at을 현재 저장된 값에서 정확히 1시간 뒤로 업데이트합니다.
+ * 갱신된 expires_at을 반환하며, 실패 시 null을 반환합니다.
+ * (PromiseLike 타입 이슈 방지를 위해 모든 비동기 호출은 await로 처리합니다.)
  */
 export async function extendBoardExpiry(boardId: string): Promise<Date | null> {
   const supabase = createClient()
