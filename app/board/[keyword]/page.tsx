@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import PulseFeed from '@/components/PulseFeed'
 import { mockBoards } from '@/lib/mockData'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
+import { getOrCreateBoardByKeyword, type BoardRow } from '@/lib/supabase/boards'
 
 interface BoardByKeywordPageProps {
   params: { keyword: string }
@@ -15,6 +16,8 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   const router = useRouter()
   const decodedKeyword = decodeURIComponent(params.keyword)
   const [showToast, setShowToast] = useState(false)
+  const [supabaseBoard, setSupabaseBoard] = useState<BoardRow | null>(null)
+  const [boardLoading, setBoardLoading] = useState(true)
   const useSupabase = isSupabaseConfigured()
 
   const matchedBoard = useMemo(() => {
@@ -33,6 +36,20 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     }
   }, [matchedBoard])
 
+  // Supabase 사용 시 키워드로 보드 조회/생성 (UUID 사용)
+  useEffect(() => {
+    if (!useSupabase || matchedBoard) {
+      setBoardLoading(false)
+      return
+    }
+    let cancelled = false
+    getOrCreateBoardByKeyword(decodedKeyword).then((row) => {
+      if (!cancelled && row) setSupabaseBoard(row)
+      setBoardLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [useSupabase, decodedKeyword, matchedBoard])
+
   if (matchedBoard) {
     return (
       <div className="min-h-screen bg-midnight-black text-white">
@@ -46,8 +63,22 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     )
   }
 
-  // 새 키워드 방: Supabase 연동 시 실시간 채팅으로 입장, 아니면 빈 화면
+  // 새 키워드 방: Supabase 연동 시 UUID 보드 조회/생성 후 PulseFeed에 전달
   if (useSupabase) {
+    if (boardLoading) {
+      return (
+        <div className="min-h-screen bg-midnight-black text-white flex items-center justify-center">
+          <p className="text-gray-400">방을 불러오는 중...</p>
+        </div>
+      )
+    }
+    if (!supabaseBoard) {
+      return (
+        <div className="min-h-screen bg-midnight-black text-white flex items-center justify-center">
+          <p className="text-gray-400">방을 불러올 수 없습니다.</p>
+        </div>
+      )
+    }
     return (
       <div className="min-h-screen bg-midnight-black text-white">
         <AnimatePresence>
@@ -64,10 +95,13 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
           )}
         </AnimatePresence>
         <PulseFeed
-          boardId={decodedKeyword}
+          boardId={supabaseBoard.id}
           userCharacter={0}
           userNickname="게스트"
           onBack={() => router.push('/')}
+          initialExpiresAt={new Date(supabaseBoard.expires_at)}
+          initialCreatedAt={new Date(supabaseBoard.created_at)}
+          initialBoardName={supabaseBoard.name ?? `#${decodedKeyword}`}
         />
       </div>
     )

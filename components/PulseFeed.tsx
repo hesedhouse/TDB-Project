@@ -18,11 +18,17 @@ interface PulseFeedProps {
   userCharacter: number
   userNickname: string
   onBack: () => void
+  /** Supabase에서 조회한 방의 만료 시각 (UUID 보드일 때 타이머용) */
+  initialExpiresAt?: Date | null
+  /** Supabase에서 조회한 방의 생성 시각 */
+  initialCreatedAt?: Date | null
+  /** 방 표시명 (예: #키워드) */
+  initialBoardName?: string | null
 }
 
 type SortType = 'latest' | 'popular'
 
-export default function PulseFeed({ boardId, userCharacter, userNickname, onBack }: PulseFeedProps) {
+export default function PulseFeed({ boardId, userCharacter, userNickname, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
   const useSupabase = isSupabaseConfigured()
 
   const [sortType, setSortType] = useState<SortType>('latest')
@@ -146,7 +152,9 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
 
   // 초 단위 타이머 + 프로그레스 (1초마다 갱신, unmount 시 clearInterval)
   useEffect(() => {
-    const targetBoard = board ?? (useSupabase ? { createdAt: new Date(), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } : null)
+    const fallbackExpires = initialExpiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    const fallbackCreated = initialCreatedAt ?? new Date()
+    const targetBoard = board ?? (useSupabase ? { createdAt: fallbackCreated, expiresAt: fallbackExpires } : null)
     const effectiveExpiresAt: Date | undefined = boardExpiresAtOverride ?? targetBoard?.expiresAt
     if (!targetBoard || !effectiveExpiresAt) return
 
@@ -176,7 +184,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     }, 1000)
 
     return () => clearInterval(intervalId)
-  }, [board, useSupabase, boardExpiresAtOverride])
+  }, [board, useSupabase, boardExpiresAtOverride, initialExpiresAt, initialCreatedAt])
 
   // 만료 시 "폭파" 메시지 후 메인으로
   useEffect(() => {
@@ -291,7 +299,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
     return `${days}일 전`
   }
 
-  const displayBoard = board ?? (useSupabase ? { name: `#${boardId}`, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createdAt: new Date() } : null)
+  const displayBoard = board ?? (useSupabase ? { name: initialBoardName ?? `#${boardId}`, expiresAt: initialExpiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createdAt: initialCreatedAt ?? new Date() } : null)
   if (!displayBoard) {
     return (
       <div className="min-h-screen bg-midnight-black flex items-center justify-center">

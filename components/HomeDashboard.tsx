@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import DotCharacter from './DotCharacter'
 import { mockBoards, getRemainingTime, getTrendKeywords, filterActiveBoards } from '@/lib/mockData'
 import { getHourglasses } from '@/lib/hourglass'
+import { isSupabaseConfigured } from '@/lib/supabase/client'
 import type { Board } from '@/lib/mockData'
 
 interface HomeDashboardProps {
@@ -15,6 +16,7 @@ interface HomeDashboardProps {
 
 export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
   const router = useRouter()
+  const useSupabase = isSupabaseConfigured()
   const [searchQuery, setSearchQuery] = useState('')
   const [trendKeywords] = useState<string[]>(getTrendKeywords())
   const [featuredKeywords, setFeaturedKeywords] = useState<Set<string>>(new Set(['맛집', '데이트', '카페']))
@@ -31,23 +33,28 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
   // 더블클릭 감지
   const [lastClickTime, setLastClickTime] = useState<{ [key: string]: number }>({})
 
-  const handleBoardClick = (boardId: string) => {
+  const getBoardKeyword = (board: Board) => board.trendKeywords?.[0] ?? board.name ?? board.id
+
+  const handleBoardClick = (board: Board) => {
     const now = Date.now()
+    const boardId = board.id
     const lastClick = lastClickTime[boardId] || 0
-    
+
     if (now - lastClick < 300) {
-      // 더블클릭 감지
-      handleWarp(boardId)
+      handleWarp(board)
     } else {
       setLastClickTime({ ...lastClickTime, [boardId]: now })
     }
   }
 
-  const handleWarp = (boardId: string) => {
-    // Pixel Burst 애니메이션
-    setWarpingBoardId(boardId)
+  const handleWarp = (board: Board) => {
+    setWarpingBoardId(board.id)
     setTimeout(() => {
-      onEnterBoard(boardId)
+      if (useSupabase) {
+        router.push(`/board/${encodeURIComponent(getBoardKeyword(board))}`)
+      } else {
+        onEnterBoard(board.id)
+      }
       setWarpingBoardId(null)
     }, 600)
   }
@@ -202,7 +209,7 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
               <motion.div
                 key={board.id}
                 className="flex-shrink-0 glass-strong rounded-2xl p-4 w-[78vw] max-w-[22rem] sm:w-80 cursor-pointer relative"
-                onClick={() => handleBoardClick(board.id)}
+                onClick={() => handleBoardClick(board)}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 animate={isWarping ? {
@@ -283,7 +290,13 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
               <motion.div
                 key={board.id}
                 className="glass-strong rounded-2xl p-4 cursor-pointer"
-                onClick={() => onEnterBoard(board.id)}
+                onClick={() => {
+                  if (useSupabase) {
+                    router.push(`/board/${encodeURIComponent(getBoardKeyword(board))}`)
+                  } else {
+                    onEnterBoard(board.id)
+                  }
+                }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
