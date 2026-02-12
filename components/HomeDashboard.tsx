@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useEffect, useCallback, memo, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -87,6 +87,29 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
   /** 해시태그 없으면 앞에 # 붙여서 표시 (방 내부와 통일) */
   const displayBoardName = (name: string) => (name.startsWith('#') ? name : `#${name}`)
+
+  /** 플로팅 태그 위치: 0~90% left, 0~80% top, 시드 기반 난수 + 최소 간격으로 겹침 방지 */
+  const tagPositions = useMemo(() => {
+    const seed = floatingTags.map((t) => t.word).join('|').length
+    const rnd = (s: number) => ((Math.sin(s) * 10000) % 1 + 1) % 1
+    const MIN_GAP = 7
+    const positions: { left: number; top: number }[] = []
+    for (let i = 0; i < floatingTags.length; i++) {
+      let left: number
+      let top: number
+      let attempts = 0
+      do {
+        left = rnd(seed + i * 2 + attempts * 100) * 90
+        top = rnd(seed + i * 2 + 1 + attempts * 100) * 80
+        attempts++
+      } while (
+        attempts < 25 &&
+        positions.some((p) => Math.hypot(p.left - left, p.top - top) < MIN_GAP)
+      )
+      positions.push({ left, top })
+    }
+    return positions
+  }, [floatingTags])
 
   const handleWarp = (board: Board) => {
     setWarpingBoardId(board.id)
@@ -201,27 +224,24 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           </motion.button>
         </div>
         
-        {/* 플로팅 태그: 위치는 left/top %(컨테이너 기준), 떠다니는 움직임만 transform(px)으로 GPU 가속 */}
-        <div className="relative h-56 sm:h-64 rounded-2xl bg-black/20 overflow-hidden" style={{ contain: 'layout' }}>
+        {/* 플로팅 태그: 컨테이너 100% 폭, left/top 랜덤(0~90%, 0~80%) + 최소 간격, 떠다니는 건 transform */}
+        <div
+          className="relative w-full min-h-[300px] h-56 sm:h-64 rounded-2xl bg-black/20 overflow-hidden"
+          style={{ contain: 'layout' }}
+        >
           <AnimatePresence initial={false}>
             {floatingTags.map((tag, index) => {
               const { word } = tag
+              const pos = tagPositions[index] ?? { left: 10 + (index % 5) * 18, top: 10 + Math.floor(index / 5) * 20 }
               const isFeatured = featuredKeywords.has(word)
               const delay = index * 0.15
-              const cols = 10
-              const rows = Math.max(1, Math.ceil(floatingTags.length / cols))
-              const rangeMax = 90
-              const stepX = rangeMax / cols
-              const stepY = rows > 0 ? rangeMax / rows : rangeMax
-              const baseX = (index % cols) * stepX + (index * 7) % 5
-              const baseY = Math.floor(index / cols) * stepY + (index * 11) % 6
               return (
                 <motion.div
                   key={`tag-${index}-${word}`}
                   className="absolute w-0 h-0"
                   style={{
-                    left: `${baseX}%`,
-                    top: `${baseY}%`,
+                    left: `${pos.left}%`,
+                    top: `${pos.top}%`,
                   }}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -240,15 +260,15 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                       scale: isFeatured ? [1, 1.15, 1] : [1, 1.05, 1],
                       x: [
                         0,
-                        Math.sin(index * 0.7) * 18,
-                        Math.cos(index * 0.5) * 14,
-                        Math.sin(index * 0.3) * 10,
+                        Math.sin(index * 0.7) * 28,
+                        Math.cos(index * 0.5) * 22,
+                        Math.sin(index * 0.3) * 16,
                         0,
                       ],
                       y: [
                         0,
-                        -22 + Math.sin(index * 0.5) * 12,
-                        -12 + Math.cos(index * 0.3) * 8,
+                        -32 + Math.sin(index * 0.5) * 18,
+                        -18 + Math.cos(index * 0.3) * 12,
                         0,
                         0,
                       ],
