@@ -13,18 +13,23 @@ export type BoardRow = {
 }
 
 /**
- * 키워드로 방을 조회하고, 없으면 생성 후 반환합니다.
- * id는 Supabase가 자동 생성한 UUID입니다.
- * (PromiseLike 방지를 위해 모든 비동기 호출은 await로 처리합니다.)
+ * 방 제목(키워드)으로 방을 조회하고, 없으면 새로 생성 후 반환합니다.
+ * - 검색은 반드시 keyword 컬럼만 사용합니다. id는 절대 검색/입력하지 않습니다.
+ * - id는 Supabase gen_random_uuid()로 자동 생성되며, insert 시 id를 넣지 않습니다.
+ * (한글 등 모든 방 제목 지원, UUID 형식 에러 원천 차단)
  */
 export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardRow | null> {
   const supabase = createClient()
   if (!supabase) return null
 
+  const normalizedKeyword = keyword.trim()
+  if (!normalizedKeyword) return null
+
+  // 1) keyword 컬럼으로만 조회 (id 사용 금지)
   const { data: existing, error: selectErr } = await supabase
     .from('boards')
     .select('id, keyword, name, expires_at, created_at')
-    .eq('keyword', keyword)
+    .eq('keyword', normalizedKeyword)
     .maybeSingle()
 
   if (selectErr) {
@@ -36,11 +41,12 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
     return existing as BoardRow
   }
 
+  // 2) 새 방 생성 시 id는 넣지 않음 → DB가 UUID 자동 생성
   const { data: inserted, error: insertErr } = await supabase
     .from('boards')
     .insert({
-      keyword,
-      name: `#${keyword}`,
+      keyword: normalizedKeyword,
+      name: `#${normalizedKeyword}`,
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     })
     .select('id, keyword, name, expires_at, created_at')

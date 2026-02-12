@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getHourglasses, setHourglasses } from '@/lib/hourglass'
@@ -10,10 +11,14 @@ import { PaymentCurrency, PaymentPayMethod } from '@portone/browser-sdk/v2'
 const PRICE_PER_ONE = 120
 const PRESET_OPTIONS = [1, 10, 100, 1000, 10000]
 
-const STORE_ID = process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? ''
-const CHANNEL_KEY = process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? ''
+// 포트원 V2 (토스페이먼츠 테스트). .env로 덮어쓸 수 있음.
+const STORE_ID =
+  process.env.NEXT_PUBLIC_PORTONE_STORE_ID ?? 'store-c88c91a8-6c3c-4df1-a69c-6b08e7169521'
+const CHANNEL_KEY =
+  process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? 'channel-key-5d85fadf-b4c1-4ead-a5b9-aae3f2fe1a6f'
 
 export default function StorePage() {
+  const router = useRouter()
   const [hourglasses, setHourglassesState] = useState(0)
   const [customQty, setCustomQty] = useState<string>('')
   const [toast, setToast] = useState<string | null>(null)
@@ -29,7 +34,7 @@ export default function StorePage() {
   const handlePurchase = async (qty: number) => {
     if (qty < 1 || processing) return
     if (!STORE_ID || !CHANNEL_KEY) {
-      setToast('결제 설정이 없습니다. 상점 ID와 채널 키를 설정해 주세요.')
+      setToast('결제 설정이 없습니다. 상점 ID와 채널 키를 확인해 주세요.')
       return
     }
     const totalAmount = qty * PRICE_PER_ONE
@@ -46,16 +51,20 @@ export default function StorePage() {
         payMethod: PaymentPayMethod.CARD,
       })
       if (response?.code != null) {
-        setToast(response.message ?? '결제에 실패했어요.')
+        setToast(response.message ?? '결제에 실패했어요. 다시 시도해 주세요.')
         return
       }
       const next = getHourglasses() + qty
       setHourglasses(next)
       setHourglassesState(next)
-      setToast('결제 완료! 모래시계가 충전되었어요.')
       setCustomQty('')
+      setToast('결제가 완료되었습니다! 모래시계가 충전되었습니다.')
+      setTimeout(() => router.push('/'), 1800)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : '결제 요청 중 오류가 났어요.'
+      const msg =
+        e instanceof Error
+          ? e.message
+          : '결제 중 오류가 발생했어요. 결제를 취소하셨거나 네트워크를 확인해 주세요.'
       setToast(msg)
     } finally {
       setProcessing(false)

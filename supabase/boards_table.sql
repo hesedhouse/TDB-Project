@@ -1,9 +1,9 @@
 -- ============================================================
--- boards 테이블: id는 UUID, 키워드로 조회/생성
--- Supabase SQL Editor에서 실행. 기존 테이블이 있으면 마이그레이션 필요.
+-- boards 테이블: id는 UUID 자동 생성, keyword로 한글 방 제목 검색
+-- Supabase SQL Editor에서 실행.
+-- 기존 테이블에 keyword가 없으면 boards_migration_keyword.sql 먼저 실행.
 -- ============================================================
-
--- 기존 id text 테이블이 있다면 먼저 백업 후 삭제하거나, 마이그레이션 스크립트로 전환
+-- 검색/생성 시: keyword 컬럼만 사용. id에는 'board-1', 'PUBG' 등 절대 넣지 않음.
 
 create table if not exists public.boards (
   id uuid primary key default gen_random_uuid(),
@@ -12,6 +12,9 @@ create table if not exists public.boards (
   expires_at timestamptz not null default (now() + interval '7 days'),
   created_at timestamptz not null default now()
 );
+
+comment on column public.boards.keyword is '방 제목/키워드 (한글 등). 검색은 이 컬럼으로만 수행.';
+comment on column public.boards.id is 'UUID 자동 생성. 직접 지정 금지.';
 
 alter table public.boards enable row level security;
 
