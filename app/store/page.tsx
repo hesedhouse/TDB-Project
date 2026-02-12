@@ -9,7 +9,7 @@ import { PaymentCurrency, PaymentPayMethod } from '@portone/browser-sdk/v2'
 
 const PRICE_PER_ONE = 120
 const PRESET_OPTIONS = [1, 10, 100, 1000, 10000]
-/** 모래시계 1개당 연장 시간(분). UI 문구용. */
+/** 모래시계 1개당 연장 시간(분). 120원 = 30분 가치로 확정. */
 const EXTEND_MINUTES_PER_HOURGLASS = 30
 
 // 포트원 V2 결제 (최종). .env 로 덮어쓸 수 있음.

@@ -169,45 +169,50 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
             return (
               <motion.div
                 key={keyword}
-                className={`absolute glass rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none ${
-                  isFeatured ? 'neon-glow border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.8)]' : ''
-                }`}
+                className="absolute left-0 top-0 w-0 h-0"
                 style={{
-                  left: `${baseX}%`,
-                  top: `${baseY}%`,
-                }}
-                initial={{ opacity: 0, scale: 0 }}
-                onClick={() => handleKeywordClick(keyword)}
-                animate={{
-                  opacity: isFeatured ? [0.8, 1, 0.8] : [0.5, 0.7, 0.5],
-                  scale: isFeatured ? [1, 1.15, 1] : [1, 1.05, 1],
-                  y: [
-                    0,
-                    -30 + Math.sin(index * 0.5) * 15,
-                    -15 + Math.cos(index * 0.3) * 10,
-                    0,
-                  ],
-                  x: [
-                    0,
-                    Math.sin(index * 0.7) * 20,
-                    Math.cos(index * 0.5) * 15,
-                    Math.sin(index * 0.3) * 10,
-                    0,
-                  ],
-                }}
-                transition={{
-                  duration: 8 + index * 0.3,
-                  delay,
-                  repeat: Infinity,
-                  ease: 'easeInOut',
-                }}
-                whileHover={{
-                  scale: 1.4,
-                  zIndex: 10,
-                  boxShadow: '0 0 24px rgba(255,95,0,0.9)',
-                  transition: { duration: 0.18 },
+                  transform: `translate3d(${baseX}%, ${baseY}%, 0)`,
+                  willChange: 'transform',
                 }}
               >
+                <motion.div
+                  className={`glass rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none ${
+                    isFeatured ? 'neon-glow border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.8)]' : ''
+                  }`}
+                  style={{ willChange: 'transform' }}
+                  initial={{ opacity: 0, scale: 0 }}
+                  onClick={() => handleKeywordClick(keyword)}
+                  animate={{
+                    opacity: isFeatured ? [0.8, 1, 0.8] : [0.5, 0.7, 0.5],
+                    scale: isFeatured ? [1, 1.15, 1] : [1, 1.05, 1],
+                    x: [
+                      0,
+                      Math.sin(index * 0.7) * 20,
+                      Math.cos(index * 0.5) * 15,
+                      Math.sin(index * 0.3) * 10,
+                      0,
+                    ],
+                    y: [
+                      0,
+                      -30 + Math.sin(index * 0.5) * 15,
+                      -15 + Math.cos(index * 0.3) * 10,
+                      0,
+                      0,
+                    ],
+                  }}
+                  transition={{
+                    duration: 8 + index * 0.3,
+                    delay,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  }}
+                  whileHover={{
+                    scale: 1.4,
+                    zIndex: 10,
+                    boxShadow: '0 0 24px rgba(255,95,0,0.9)',
+                    transition: { duration: 0.18 },
+                  }}
+                >
                 <span className={`text-xs sm:text-sm font-medium ${isFeatured ? 'text-neon-orange' : 'text-white/90'}`}>
                   #{keyword}
                 </span>
@@ -237,6 +242,7 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
                     </>
                   )}
                 </AnimatePresence>
+                </motion.div>
               </motion.div>
             )
           })}
@@ -312,13 +318,13 @@ export default function HomeDashboard({ onEnterBoard }: HomeDashboardProps) {
                   <DotCharacter characterId={0} size={32} />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm truncate text-blue-400">{displayBoardName(board.name)}</div>
-                    <div className="text-xs text-gray-400 font-mono tabular-nums">
+                    <div className="text-xs font-mono tabular-nums text-neon-orange">
                       {timeLabel}
                     </div>
                   </div>
                 </div>
                 <div className="text-xs text-neon-orange">
-                  클릭하여 입장
+                  지금 입장하기
                 </div>
               </motion.div>
             )
