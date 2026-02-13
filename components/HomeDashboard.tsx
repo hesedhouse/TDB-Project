@@ -282,7 +282,6 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                     whileHover={{
                       scale: 1.4,
                       zIndex: 10,
-                      boxShadow: '0 0 40px rgba(255,140,0,0.5), 0 0 72px rgba(255,120,0,0.28), 0 0 96px rgba(255,100,0,0.15)',
                       transition: { duration: 0.18 },
                     }}
                   >

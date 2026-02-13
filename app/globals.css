@@ -56,7 +56,7 @@
                 0 0 30px rgba(255, 95, 0, 0.2);
   }
 
-  /* 플로팅 태그: #맛집 시안 - 순백 글자, 정중앙 타원 아우라, 1클릭 입장 */
+  /* 플로팅 태그: 글로우 없음. 선명한 오렌지 생(Raw) 텍스트만 */
   .floating-tag-glow,
   .floating-tag-soft {
     position: relative;
@@ -64,55 +64,13 @@
     align-items: center;
     justify-content: center;
     text-align: center;
+    box-shadow: none;
   }
-  /* Featured: 호박색 아우라 (50% 50% 중심 유지) */
-  .floating-tag-glow {
-    box-shadow: 0 0 32px rgba(255, 193, 7, 0.36),
-                0 0 56px rgba(255, 167, 38, 0.24),
-                0 0 80px rgba(255, 183, 77, 0.14),
-                inset 0 0 20px rgba(255, 213, 79, 0.06);
-  }
-  .floating-tag-glow::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 100%;
-    height: 100%;
-    min-width: 100%;
-    transform: translate(-50%, -50%);
-    border-radius: inherit;
-    background: radial-gradient(
-      ellipse 100% 70% at 50% 50%,
-      rgba(255, 213, 79, 0.18) 0%,
-      rgba(255, 167, 38, 0.07) 45%,
-      transparent 72%
-    );
-    pointer-events: none;
-  }
-  .floating-tag-soft {
-    box-shadow: 0 0 24px rgba(255, 193, 7, 0.15),
-                0 0 48px rgba(255, 183, 77, 0.08);
-  }
+  .floating-tag-glow::before,
   .floating-tag-soft::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 100%;
-    height: 100%;
-    min-width: 100%;
-    transform: translate(-50%, -50%);
-    border-radius: inherit;
-    background: radial-gradient(
-      ellipse 100% 65% at 50% 50%,
-      rgba(255, 224, 130, 0.12) 0%,
-      rgba(255, 183, 77, 0.05) 55%,
-      transparent 72%
-    );
-    pointer-events: none;
+    display: none;
   }
-  /* 글자: 시작하기 버튼과 동일한 강렬한 오렌지(#FF6B00), 두껍게(800) → 윤곽선 또렷하게 */
+  /* 글자: 강렬한 오렌지(#FF6B00), 두껍게(800), 그림자/광원 없음 */
   .floating-tag-text {
     position: relative;
     z-index: 1;
@@ -120,40 +78,10 @@
     color: #FF6B00;
     font-weight: 800;
     text-align: center;
+    text-shadow: none;
   }
-  /* 글로우는 글자 뒤쪽으로만: 낮은 blur로 윤곽선 뭉개지지 않게 */
-  .floating-tag-glow .floating-tag-text,
-  .floating-tag-soft .floating-tag-text {
-    text-shadow: 0 0 4px rgba(255, 107, 0, 0.5),
-                 0 0 10px rgba(255, 107, 0, 0.35),
-                 0 0 18px rgba(255, 140, 0, 0.2);
-  }
-  /* 정중앙(50% 50%) 광원 유지, 글자 뒤에 은은한 주황 아우라 */
   .floating-tag-text::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 140%;
-    height: 220%;
-    min-width: 4em;
-    transform: translate(-50%, -50%);
-    background: radial-gradient(
-      ellipse 80% 50% at 50% 50%,
-      rgba(255, 140, 0, 0.14) 0%,
-      rgba(255, 107, 0, 0.05) 50%,
-      transparent 70%
-    );
-    pointer-events: none;
-    z-index: -1;
-  }
-  .floating-tag-glow .floating-tag-text::after {
-    background: radial-gradient(
-      ellipse 80% 50% at 50% 50%,
-      rgba(255, 160, 50, 0.16) 0%,
-      rgba(255, 107, 0, 0.06) 50%,
-      transparent 70%
-    );
+    display: none;
   }
   
   .pixel-art {
