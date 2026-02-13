@@ -286,7 +286,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                       transition: { duration: 0.18 },
                     }}
                   >
-                <span className="floating-tag-text text-xs sm:text-sm font-medium text-white">
+                <span className="floating-tag-text text-xs sm:text-sm font-bold">
                   #{word}
                 </span>
                 {/* 클릭 시 픽셀 파티클 효과 */}

@@ -65,12 +65,12 @@
     justify-content: center;
     text-align: center;
   }
-  /* Featured: 주황/호박 아우라 (박스 전체에 넓게) */
+  /* Featured: 호박색 아우라 (50% 50% 중심 유지) */
   .floating-tag-glow {
-    box-shadow: 0 0 32px rgba(255, 140, 0, 0.38),
-                0 0 56px rgba(255, 95, 0, 0.26),
-                0 0 80px rgba(255, 120, 0, 0.14),
-                inset 0 0 20px rgba(255, 160, 50, 0.06);
+    box-shadow: 0 0 32px rgba(255, 193, 7, 0.36),
+                0 0 56px rgba(255, 167, 38, 0.24),
+                0 0 80px rgba(255, 183, 77, 0.14),
+                inset 0 0 20px rgba(255, 213, 79, 0.06);
   }
   .floating-tag-glow::before {
     content: '';
@@ -84,15 +84,15 @@
     border-radius: inherit;
     background: radial-gradient(
       ellipse 100% 70% at 50% 50%,
-      rgba(255, 140, 0, 0.2) 0%,
-      rgba(255, 95, 0, 0.08) 45%,
+      rgba(255, 213, 79, 0.18) 0%,
+      rgba(255, 167, 38, 0.07) 45%,
       transparent 72%
     );
     pointer-events: none;
   }
   .floating-tag-soft {
-    box-shadow: 0 0 24px rgba(255, 140, 0, 0.16),
-                0 0 48px rgba(255, 120, 0, 0.09);
+    box-shadow: 0 0 24px rgba(255, 193, 7, 0.15),
+                0 0 48px rgba(255, 183, 77, 0.08);
   }
   .floating-tag-soft::before {
     content: '';
@@ -106,27 +106,28 @@
     border-radius: inherit;
     background: radial-gradient(
       ellipse 100% 65% at 50% 50%,
-      rgba(255, 180, 80, 0.11) 0%,
-      rgba(255, 140, 0, 0.04) 55%,
+      rgba(255, 224, 130, 0.12) 0%,
+      rgba(255, 183, 77, 0.05) 55%,
       transparent 72%
     );
     pointer-events: none;
   }
-  /* 글자: 순백(#FFFFFF) + 스스로 빛나는 text-shadow (광원은 항상 글자 정중앙) */
+  /* 글자: 선명한 주황(#FF6B00) + 두껍게(700) + 정중앙 50% 호박색 아우라 유지 */
   .floating-tag-text {
     position: relative;
     z-index: 1;
     display: inline-block;
-    color: #FFFFFF;
+    color: #FF6B00;
+    font-weight: 700;
     text-align: center;
   }
   .floating-tag-glow .floating-tag-text,
   .floating-tag-soft .floating-tag-text {
-    text-shadow: 0 0 12px rgba(255, 255, 255, 0.85),
-                 0 0 24px rgba(255, 255, 255, 0.45),
-                 0 0 36px rgba(255, 248, 240, 0.25);
+    text-shadow: 0 0 12px rgba(255, 107, 0, 0.9),
+                 0 0 24px rgba(255, 193, 7, 0.5),
+                 0 0 36px rgba(255, 183, 77, 0.35);
   }
-  /* 텍스트 기준 정중앙 타원 아우라 (단어 길이에 맞춰 폭 유동) */
+  /* 텍스트 기준 정중앙 타원 아우라 (50% 50% 고정, 호박색으로 은은히 타오르는 느낌) */
   .floating-tag-text::after {
     content: '';
     position: absolute;
@@ -138,8 +139,8 @@
     transform: translate(-50%, -50%);
     background: radial-gradient(
       ellipse 80% 50% at 50% 50%,
-      rgba(255, 200, 120, 0.18) 0%,
-      rgba(255, 140, 0, 0.06) 50%,
+      rgba(255, 213, 79, 0.2) 0%,
+      rgba(255, 167, 38, 0.08) 50%,
       transparent 70%
     );
     pointer-events: none;
@@ -148,8 +149,8 @@
   .floating-tag-glow .floating-tag-text::after {
     background: radial-gradient(
       ellipse 80% 50% at 50% 50%,
-      rgba(255, 180, 80, 0.22) 0%,
-      rgba(255, 120, 0, 0.08) 50%,
+      rgba(255, 224, 130, 0.24) 0%,
+      rgba(255, 183, 77, 0.1) 50%,
       transparent 70%
     );
   }
