@@ -282,11 +282,11 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                     whileHover={{
                       scale: 1.4,
                       zIndex: 10,
-                      boxShadow: '0 0 32px rgba(255,95,0,0.45), 0 0 56px rgba(255,95,0,0.2)',
+                      boxShadow: '0 0 40px rgba(255,140,0,0.5), 0 0 72px rgba(255,120,0,0.28), 0 0 96px rgba(255,100,0,0.15)',
                       transition: { duration: 0.18 },
                     }}
                   >
-                <span className={`floating-tag-text text-xs sm:text-sm font-medium ${isFeatured ? 'text-neon-orange' : 'text-white/90'}`}>
+                <span className="floating-tag-text text-xs sm:text-sm font-medium text-white">
                   #{word}
                 </span>
                 {/* 클릭 시 픽셀 파티클 효과 */}

@@ -11,24 +11,30 @@ function normalizeWord(raw: string): string {
   return raw.trim().replace(/^#/, '') || ''
 }
 
+const BOARD_RATIO = 0.7
+const TRENDING_RATIO = 0.3
+
 /**
- * boards.name + trending_keywords.word 를 합쳐서 무작위 순서로 반환.
+ * 플로팅 태그: boards 70% + trending_keywords 30% 비율로 섞어서 반환.
  * Supabase 미설정 시 빈 배열 (호출측에서 mock 사용).
  */
 export async function getFloatingTags(limit = 24): Promise<FloatingTag[]> {
   const supabase = createClient()
   if (!supabase) return []
 
+  const boardLimit = Math.max(1, Math.round(limit * BOARD_RATIO))
+  const trendLimit = Math.max(0, Math.round(limit * TRENDING_RATIO))
+
   const fromBoards = supabase
     .from('boards')
     .select('name')
     .order('created_at', { ascending: false })
-    .limit(limit)
+    .limit(boardLimit)
   const fromTrending = supabase
     .from('trending_keywords')
     .select('word')
     .order('created_at', { ascending: false })
-    .limit(limit)
+    .limit(trendLimit)
 
   const [boardsRes, trendingRes] = await Promise.all([
     fromBoards,

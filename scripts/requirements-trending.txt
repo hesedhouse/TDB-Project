@@ -1,0 +1,2 @@
+# 트렌드 수집 스크립트용 (fetch_trends.py)
+pytrends>=4.9.0
