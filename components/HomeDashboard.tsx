@@ -250,7 +250,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                 >
                   <motion.div
                     className={`glass rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none whitespace-nowrap ${
-                      isFeatured ? 'floating-tag-glow border-2 border-neon-orange' : 'floating-tag-soft'
+                      isFeatured ? 'floating-tag-glow' : 'floating-tag-soft'
                     }`}
                     style={{ willChange: 'transform', transform: 'translate3d(0,0,0)' }}
                     initial={{ opacity: 0, scale: 0 }}
