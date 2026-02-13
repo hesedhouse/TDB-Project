@@ -224,10 +224,10 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           </motion.button>
         </div>
         
-        {/* 플로팅 태그: 컨테이너 100% 폭, left/top 랜덤(0~90%, 0~80%) + 최소 간격, 떠다니는 건 transform */}
+        {/* 플로팅 태그: 컨테이너 — 블러/오버레이 없음, 선명한 배경 위에 태그만 표시 */}
         <div
-          className="relative w-full min-h-[300px] h-56 sm:h-64 rounded-2xl bg-black/20 overflow-hidden"
-          style={{ contain: 'layout' }}
+          className="relative w-full min-h-[300px] h-56 sm:h-64 rounded-2xl overflow-hidden floating-tags-container"
+          style={{ contain: 'layout', backdropFilter: 'none', WebkitBackdropFilter: 'none', filter: 'none' }}
         >
           <AnimatePresence initial={false}>
             {floatingTags.map((tag, index) => {
