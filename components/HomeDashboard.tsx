@@ -226,7 +226,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         
         {/* 플로팅 태그: 컨테이너 — 블러/오버레이 없음, 선명한 배경 위에 태그만 표시 */}
         <div
-          className="relative w-full min-h-[300px] h-56 sm:h-64 rounded-2xl overflow-hidden floating-tags-container"
+          className="relative w-full min-h-[300px] h-56 sm:h-64 rounded-2xl overflow-visible floating-tags-container"
           style={{ contain: 'layout', backdropFilter: 'none', WebkitBackdropFilter: 'none', filter: 'none' }}
         >
           <AnimatePresence initial={false}>
