@@ -91,8 +91,12 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
   const getBoardKeyword = (board: Board) => board.trendKeywords?.[0] ?? board.name ?? board.id
 
-  /** 해시태그 없으면 앞에 # 붙여서 표시 (방 내부와 통일) */
-  const displayBoardName = (name: string) => (name.startsWith('#') ? name : `#${name}`)
+  /** 외부(메인 리스트): #board-4 등 ID 제거, 깔끔한 제목만 노출 */
+  const displayBoardName = (name: string) => {
+    const n = (name ?? '').trim()
+    if (/^#?board-\d+$/i.test(n)) return '새 방'
+    return n.replace(/^#\s*/, '').trim() || '방'
+  }
 
   /** 하이드레이션 방지: 마운트된 후에만 랜덤 위치 적용 (서버/클라이언트 첫 렌더는 동일한 fallback 사용) */
   const [mounted, setMounted] = useState(false)
