@@ -16,8 +16,10 @@ import type { Message } from '@/lib/supabase/types'
 
 interface PulseFeedProps {
   boardId: string
-  /** 사용자용 숫자 방 번호 (No. 123). Supabase public_id가 있을 때 전달 */
+  /** 사용자용 숫자 방 번호 (No. 123). Supabase public_id 또는 API 응답 */
   boardPublicId?: number | null
+  /** URL 경로의 방 식별자 (예: /board/5 → "5"). 새 방 리다이렉트 시 배지에 즉시 반영용 */
+  roomIdFromUrl?: string | null
   userCharacter: number
   userNickname: string
   onBack: () => void
@@ -41,7 +43,7 @@ export interface Comment {
   createdAt: Date
 }
 
-export default function PulseFeed({ boardId, boardPublicId, userCharacter, userNickname, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
+export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userCharacter, userNickname, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
   const useSupabase = isSupabaseConfigured()
   /** Supabase 사용 시 반드시 UUID인 경우만 API 호출 (400 에러 방지) */
   const useSupabaseWithUuid = useSupabase && isValidUuid(boardId)
@@ -433,11 +435,13 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
       : (displayBoard.name ?? '방')
   const headerTitle = String(displayTitle).replace(/^#\s*/, '').trim() || '익명의 떴다방'
 
-  /** 방 번호: boardPublicId 우선, 없으면 boardId에서 board-N 추출 */
+  /** 방 번호: boardPublicId(API) → URL 숫자(roomIdFromUrl) → board-N 패턴. 있으면 무조건 배지 표시 */
   const roomNo =
     boardPublicId != null
       ? String(boardPublicId)
-      : (boardId.match(/^board-(\d+)$/i)?.[1] ?? null)
+      : (roomIdFromUrl != null && roomIdFromUrl !== '' && /^\d+$/.test(String(roomIdFromUrl))
+          ? String(roomIdFromUrl)
+          : (boardId.match(/^board-(\d+)$/i)?.[1] ?? null))
 
   const effectiveExpiresAt = boardExpiresAtOverride ?? displayBoard.expiresAt
 
@@ -544,7 +548,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
               <h1 className="text-base sm:text-xl font-bold truncate min-w-0 text-white">
                 {headerTitle}
               </h1>
-              {/* 주황색 배경 No. ID 배지 (모든 방 통일, 클릭 시 방 링크 복사) */}
+              {/* 오렌지 No. ID 배지: 모든 방 강제 표시, 클릭 시 해당 방 링크 복사 */}
               <button
                 type="button"
                 onClick={handleCopyRoomLink}
@@ -557,7 +561,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
                 title="방 링크 복사"
                 aria-label={roomNo ? `방 번호 No. ${roomNo} - 클릭 시 방 링크 복사` : '방 링크 복사'}
               >
-                <span className="tabular-nums">No. {roomNo ?? '—'}</span>
+                <span className="tabular-nums">No. {roomNo || '—'}</span>
               </button>
             </div>
             <motion.button

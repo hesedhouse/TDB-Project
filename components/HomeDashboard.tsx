@@ -185,8 +185,8 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         return
       }
       const board = await res.json()
-      // 생성된 방 번호(자동 부여 public_id)로 즉시 해당 방 페이지로 이동
-      const path = board.public_id != null ? `/board/${board.public_id}` : `/board/${board.id}`
+      const numId = board.room_no ?? board.public_id
+      const path = numId != null ? `/board/${numId}` : `/board/${board.id}`
       router.push(path)
     } catch {
       setCreatingRoom(false)
@@ -278,7 +278,8 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
               <button
                 type="button"
                 onClick={() => setShowRoomPassword((v) => !v)}
-                className="absolute right-3 p-1.5 rounded-lg text-[#FF6B00] hover:bg-[#FF6B00]/10 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40"
+                className="absolute right-3 p-1.5 rounded-lg hover:bg-[#FF6B00]/10 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40"
+                style={{ color: '#FF6B00', textShadow: '0 0 8px rgba(255,107,0,0.6), 0 0 14px rgba(255,107,0,0.3)' }}
                 aria-label={showRoomPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
               >
                 {showRoomPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}

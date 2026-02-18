@@ -25,30 +25,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'Supabase not configured' }, { status: 503 })
     }
 
-    let query = supabase
-      .from('boards')
-      .select('id, password_hash')
-      .limit(1)
-
+    let queryWithPassword = supabase.from('boards').select('id, password_hash, password').limit(1)
+    let queryHashOnly = supabase.from('boards').select('id, password_hash').limit(1)
     if (publicId != null && Number.isFinite(publicId)) {
-      query = query.eq('public_id', publicId)
+      queryWithPassword = queryWithPassword.eq('public_id', publicId)
+      queryHashOnly = queryHashOnly.eq('public_id', publicId)
     } else if (boardId) {
-      query = query.eq('id', boardId)
+      queryWithPassword = queryWithPassword.eq('id', boardId)
+      queryHashOnly = queryHashOnly.eq('id', boardId)
     } else {
       return NextResponse.json({ ok: false, error: 'publicId or boardId required' }, { status: 400 })
     }
 
-    const { data: row, error } = await query.maybeSingle()
-
-    if (error) {
-      console.error('[api/board/verify-password]', error)
-      return NextResponse.json({ ok: false, error: 'Failed to verify' }, { status: 500 })
+    let row: { password_hash?: string | null; password?: string | null } | null = null
+    const res1 = await queryWithPassword.maybeSingle()
+    if (!res1.error && res1.data) {
+      row = res1.data as { password_hash?: string | null; password?: string | null }
+    } else {
+      const res2 = await queryHashOnly.maybeSingle()
+      if (res2.error) {
+        console.error('[api/board/verify-password]', res2.error)
+        return NextResponse.json({ ok: false, error: 'Failed to verify' }, { status: 500 })
+      }
+      row = res2.data as { password_hash?: string | null } | null
     }
     if (!row) {
       return NextResponse.json({ ok: false, error: 'Board not found' }, { status: 404 })
     }
 
-    const hash = (row as { password_hash?: string | null }).password_hash
+    const hash = row.password_hash ?? row.password
     if (!hash) {
       return NextResponse.json({ ok: true })
     }

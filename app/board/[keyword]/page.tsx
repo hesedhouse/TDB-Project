@@ -17,6 +17,7 @@ interface BoardByKeywordPageProps {
 type BoardFromApi = {
   id: string
   public_id: number | null
+  room_no: number | null
   keyword: string
   name: string | null
   expires_at: string
@@ -81,7 +82,8 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
         if (cancelled) return
         if (createRes.ok) {
           const created = await createRes.json()
-          const path = created.public_id != null ? `/board/${created.public_id}` : `/board/${created.id}`
+          const numId = created.room_no ?? created.public_id
+          const path = numId != null ? `/board/${numId}` : `/board/${created.id}`
           router.replace(path)
           return
         }
@@ -143,6 +145,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
         <PulseFeed
           boardId={boardId}
           boardPublicId={boardPublicId}
+          roomIdFromUrl={decodedKeyword}
           userCharacter={0}
           userNickname="게스트"
           onBack={() => router.push('/')}
@@ -233,7 +236,8 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
         ) : (
           <PulseFeed
             boardId={supabaseBoard.id}
-            boardPublicId={supabaseBoard.public_id ?? (/^\d+$/.test(decodedKeyword) ? Number(decodedKeyword) : null)}
+            boardPublicId={supabaseBoard.room_no ?? supabaseBoard.public_id ?? (/^\d+$/.test(decodedKeyword) ? Number(decodedKeyword) : null)}
+            roomIdFromUrl={decodedKeyword}
             userCharacter={0}
             userNickname="게스트"
             onBack={() => router.push('/')}

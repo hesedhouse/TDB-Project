@@ -5,6 +5,8 @@ import { isValidUuid } from '@/lib/supabase/client'
 export type BoardApiResponse = {
   id: string
   public_id: number | null
+  /** 방 번호(숫자). room_no 컬럼 우선, 없으면 public_id 사용 → 헤더 'No. {room_no}' 배지용 */
+  room_no: number | null
   keyword: string
   name: string | null
   expires_at: string
@@ -28,8 +30,9 @@ export async function GET(
       return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 })
     }
 
-    const selectColsWithPassword = 'id, keyword, name, expires_at, created_at, public_id, password_hash'
-    const selectColsWithoutPassword = 'id, keyword, name, expires_at, created_at, public_id'
+    const selectColsWithPassword = 'id, keyword, name, expires_at, created_at, public_id, room_no, password_hash'
+    const selectColsWithoutPassword = 'id, keyword, name, expires_at, created_at, public_id, room_no'
+    const selectColsMinimal = 'id, keyword, name, expires_at, created_at, public_id'
 
     const buildQuery = (cols: string) => {
       let q = supabase.from('boards').select(cols).limit(1)
@@ -48,13 +51,16 @@ export async function GET(
       row = data as Record<string, unknown>
       has_password = Boolean(row?.password_hash)
     } else if (resWith.error) {
-      console.warn('[api/board] boards.password_hash 컬럼 없음 또는 오류. Supabase에서 boards_migration_password.sql 실행 여부 확인.', resWith.error?.message ?? resWith.error)
-      const resWithout = await buildQuery(selectColsWithoutPassword).maybeSingle()
-      if (resWithout.error) {
-        console.error('[api/board/[identifier]]', resWithout.error)
+      console.warn('[api/board] boards.password_hash/room_no 컬럼 없음 또는 오류. fallback 사용.', resWith.error?.message ?? resWith.error)
+      let resFallback = await buildQuery(selectColsWithoutPassword).maybeSingle()
+      if (resFallback.error) {
+        resFallback = await buildQuery(selectColsMinimal).maybeSingle()
+      }
+      if (resFallback.error) {
+        console.error('[api/board/[identifier]]', resFallback.error)
         return NextResponse.json({ error: 'Failed to fetch board' }, { status: 500 })
       }
-      row = resWithout.data == null ? null : (resWithout.data as unknown as Record<string, unknown>)
+      row = resFallback.data == null ? null : (resFallback.data as unknown as Record<string, unknown>)
     }
 
     if (!row) {
@@ -63,9 +69,12 @@ export async function GET(
 
     const r = row
     const numericId = /^\d+$/.test(raw) ? Number(raw) : null
+    const publicIdVal = r.public_id != null ? Number(r.public_id) : numericId
+    const roomNoVal = r.room_no != null ? Number(r.room_no) : publicIdVal
     const response: BoardApiResponse = {
       id: String(r.id),
-      public_id: r.public_id != null ? Number(r.public_id) : numericId,
+      public_id: publicIdVal,
+      room_no: roomNoVal,
       keyword: String(r.keyword),
       name: r.name != null ? String(r.name) : null,
       expires_at: String(r.expires_at),

@@ -7,6 +7,8 @@ const SALT_ROUNDS = 10
 export type CreateBoardResponse = {
   id: string
   public_id: number | null
+  /** 방 번호. room_no 우선, 없으면 public_id (헤더 'No. {room_no}' 배지용) */
+  room_no: number | null
   keyword: string
   name: string | null
   expires_at: string
@@ -29,8 +31,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 })
     }
 
-    const selectColsWithPassword = 'id, keyword, name, expires_at, created_at, public_id, password_hash'
-    const selectColsWithoutPassword = 'id, keyword, name, expires_at, created_at, public_id'
+    const selectColsWithPassword = 'id, keyword, name, expires_at, created_at, public_id, room_no, password_hash'
+    const selectColsWithoutPassword = 'id, keyword, name, expires_at, created_at, public_id, password_hash'
+    const selectColsMinimal = 'id, keyword, name, expires_at, created_at, public_id'
 
     // 기존 방 있으면 그대로 반환 (생성 안 함). password_hash 컬럼 없을 수 있으므로 폴백
     let existing: Record<string, unknown> | null = null
@@ -105,6 +108,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Create failed' }, { status: 500 })
     }
 
+    if (inserted.public_id == null && inserted.id) {
+      const { data: refetched } = await supabase
+        .from('boards')
+        .select(selectColsWithPassword)
+        .eq('id', inserted.id)
+        .single()
+      if (refetched) inserted = refetched as Record<string, unknown>
+    }
+
     return NextResponse.json(toBoardResponse(inserted))
   } catch (e) {
     console.error('[api/board/create]', e)
@@ -115,10 +127,13 @@ export async function POST(request: Request) {
 function toBoardResponse(row: Record<string, unknown>): CreateBoardResponse {
   const has_password = Boolean(row.password_hash)
   const { password_hash: _, ...safe } = row
+  const publicId = row.public_id != null ? Number(row.public_id) : null
+  const roomNo = row.room_no != null ? Number(row.room_no) : publicId
   return {
     ...safe,
     id: String(row.id),
-    public_id: row.public_id != null ? Number(row.public_id) : null,
+    public_id: publicId,
+    room_no: roomNo,
     name: row.name != null ? String(row.name) : null,
     expires_at: String(row.expires_at),
     created_at: String(row.created_at),
