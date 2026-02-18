@@ -1,15 +1,26 @@
 'use client'
 
-import { useEffect, Suspense } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useAuth, type AuthProvider } from '@/lib/supabase/auth'
+
+const cardStyle = {
+  background: 'rgba(18,18,18,0.95)',
+  border: '2px solid rgba(255,107,0,0.5)',
+  boxShadow: '0 0 28px rgba(255,107,0,0.18), 0 0 48px rgba(255,107,0,0.08), inset 0 0 0 1px rgba(255,107,0,0.1)',
+} as const
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const returnUrl = searchParams.get('returnUrl') ?? '/'
-  const { user, loading, signIn } = useAuth()
+  const { user, loading, signIn, signInWithEmail } = useAuth()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [emailSubmitting, setEmailSubmitting] = useState(false)
 
   useEffect(() => {
     if (loading) return
@@ -21,6 +32,25 @@ function LoginForm() {
 
   const handleLogin = async (provider: AuthProvider) => {
     await signIn(provider, returnUrl)
+  }
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    const trimEmail = email.trim()
+    if (!trimEmail || !password) {
+      setError('이메일과 비밀번호를 입력해주세요.')
+      return
+    }
+    setEmailSubmitting(true)
+    const result = await signInWithEmail(trimEmail, password)
+    setEmailSubmitting(false)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    const path = returnUrl.startsWith('/') ? returnUrl : '/'
+    router.replace(path)
   }
 
   if (loading) {
@@ -53,13 +83,49 @@ function LoginForm() {
         <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1" style={{ textShadow: '0 0 20px rgba(255,107,0,0.3)' }}>
           TDB 떴다방
         </h1>
-        <p className="text-gray-400 text-sm mb-8">로그인 후 방을 만들고 대화에 참여하세요</p>
+        <p className="text-gray-400 text-sm mb-6">로그인 후 방을 만들고 대화에 참여하세요</p>
 
-        <div className="w-full rounded-2xl p-6 flex flex-col gap-3" style={{
-          background: 'rgba(18,18,18,0.95)',
-          border: '2px solid rgba(255,107,0,0.5)',
-          boxShadow: '0 0 28px rgba(255,107,0,0.18), 0 0 48px rgba(255,107,0,0.08), inset 0 0 0 1px rgba(255,107,0,0.1)',
-        }}>
+        {/* 이메일·비밀번호 로그인 */}
+        <form onSubmit={handleEmailLogin} className="w-full rounded-2xl p-6 flex flex-col gap-4 mb-4" style={cardStyle}>
+          <p className="text-center text-gray-300 text-sm mb-1">이메일로 로그인</p>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="이메일"
+            autoComplete="email"
+            disabled={emailSubmitting}
+            className="w-full px-4 py-3 rounded-xl bg-black/60 border-2 border-[#FF6B00]/40 focus:border-[#FF6B00] focus:outline-none text-white placeholder-gray-500 text-sm"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="비밀번호"
+            autoComplete="current-password"
+            disabled={emailSubmitting}
+            className="w-full px-4 py-3 rounded-xl bg-black/60 border-2 border-[#FF6B00]/40 focus:border-[#FF6B00] focus:outline-none text-white placeholder-gray-500 text-sm"
+          />
+          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          <motion.button
+            type="submit"
+            disabled={emailSubmitting}
+            className="w-full py-3.5 rounded-xl font-bold text-base text-white disabled:opacity-50"
+            style={{ background: '#FF6B00', boxShadow: '0 0 14px rgba(255,107,0,0.4)' }}
+            whileHover={!emailSubmitting ? { scale: 1.02 } : {}}
+            whileTap={!emailSubmitting ? { scale: 0.98 } : {}}
+          >
+            {emailSubmitting ? '로그인 중...' : '로그인'}
+          </motion.button>
+          <p className="text-gray-500 text-sm text-center">
+            계정이 없으신가요?{' '}
+            <Link href="/signup" className="text-[#FF6B00] hover:underline">
+              가입하기
+            </Link>
+          </p>
+        </form>
+
+        <div className="w-full rounded-2xl p-6 flex flex-col gap-3" style={cardStyle}>
           <p className="text-center text-gray-300 text-sm mb-2">소셜 계정으로 로그인</p>
 
           <motion.button
