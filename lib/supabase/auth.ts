@@ -35,7 +35,7 @@ export function useAuth() {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const redirectTo = returnUrl ? `${origin}${returnUrl}` : `${origin}/`
     await supabase.auth.signInWithOAuth({
-      provider,
+      provider: provider as any,
       options: { redirectTo },
     })
   }, [])
