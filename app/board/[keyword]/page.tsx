@@ -233,7 +233,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
         ) : (
           <PulseFeed
             boardId={supabaseBoard.id}
-            boardPublicId={supabaseBoard.public_id ?? null}
+            boardPublicId={supabaseBoard.public_id ?? (/^\d+$/.test(decodedKeyword) ? Number(decodedKeyword) : null)}
             userCharacter={0}
             userNickname="게스트"
             onBack={() => router.push('/')}

@@ -63,6 +63,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
   const [showRoomNoCopyToast, setShowRoomNoCopyToast] = useState(false)
   const [extendingHourglass, setExtendingHourglass] = useState(false)
   const [timerLabel, setTimerLabel] = useState('0:00:00')
+  const [timerMounted, setTimerMounted] = useState(false)
   const [isUnderOneMinute, setIsUnderOneMinute] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
   const [topContributors, setTopContributors] = useState<TopContributor[]>([])
@@ -270,6 +271,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
     }
 
     tick()
+    setTimerMounted(true)
     const intervalId = setInterval(() => {
       const { remainingMs, ...rest } = formatRemainingTimer(expiresAt)
       setTimerLabel(rest.label)
@@ -429,7 +431,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
     displayBoard.name != null && /^#?board-\d+$/i.test(displayBoard.name.trim())
       ? '새 방'
       : (displayBoard.name ?? '방')
-  const headerTitle = String(displayTitle).replace(/^#\s*/, '').trim() || '이름 없는 방'
+  const headerTitle = String(displayTitle).replace(/^#\s*/, '').trim() || '익명의 떴다방'
 
   /** 방 번호: boardPublicId 우선, 없으면 boardId에서 board-N 추출 */
   const roomNo =
@@ -610,7 +612,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
               transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
             >
               <span className="font-mono tabular-nums text-left" aria-label="남은 시간">
-                {timerLabel}
+                {timerMounted ? timerLabel : '\u00A0'}
               </span>
               <span>남음</span>
             </motion.span>
