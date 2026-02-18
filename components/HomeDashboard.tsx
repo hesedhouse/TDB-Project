@@ -10,7 +10,6 @@ import { mockBoards, getTrendKeywords, filterActiveBoards, formatRemainingTimer 
 import { getHourglasses } from '@/lib/hourglass'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { createClient } from '@/lib/supabase/client'
-import { getBoardByPublicId, getOrCreateBoardByKeyword } from '@/lib/supabase/boards'
 import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
 import { useTick } from '@/lib/TickContext'
 import type { Board } from '@/lib/mockData'
@@ -47,6 +46,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const [warpingKeyword, setWarpingKeyword] = useState<string | null>(null)
   const [hourglasses, setHourglasses] = useState(0)
   const [creatingRoom, setCreatingRoom] = useState(false)
+  const [roomPassword, setRoomPassword] = useState('')
 
   useEffect(() => {
     setHourglasses(getHourglasses())
@@ -150,7 +150,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     }, 500)
   }
 
-  /** 방 만들기/시작하기: 입력값을 키워드로 보드 조회·생성 후 해당 방(UUID URL)으로 이동 */
+  /** 방 만들기/시작하기: API로 조회·생성 후 생성된 방 번호(public_id)로 즉시 이동 */
   const handleCreateOrEnterRoom = useCallback(async () => {
     const keyword = searchQuery.trim()
     if (!keyword) return
@@ -163,25 +163,33 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     setCreatingRoom(true)
     try {
       if (isNumericOnly) {
-        const direct = await getBoardByPublicId(keyword)
-        if (direct?.id) {
-          // 숫자 직통 입장은 URL도 숫자(/board/123)를 유지
-          router.push(`/board/${encodeURIComponent(keyword)}`)
+        const res = await fetch(`/api/board/${encodeURIComponent(keyword)}`)
+        if (res.ok) {
+          router.push(`/board/${keyword}`)
           return
         }
-      }
-      const board = await getOrCreateBoardByKeyword(keyword)
-      if (board) {
-        // 생성된 방 번호(public_id)로 즉시 이동. 없으면 UUID로 이동
-        const path = board.public_id != null ? `/board/${board.public_id}` : `/board/${board.id}`
-        router.push(path)
-      } else {
         setCreatingRoom(false)
+        return
       }
+      const res = await fetch('/api/board/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyword,
+          password: roomPassword.trim() || undefined,
+        }),
+      })
+      if (!res.ok) {
+        setCreatingRoom(false)
+        return
+      }
+      const board = await res.json()
+      const path = board.public_id != null ? `/board/${board.public_id}` : `/board/${board.id}`
+      router.push(path)
     } catch {
       setCreatingRoom(false)
     }
-  }, [searchQuery, creatingRoom, useSupabase, router])
+  }, [searchQuery, roomPassword, creatingRoom, useSupabase, router])
 
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom">
@@ -212,22 +220,23 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         </Link>
       </header>
 
-      {/* Discovery Section - 방 제목·태그만 입력 (번호는 자동 부여됨) */}
+      {/* Discovery Section - 방 제목·태그만 입력 (번호 자동 부여, 비밀번호 선택) */}
       <section className="mb-7 relative overflow-visible">
-        <div className="relative z-10 mb-5 flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            placeholder="방 제목을 입력하세요"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleCreateOrEnterRoom()
-            }}
-            disabled={creatingRoom}
-            className="flex-1 w-full px-5 py-3.5 sm:px-6 sm:py-4 rounded-2xl glass-strong border-2 border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm sm:text-base disabled:opacity-60"
-            aria-label="방 제목 입력"
-          />
-          <motion.button
+        <div className="relative z-10 mb-5 flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              placeholder="방 제목을 입력하세요"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreateOrEnterRoom()
+              }}
+              disabled={creatingRoom}
+              className="flex-1 w-full px-5 py-3.5 sm:px-6 sm:py-4 rounded-2xl glass-strong border-2 border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm sm:text-base disabled:opacity-60"
+              aria-label="방 제목 입력"
+            />
+            <motion.button
             type="button"
             onClick={handleCreateOrEnterRoom}
             disabled={creatingRoom || !searchQuery.trim()}
@@ -251,6 +260,18 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
               </>
             )}
           </motion.button>
+          </div>
+          {useSupabase && (
+            <input
+              type="password"
+              placeholder="비밀번호(선택)"
+              value={roomPassword}
+              onChange={(e) => setRoomPassword(e.target.value)}
+              disabled={creatingRoom}
+              className="w-full px-5 py-3 rounded-2xl bg-black/40 border-2 border-neon-orange/40 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm shadow-[0_0_12px_rgba(255,107,0,0.15)]"
+              aria-label="방 비밀번호 선택"
+            />
+          )}
         </div>
         
         {/* 플로팅 태그: 너비 100%, overflow visible로 우측 잘림 없이 가로폭 전체 유영 */}

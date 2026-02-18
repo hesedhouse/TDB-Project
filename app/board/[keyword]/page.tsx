@@ -6,11 +6,22 @@ import { motion, AnimatePresence } from 'framer-motion'
 import PulseFeed from '@/components/PulseFeed'
 import { mockBoards } from '@/lib/mockData'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
-import { getBoardByPublicId, getOrCreateBoardByKeyword, getBoardById, type Board, type BoardRow } from '@/lib/supabase/boards'
-import { isValidUuid } from '@/lib/supabase/client'
+
+const UNLOCK_STORAGE_PREFIX = 'tdb-unlocked-'
 
 interface BoardByKeywordPageProps {
   params: { keyword: string }
+}
+
+/** API에서 반환하는 보드 (has_password 포함, password_hash 미노출) */
+type BoardFromApi = {
+  id: string
+  public_id: number | null
+  keyword: string
+  name: string | null
+  expires_at: string
+  created_at: string
+  has_password: boolean
 }
 
 /** #PUBG 등 특수문자 포함 키워드를 URL에서 안전하게 디코딩 */
@@ -26,8 +37,12 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   const router = useRouter()
   const decodedKeyword = safeDecodeKeyword(params.keyword ?? '')
   const [showToast, setShowToast] = useState(false)
-  const [supabaseBoard, setSupabaseBoard] = useState<Board | null>(null)
+  const [supabaseBoard, setSupabaseBoard] = useState<BoardFromApi | null>(null)
   const [boardLoading, setBoardLoading] = useState(true)
+  const [passwordUnlocked, setPasswordUnlocked] = useState(false)
+  const [passwordInput, setPasswordInput] = useState('')
+  const [passwordError, setPasswordError] = useState(false)
+  const [verifying, setVerifying] = useState(false)
   const useSupabase = isSupabaseConfigured()
 
   const matchedBoard = useMemo(() => {
@@ -46,35 +61,76 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     }
   }, [matchedBoard])
 
-  // Supabase 사용 시:
-  // - 숫자만 입력: boards.id(숫자) 직통 조회 → 없으면 키워드로 조회/생성 fallback
-  // - UUID: getBoardById
-  // - 그 외: 키워드로 조회/생성
+  // Supabase 사용 시: API로 보드 조회 (has_password 포함). 404면 키워드로 생성 시도 후 리다이렉트
   useEffect(() => {
     if (!useSupabase) {
       setBoardLoading(false)
       return
     }
     let cancelled = false
-    const isNumericOnly = /^[0-9]+$/.test(decodedKeyword)
     const run = async () => {
-      let row: Board | null = null
-      if (isNumericOnly) {
-        row = await getBoardByPublicId(decodedKeyword)
-        if (!row) {
-          row = await getOrCreateBoardByKeyword(decodedKeyword)
+      const res = await fetch(`/api/board/${encodeURIComponent(decodedKeyword)}`)
+      if (cancelled) return
+      if (res.status === 404) {
+        // 키워드로 새 방 생성 후 생성된 번호로 이동
+        const createRes = await fetch('/api/board/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword: decodedKeyword }),
+        })
+        if (cancelled) return
+        if (createRes.ok) {
+          const created = await createRes.json()
+          const path = created.public_id != null ? `/board/${created.public_id}` : `/board/${created.id}`
+          router.replace(path)
+          return
         }
-      } else if (isValidUuid(decodedKeyword)) {
-        row = await getBoardById(decodedKeyword)
-      } else {
-        row = await getOrCreateBoardByKeyword(decodedKeyword)
+        setBoardLoading(false)
+        return
       }
-      if (!cancelled && row) setSupabaseBoard(row)
+      if (!res.ok) {
+        setBoardLoading(false)
+        return
+      }
+      const data: BoardFromApi = await res.json()
+      setSupabaseBoard(data)
+      const storageKey = `${UNLOCK_STORAGE_PREFIX}${data.id}`
+      const wasUnlocked = typeof window !== 'undefined' && sessionStorage.getItem(storageKey) === '1'
+      setPasswordUnlocked(wasUnlocked)
       setBoardLoading(false)
     }
     run()
     return () => { cancelled = true }
-  }, [useSupabase, decodedKeyword])
+  }, [useSupabase, decodedKeyword, router])
+
+  const handlePasswordSubmit = async () => {
+    if (!supabaseBoard || !passwordInput.trim() || verifying) return
+    setVerifying(true)
+    setPasswordError(false)
+    try {
+      const res = await fetch('/api/board/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          publicId: supabaseBoard.public_id,
+          boardId: supabaseBoard.id,
+          password: passwordInput.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (data?.ok) {
+        sessionStorage.setItem(`${UNLOCK_STORAGE_PREFIX}${supabaseBoard.id}`, '1')
+        setPasswordUnlocked(true)
+        setPasswordInput('')
+      } else {
+        setPasswordError(true)
+      }
+    } catch {
+      setPasswordError(true)
+    } finally {
+      setVerifying(false)
+    }
+  }
 
   // Supabase 미사용 시: 매칭된 목 보드가 있으면 PulseFeed, 없으면 키워드로 PulseFeed(빈 방)
   if (!useSupabase) {
@@ -96,7 +152,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     )
   }
 
-  // Supabase 연동 시: 항상 UUID 보드 조회/생성 후 PulseFeed에 전달
+  // Supabase 연동 시: 보드 조회 후 비밀번호 잠금이면 모달, 해제되면 PulseFeed
   if (useSupabase) {
     if (boardLoading) {
       return (
@@ -112,6 +168,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
         </div>
       )
     }
+    const needsPassword = supabaseBoard.has_password && !passwordUnlocked
     return (
       <div className="min-h-screen bg-midnight-black text-white">
         <AnimatePresence>
@@ -127,16 +184,64 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
             </motion.div>
           )}
         </AnimatePresence>
-        <PulseFeed
-          boardId={supabaseBoard.id}
-          boardPublicId={supabaseBoard.public_id ?? null}
-          userCharacter={0}
-          userNickname="게스트"
-          onBack={() => router.push('/')}
-          initialExpiresAt={new Date(supabaseBoard.expires_at)}
-          initialCreatedAt={new Date(supabaseBoard.created_at)}
-          initialBoardName={supabaseBoard.name ?? `#${decodedKeyword}`}
-        />
+        {needsPassword ? (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="w-full max-w-sm rounded-2xl p-6 glass-strong border-2 border-neon-orange/50 shadow-[0_0_24px_rgba(255,107,0,0.25),0_0_48px_rgba(255,107,0,0.12)]"
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', damping: 25 }}
+            >
+              <p className="text-center text-neon-orange font-bold text-lg mb-4" style={{ textShadow: '0 0 12px rgba(255,107,0,0.6)' }}>
+                비밀번호를 입력하세요
+              </p>
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(false) }}
+                onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+                placeholder="비밀번호"
+                disabled={verifying}
+                className="w-full px-4 py-3 rounded-xl bg-black/50 border-2 border-neon-orange/40 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm mb-3 shadow-[0_0_12px_rgba(255,107,0,0.15)]"
+                autoFocus
+              />
+              {passwordError && (
+                <p className="text-red-400 text-sm mb-2 text-center">비밀번호가 올바르지 않습니다.</p>
+              )}
+              <motion.button
+                type="button"
+                onClick={handlePasswordSubmit}
+                disabled={verifying || !passwordInput.trim()}
+                className="w-full py-3 rounded-xl font-semibold bg-neon-orange text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_14px_rgba(255,107,0,0.4)]"
+              >
+                {verifying ? '확인 중...' : '입장하기'}
+              </motion.button>
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                className="w-full mt-3 py-2 text-sm text-gray-400 hover:text-white"
+              >
+                뒤로
+              </button>
+            </motion.div>
+          </motion.div>
+        ) : (
+          <PulseFeed
+            boardId={supabaseBoard.id}
+            boardPublicId={supabaseBoard.public_id ?? null}
+            userCharacter={0}
+            userNickname="게스트"
+            onBack={() => router.push('/')}
+            initialExpiresAt={new Date(supabaseBoard.expires_at)}
+            initialCreatedAt={new Date(supabaseBoard.created_at)}
+            initialBoardName={supabaseBoard.name ?? `#${decodedKeyword}`}
+          />
+        )}
       </div>
     )
   }
