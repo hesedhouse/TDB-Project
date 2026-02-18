@@ -416,38 +416,6 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
         ? { name: initialBoardName, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createdAt: new Date() }
         : null)
 
-  /** #board-4 / board-4 형태면 "새 방"으로 표시, 아니면 원래 제목 */
-  const displayTitle =
-    displayBoard?.name != null && /^#?board-\d+$/i.test(displayBoard.name.trim())
-      ? '새 방'
-      : (displayBoard?.name ?? '방')
-
-  /** 방 번호: boardPublicId 우선, 없으면 boardId에서 board-N 추출 */
-  const roomNo =
-    boardPublicId != null
-      ? String(boardPublicId)
-      : (boardId.match(/^board-(\d+)$/i)?.[1] ?? null)
-
-  /** 방 제목(name)에서 # 포함 구간을 오렌지 해시태그로 렌더 (실제 키워드일 때만) */
-  const renderBoardNameWithHashtag = (name: string) => {
-    if (/^#?board-\d+$/i.test(name.trim())) return name
-    const parts = name.split('#')
-    if (parts.length <= 1) return name
-    const nodes: React.ReactNode[] = [parts[0]]
-    for (let i = 1; i < parts.length; i++) {
-      const segment = parts[i]
-      const word = segment.split(/\s/)[0] || segment
-      const rest = segment.slice(word.length)
-      nodes.push(
-        <span key={i} className="font-semibold" style={{ color: '#FF6B00' }}>
-          #{word}
-        </span>
-      )
-      if (rest) nodes.push(rest)
-    }
-    return nodes
-  }
-
   if (!displayBoard) {
     return (
       <div className="min-h-screen bg-midnight-black flex items-center justify-center">
@@ -455,6 +423,19 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
       </div>
     )
   }
+
+  /** 헤더용: ID(#board-4 등) 제거, 깔끔한 방 제목만 */
+  const displayTitle =
+    displayBoard.name != null && /^#?board-\d+$/i.test(displayBoard.name.trim())
+      ? '새 방'
+      : (displayBoard.name ?? '방')
+  const headerTitle = String(displayTitle).replace(/^#\s*/, '').trim() || '방'
+
+  /** 방 번호: boardPublicId 우선, 없으면 boardId에서 board-N 추출 */
+  const roomNo =
+    boardPublicId != null
+      ? String(boardPublicId)
+      : (boardId.match(/^board-(\d+)$/i)?.[1] ?? null)
 
   const effectiveExpiresAt = boardExpiresAtOverride ?? displayBoard.expiresAt
 
@@ -550,9 +531,9 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
             </button>
             <div className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3 flex-wrap items-center">
               <h1 className="text-base sm:text-xl font-bold truncate min-w-0 text-white">
-                {renderBoardNameWithHashtag(displayTitle)}
+                {headerTitle}
               </h1>
-              {roomNo && (
+              {roomNo != null && roomNo !== '' && (
                 <button
                   type="button"
                   onClick={handleCopyRoomNo}
