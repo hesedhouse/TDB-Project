@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import PulseFeed from '@/components/PulseFeed'
 import { mockBoards } from '@/lib/mockData'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
+import { useAuth } from '@/lib/supabase/auth'
 
 const UNLOCK_STORAGE_PREFIX = 'tdb-unlocked-'
 
@@ -37,6 +38,7 @@ function safeDecodeKeyword(raw: string): string {
 export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) {
   const router = useRouter()
   const decodedKeyword = safeDecodeKeyword(params.keyword ?? '')
+  const { user: authUser, loading: authLoading } = useAuth()
   const [showToast, setShowToast] = useState(false)
   const [supabaseBoard, setSupabaseBoard] = useState<BoardFromApi | null>(null)
   const [boardLoading, setBoardLoading] = useState(true)
@@ -45,6 +47,22 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   const [passwordError, setPasswordError] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const useSupabase = isSupabaseConfigured()
+
+  useEffect(() => {
+    if (!useSupabase || authLoading) return
+    if (!authUser) {
+      const path = `/board/${encodeURIComponent(decodedKeyword)}`
+      router.replace(`/login?returnUrl=${encodeURIComponent(path)}`)
+    }
+  }, [useSupabase, authLoading, authUser, router, decodedKeyword])
+
+  if (useSupabase && (authLoading || !authUser)) {
+    return (
+      <div className="min-h-screen bg-midnight-black text-white flex items-center justify-center">
+        <p className="text-gray-400">로그인 확인 중...</p>
+      </div>
+    )
+  }
 
   const matchedBoard = useMemo(() => {
     const keyword = decodedKeyword
@@ -242,6 +260,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
             roomIdFromUrl={decodedKeyword}
             userCharacter={0}
             userNickname="게스트"
+            userId={authUser?.id ?? null}
             onBack={() => router.push('/')}
             initialExpiresAt={new Date(supabaseBoard.expires_at)}
             initialCreatedAt={new Date(supabaseBoard.created_at)}

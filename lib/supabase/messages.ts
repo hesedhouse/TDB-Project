@@ -24,20 +24,27 @@ export async function sendMessage(params: {
   authorNickname: string
   content: string
   imageUrl?: string | null
+  /** 로그인 유저의 Auth UID (관리자 추적용). Supabase Auth user.id */
+  userId?: string | null
 }): Promise<Message | null> {
   const supabase = createClient()
   if (!supabase) return null
 
+  const row: Record<string, unknown> = {
+    board_id: params.boardId,
+    author_character: params.authorCharacter,
+    author_nickname: params.authorNickname,
+    content: params.content.trim(),
+    heart_count: 0,
+    image_url: params.imageUrl ?? null,
+  }
+  if (params.userId != null && params.userId !== '') {
+    row.user_id = params.userId
+  }
+
   const { data, error } = await supabase
     .from('messages')
-    .insert({
-      board_id: params.boardId,
-      author_character: params.authorCharacter,
-      author_nickname: params.authorNickname,
-      content: params.content.trim(),
-      heart_count: 0,
-      image_url: params.imageUrl ?? null,
-    })
+    .insert(row)
     .select()
     .single()
 

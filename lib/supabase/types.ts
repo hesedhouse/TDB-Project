@@ -10,6 +10,8 @@ export interface DbMessage {
   image_url?: string | null
   images?: string[] | null
   links?: { url: string; type: string }[] | null
+  /** 로그인 유저의 Auth UID (관리자 추적용). nullable */
+  user_id?: string | null
 }
 
 /** 클라이언트에서 쓰기 편한 메시지 타입 (created_at을 Date처럼 다룸) */

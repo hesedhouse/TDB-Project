@@ -1,16 +1,30 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { TickProvider } from '@/lib/TickContext'
 import HomeDashboard from '@/components/HomeDashboard'
 import EntryGate from '@/components/EntryGate'
 import PulseFeed from '@/components/PulseFeed'
+import { useAuth } from '@/lib/supabase/auth'
+import { isSupabaseConfigured } from '@/lib/supabase/client'
 
 export default function Home() {
+  const router = useRouter()
+  const { user, loading } = useAuth()
+  const useSupabase = isSupabaseConfigured()
+
   const [currentView, setCurrentView] = useState<'home' | 'entry' | 'feed'>('home')
   const [selectedBoard, setSelectedBoard] = useState<string | null>(null)
   const [userCharacter, setUserCharacter] = useState<number>(0)
   const [userNickname, setUserNickname] = useState<string>('')
+
+  useEffect(() => {
+    if (!useSupabase || loading) return
+    if (!user) {
+      router.replace('/login?returnUrl=/')
+    }
+  }, [useSupabase, loading, user, router])
 
   const handleEnterBoard = useCallback((boardId: string) => {
     if (!userNickname) {
@@ -38,6 +52,14 @@ export default function Home() {
     setSelectedBoard(null)
   }
 
+  if (useSupabase && (loading || !user)) {
+    return (
+      <main className="min-h-screen bg-midnight-black flex items-center justify-center">
+        <p className="text-gray-400">로그인 확인 중...</p>
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-screen bg-midnight-black pt-16">
       {currentView === 'home' && (
@@ -52,11 +74,12 @@ export default function Home() {
           onClose={() => setCurrentView('home')}
         />
       )}
-      {currentView === 'feed' && selectedBoard && (
+      {currentView === 'feed' && selectedBoard && user && (
         <PulseFeed
           boardId={selectedBoard}
           userCharacter={userCharacter}
           userNickname={userNickname}
+          userId={user.id}
           onBack={handleBackToHome}
         />
       )}

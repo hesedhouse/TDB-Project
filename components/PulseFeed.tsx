@@ -22,6 +22,8 @@ interface PulseFeedProps {
   roomIdFromUrl?: string | null
   userCharacter: number
   userNickname: string
+  /** 로그인 유저의 Auth UID. 게시글 저장 시 user_id로 Supabase에 전달 (관리자 추적용) */
+  userId?: string | null
   onBack: () => void
   /** Supabase에서 조회한 방의 만료 시각 (UUID 보드일 때 타이머용) */
   initialExpiresAt?: Date | null
@@ -43,7 +45,7 @@ export interface Comment {
   createdAt: Date
 }
 
-export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userCharacter, userNickname, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
+export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userCharacter, userNickname, userId, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
   const useSupabase = isSupabaseConfigured()
   /** Supabase 사용 시 반드시 UUID인 경우만 API 호출 (400 에러 방지) */
   const useSupabaseWithUuid = useSupabase && isValidUuid(boardId)
@@ -72,6 +74,11 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
   const [showWriteModal, setShowWriteModal] = useState(false)
   const [writeContent, setWriteContent] = useState('')
   const [writeImageFile, setWriteImageFile] = useState<File | null>(null)
+  /** 방 입장 시 닉네임 설정 모달: 입장할 때마다 표시, 해당 방 세션(sessionStorage) 동안만 유효 */
+  const ROOM_NICKNAME_KEY_PREFIX = 'tdb-room-nickname-'
+  const [showNicknameModal, setShowNicknameModal] = useState(true)
+  const [effectiveNickname, setEffectiveNickname] = useState('')
+  const [nicknameInput, setNicknameInput] = useState('')
   const feedEndRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -80,6 +87,20 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
   useEffect(() => {
     setHourglassesState(getHourglasses())
   }, [])
+
+  /** 방 입장 시 해당 방의 세션 닉네임 있으면 pre-fill, 모달은 항상 표시 */
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const key = `${ROOM_NICKNAME_KEY_PREFIX}${boardId}`
+      const saved = (window.sessionStorage.getItem(key) ?? '').trim()
+      setNicknameInput(saved)
+      setEffectiveNickname(saved)
+      setShowNicknameModal(true)
+    } catch {
+      setShowNicknameModal(true)
+    }
+  }, [boardId])
 
   useEffect(() => {
     if (!noCopyToast) return
@@ -124,10 +145,14 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
   /** 댓글 입력값 (targetId → text) */
   const [commentInputByTarget, setCommentInputByTarget] = useState<Record<string, string>>({})
 
+  /** 글/댓글 작성자 이름: 모달 또는 localStorage 저장값 우선, 없으면 prop(게스트) */
+  const authorNickname = (effectiveNickname || '').trim() || userNickname
+
   const { messages, send, toggleHeart, sending } = useBoardChat(boardId, {
     userCharacter,
-    userNickname,
+    userNickname: authorNickname,
     enabled: useSupabaseWithUuid,
+    userId: userId ?? undefined,
   })
 
   const handleSendMessage = useCallback(async () => {
@@ -176,7 +201,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
       id: `post-${Date.now()}`,
       boardId,
       authorCharacter: userCharacter,
-      authorNickname: userNickname,
+      authorNickname,
       content: text,
       images: writeImageFile ? [URL.createObjectURL(writeImageFile)] : undefined,
       heartCount: 0,
@@ -184,7 +209,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
     }
     setPosts((prev) => [newPost, ...prev])
     handleCloseWriteModal()
-  }, [writeContent, writeImageFile, useSupabaseWithUuid, boardId, send, userCharacter, userNickname, handleCloseWriteModal])
+  }, [writeContent, writeImageFile, useSupabaseWithUuid, boardId, send, userCharacter, authorNickname, handleCloseWriteModal])
 
   const handleMessageHeart = useCallback(
     async (messageId: string) => {
@@ -467,9 +492,72 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
     }
   }, [])
 
+  const handleNicknameSubmit = useCallback(() => {
+    const name = nicknameInput.trim()
+    if (!name) return
+    try {
+      window.sessionStorage.setItem(`${ROOM_NICKNAME_KEY_PREFIX}${boardId}`, name)
+    } catch {}
+    setEffectiveNickname(name)
+    setShowNicknameModal(false)
+  }, [nicknameInput, boardId])
+
   return (
     <div className="min-h-screen bg-midnight-black text-white safe-bottom">
       <AnimatePresence>
+        {showNicknameModal && (
+          <motion.div
+            className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ background: 'rgba(0,0,0,0.92)' }}
+          >
+            <motion.div
+              className="w-full max-w-sm rounded-2xl p-6"
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 300 }}
+              style={{
+                background: '#0a0a0a',
+                border: '2px solid rgba(255,107,0,0.6)',
+                boxShadow: '0 0 20px rgba(255,107,0,0.25), 0 0 40px rgba(255,107,0,0.12), inset 0 0 0 1px rgba(255,107,0,0.15)',
+              }}
+            >
+              <h2 className="text-lg sm:text-xl font-bold text-center mb-1 text-white" style={{ textShadow: '0 0 12px rgba(255,255,255,0.15)' }}>
+                닉네임 설정
+              </h2>
+              <p className="text-center text-gray-400 text-sm mb-4">
+                이 방에서 당신의 부캐(이름)를 정해주세요
+              </p>
+              <input
+                type="text"
+                value={nicknameInput}
+                onChange={(e) => setNicknameInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleNicknameSubmit()}
+                placeholder="닉네임 입력"
+                maxLength={20}
+                className="w-full px-4 py-3 rounded-xl bg-black/60 border-2 border-[#FF6B00]/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base mb-4"
+                style={{ boxShadow: '0 0 12px rgba(255,107,0,0.15)' }}
+              />
+              <motion.button
+                type="button"
+                onClick={handleNicknameSubmit}
+                disabled={!nicknameInput.trim()}
+                className="w-full py-3.5 rounded-xl font-bold text-base text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: nicknameInput.trim() ? '#FF6B00' : '#555',
+                  boxShadow: nicknameInput.trim() ? '0 0 14px rgba(255,107,0,0.4), 0 0 24px rgba(255,107,0,0.2)' : 'none',
+                }}
+                whileHover={nicknameInput.trim() ? { scale: 1.02 } : {}}
+                whileTap={nicknameInput.trim() ? { scale: 0.98 } : {}}
+              >
+                확인
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
         {isExpired && (
           <motion.div
             className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 px-4"
@@ -806,7 +894,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
                               const newComment: Comment = {
                                 id: `c-${Date.now()}-${msg.id}`,
                                 postId: msg.id,
-                                authorNickname: userNickname,
+                                authorNickname,
                                 authorCharacter: userCharacter,
                                 content: text,
                                 createdAt: new Date(),
@@ -826,7 +914,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
                             const newComment: Comment = {
                               id: `c-${Date.now()}-${msg.id}`,
                               postId: msg.id,
-                              authorNickname: userNickname,
+                              authorNickname,
                               authorCharacter: userCharacter,
                               content: text,
                               createdAt: new Date(),
@@ -1055,7 +1143,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
                           const newComment: Comment = {
                             id: `c-${Date.now()}-${post.id}`,
                             postId: post.id,
-                            authorNickname: userNickname,
+                            authorNickname,
                             authorCharacter: userCharacter,
                             content: text,
                             createdAt: new Date(),
@@ -1075,7 +1163,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
                         const newComment: Comment = {
                           id: `c-${Date.now()}-${post.id}`,
                           postId: post.id,
-                          authorNickname: userNickname,
+                          authorNickname,
                           authorCharacter: userCharacter,
                           content: text,
                           createdAt: new Date(),

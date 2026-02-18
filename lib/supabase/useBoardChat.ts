@@ -15,9 +15,11 @@ export function useBoardChat(
     userCharacter: number
     userNickname: string
     enabled?: boolean
+    /** 로그인 유저의 Auth UID (관리자 추적용). posts/messages에 user_id로 저장 */
+    userId?: string | null
   }
 ) {
-  const { userCharacter, userNickname, enabled = true } = options
+  const { userCharacter, userNickname, enabled = true, userId } = options
   const [messages, setMessages] = useState<Message[]>([])
   const [sending, setSending] = useState(false)
 
@@ -57,6 +59,7 @@ export function useBoardChat(
         authorNickname: userNickname,
         content: text || ' ',
         imageUrl: imageUrl ?? undefined,
+        userId: userId ?? undefined,
       })
       setSending(false)
       if (sent) {
@@ -68,7 +71,7 @@ export function useBoardChat(
       }
       return null
     },
-    [boardId, userCharacter, userNickname, sending]
+    [boardId, userCharacter, userNickname, userId, sending]
   )
 
   /** 하트 토글: 이미 누른 메시지면 -1, 아니면 +1. 반환값으로 UI(빨간 하트 등) 갱신용 */
