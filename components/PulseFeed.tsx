@@ -157,8 +157,14 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
 
   const handleSendMessage = useCallback(async () => {
     if ((!chatInput.trim()) || sending || uploadingImage || !useSupabaseWithUuid) return
-    await send(chatInput)
-    setChatInput('')
+    const sent = await send(chatInput)
+    if (sent) {
+      setChatInput('')
+      // 새 글이 등록되면 목록 최상단으로 부드럽게 스크롤
+      setTimeout(() => {
+        listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
+    }
   }, [chatInput, sending, uploadingImage, useSupabaseWithUuid, send])
 
   const handlePhotoSelect = useCallback(
@@ -192,8 +198,14 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
         imageUrl = (await uploadChatImage(writeImageFile, boardId)) ?? undefined
       }
       setUploadingImage(false)
-      await send(text || '', imageUrl)
-      handleCloseWriteModal()
+      const sent = await send(text || '', imageUrl)
+      if (sent) {
+        handleCloseWriteModal()
+        // 새 글이 등록되면 목록 최상단으로 부드럽게 스크롤
+        setTimeout(() => {
+          listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+        }, 100)
+      }
       return
     }
     if (!text) return
@@ -624,7 +636,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
       </AnimatePresence>
 
       {/* Top Bar with Progress */}
-      <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top">
+      <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top pt-8">
         <div className="px-3 py-3 sm:p-4">
           <div className="flex items-center justify-between mb-2 gap-2">
             <button
@@ -903,7 +915,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
                               setCommentInputByTarget((prev) => ({ ...prev, [msg.id]: '' }))
                             }
                           }}
-                          placeholder="댓글 입력..."
+                          placeholder=""
                           className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/30 border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm"
                         />
                         <motion.button
@@ -971,7 +983,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
                     handleSendMessage()
                   }
                 }}
-                placeholder="간단 댓글 입력..."
+                placeholder=""
                 className="flex-1 min-w-0 px-3 py-2.5 rounded-xl glass border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm"
                 maxLength={500}
               />
@@ -1152,7 +1164,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
                           setCommentInputByTarget((prev) => ({ ...prev, [post.id]: '' }))
                         }
                       }}
-                      placeholder="댓글 입력..."
+                      placeholder=""
                       className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/30 border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm"
                     />
                     <motion.button
