@@ -18,6 +18,13 @@ export type CreateBoardResponse = {
 
 export async function POST(request: Request) {
   try {
+    // 환경 변수: 연결 여부만 로그 (키 값 노출 금지)
+    const supabaseUrlSet = Boolean(
+      process.env.NEXT_PUBLIC_SUPABASE_URL &&
+        String(process.env.NEXT_PUBLIC_SUPABASE_URL).trim().length > 0
+    )
+    console.log('[api/board/create] Supabase URL 연결 여부:', supabaseUrlSet ? '설정됨' : '미설정')
+
     const body = await request.json()
     const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : ''
     const password = typeof body?.password === 'string' ? body.password : undefined
@@ -28,6 +35,7 @@ export async function POST(request: Request) {
 
     const supabase = createClient()
     if (!supabase) {
+      console.error('[api/board/create] Supabase not configured (env 누락 또는 createClient null)')
       return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 })
     }
 
@@ -52,8 +60,14 @@ export async function POST(request: Request) {
         .eq('keyword', keyword)
         .maybeSingle()
       if (selectErrWithout) {
-        console.error('[api/board/create] select error:', selectErrWithout)
-        return NextResponse.json({ error: 'Failed to check board' }, { status: 500 })
+        const selErr = selectErrWithout
+        console.error('[api/board/create] select error (상세):', {
+          message: selErr?.message,
+          code: selErr?.code,
+          details: selErr?.details,
+          full: selErr,
+        })
+        return NextResponse.json({ error: selErr?.message ?? 'Failed to check board' }, { status: 500 })
       }
       existing = existingWithout ? (existingWithout as Record<string, unknown>) : null
     }
@@ -69,6 +83,7 @@ export async function POST(request: Request) {
     }
 
     const displayTitle = `#${keyword}`
+    // room_no는 SERIAL이므로 insert에 포함하지 않음. 전달 필드: name, title, password_hash(선택)
     const insertPayload = {
       keyword,
       name: displayTitle,
@@ -76,6 +91,13 @@ export async function POST(request: Request) {
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       ...(password_hash ? { password_hash } : {}),
     }
+    console.log('[api/board/create] insert payload 확인 (room_no 미포함):', {
+      keys: Object.keys(insertPayload),
+      keyword,
+      name: insertPayload.name,
+      title: insertPayload.title,
+      hasPassword: Boolean(password_hash),
+    })
 
     let inserted: Record<string, unknown> | null = null
     const insertWithRes = await supabase
@@ -87,7 +109,15 @@ export async function POST(request: Request) {
     if (!insertWithRes.error && insertWithRes.data) {
       inserted = insertWithRes.data as Record<string, unknown>
     } else if (insertWithRes.error && password_hash) {
-      console.warn('[api/board/create] insert with password_hash 실패(컬럼 없을 수 있음). password 없이 재시도.', insertWithRes.error?.message)
+      const err = insertWithRes.error
+      console.error('[api/board/create] insert 실패 (상세):', {
+        message: err?.message,
+        code: err?.code,
+        details: err?.details,
+        hint: err?.hint,
+        full: err,
+      })
+      console.warn('[api/board/create] password_hash 제외하고 재시도.')
       const { password_hash: _, ...payloadWithoutPassword } = insertPayload
       const insertWithoutRes = await supabase
         .from('boards')
@@ -95,13 +125,29 @@ export async function POST(request: Request) {
         .select(selectColsWithoutPassword)
         .single()
       if (insertWithoutRes.error) {
-        console.error('[api/board/create] insert error:', insertWithoutRes.error)
-        return NextResponse.json({ error: 'Failed to create board' }, { status: 500 })
+        const err2 = insertWithoutRes.error
+        console.error('[api/board/create] insert 재시도 실패 (상세):', {
+          message: err2?.message,
+          code: err2?.code,
+          details: err2?.details,
+          hint: err2?.hint,
+          full: err2,
+        })
+        const msg = err2?.message ?? 'Failed to create board'
+        return NextResponse.json({ error: msg }, { status: 500 })
       }
       inserted = insertWithoutRes.data as Record<string, unknown>
     } else if (insertWithRes.error) {
-      console.error('[api/board/create] insert error:', insertWithRes.error)
-      return NextResponse.json({ error: 'Failed to create board' }, { status: 500 })
+      const err = insertWithRes.error
+      console.error('[api/board/create] insert 실패 (상세):', {
+        message: err?.message,
+        code: err?.code,
+        details: err?.details,
+        hint: err?.hint,
+        full: err,
+      })
+      const msg = err?.message ?? 'Failed to create board'
+      return NextResponse.json({ error: msg }, { status: 500 })
     }
 
     if (!inserted) {
@@ -119,8 +165,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json(toBoardResponse(inserted))
   } catch (e) {
-    console.error('[api/board/create]', e)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    const err = e instanceof Error ? e : new Error(String(e))
+    console.error('[api/board/create] 예외 (상세):', {
+      message: err.message,
+      name: err.name,
+      stack: err.stack,
+      raw: e,
+    })
+    return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 })
   }
 }
 

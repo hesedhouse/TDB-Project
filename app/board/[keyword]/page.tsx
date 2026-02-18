@@ -87,6 +87,8 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
           router.replace(path)
           return
         }
+        const errBody = await createRes.json().catch(() => ({}))
+        console.error('[board] 404 후 방 생성 실패:', createRes.status, errBody)
         setBoardLoading(false)
         return
       }

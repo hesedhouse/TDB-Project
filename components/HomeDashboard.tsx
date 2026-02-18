@@ -172,6 +172,15 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         setCreatingRoom(false)
         return
       }
+      // Supabase 연결 여부(클라이언트): 키 값 노출 없이 로그
+      if (typeof window !== 'undefined') {
+        const urlSet = Boolean(
+          process.env.NEXT_PUBLIC_SUPABASE_URL &&
+            String(process.env.NEXT_PUBLIC_SUPABASE_URL).trim().length > 0
+        )
+        console.log('[HomeDashboard] Supabase URL 연결 여부:', urlSet ? '설정됨' : '미설정')
+      }
+
       const res = await fetch('/api/board/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -180,16 +189,23 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           password: roomPassword.trim() || undefined,
         }),
       })
+      const data = await res.json().catch(() => ({} as Record<string, unknown>))
       if (!res.ok) {
+        const errMsg = typeof data?.error === 'string' ? data.error : res.statusText || '알 수 없음'
+        console.error('[HomeDashboard] 방 생성 실패:', res.status, data)
         setCreatingRoom(false)
+        alert(`저장 실패: ${errMsg}`)
         return
       }
-      const board = await res.json()
+      const board = data as { room_no?: number; public_id?: number; id: string }
       const numId = board.room_no ?? board.public_id
       const path = numId != null ? `/board/${numId}` : `/board/${board.id}`
       router.push(path)
-    } catch {
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e)
+      console.error('[HomeDashboard] 방 생성 예외:', e)
       setCreatingRoom(false)
+      alert(`저장 실패: ${errMsg}`)
     }
   }, [searchQuery, roomPassword, creatingRoom, useSupabase, router])
 
