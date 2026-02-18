@@ -28,31 +28,39 @@ export async function GET(
       return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 })
     }
 
-    const selectCols = 'id, keyword, name, expires_at, created_at, public_id, password_hash'
+    const selectColsWithPassword = 'id, keyword, name, expires_at, created_at, public_id, password_hash'
+    const selectColsWithoutPassword = 'id, keyword, name, expires_at, created_at, public_id'
 
-    let query = supabase.from('boards').select(selectCols).limit(1)
-
-    if (/^\d+$/.test(raw)) {
-      query = query.eq('public_id', Number(raw))
-    } else if (isValidUuid(raw)) {
-      query = query.eq('id', raw)
-    } else {
-      query = query.eq('keyword', decodeURIComponent(raw))
+    const buildQuery = (cols: string) => {
+      let q = supabase.from('boards').select(cols).limit(1)
+      if (/^\d+$/.test(raw)) q = q.eq('public_id', Number(raw))
+      else if (isValidUuid(raw)) q = q.eq('id', raw)
+      else q = q.eq('keyword', decodeURIComponent(raw))
+      return q
     }
 
-    const { data: row, error } = await query.maybeSingle()
+    let row: Record<string, unknown> | null = null
+    let has_password = false
 
-    if (error) {
-      console.error('[api/board/[identifier]]', error)
-      return NextResponse.json({ error: 'Failed to fetch board' }, { status: 500 })
+    const resWith = await buildQuery(selectColsWithPassword).maybeSingle()
+    if (!resWith.error && resWith.data) {
+      const data = resWith.data as unknown
+      row = data as Record<string, unknown>
+      has_password = Boolean(row?.password_hash)
+    } else if (resWith.error) {
+      const resWithout = await buildQuery(selectColsWithoutPassword).maybeSingle()
+      if (resWithout.error) {
+        console.error('[api/board/[identifier]]', resWithout.error)
+        return NextResponse.json({ error: 'Failed to fetch board' }, { status: 500 })
+      }
+      row = resWithout.data == null ? null : (resWithout.data as unknown as Record<string, unknown>)
     }
+
     if (!row) {
       return NextResponse.json({ error: 'Board not found' }, { status: 404 })
     }
 
-    const r = row as Record<string, unknown>
-    const has_password = Boolean(r.password_hash)
-    const { password_hash: _, ...safe } = r
+    const r = row
     const response: BoardApiResponse = {
       id: String(r.id),
       public_id: r.public_id != null ? Number(r.public_id) : null,
