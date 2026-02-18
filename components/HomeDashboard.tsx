@@ -10,7 +10,7 @@ import { mockBoards, getTrendKeywords, filterActiveBoards, formatRemainingTimer 
 import { getHourglasses } from '@/lib/hourglass'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { createClient } from '@/lib/supabase/client'
-import { getOrCreateBoardByKeyword } from '@/lib/supabase/boards'
+import { getBoardByPublicId, getOrCreateBoardByKeyword } from '@/lib/supabase/boards'
 import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
 import { useTick } from '@/lib/TickContext'
 import type { Board } from '@/lib/mockData'
@@ -137,12 +137,21 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     const keyword = searchQuery.trim()
     if (!keyword) return
     if (creatingRoom) return
+    const isNumericOnly = /^[0-9]+$/.test(keyword)
     if (!useSupabase) {
       router.push(`/board/${encodeURIComponent(keyword)}`)
       return
     }
     setCreatingRoom(true)
     try {
+      if (isNumericOnly) {
+        const direct = await getBoardByPublicId(keyword)
+        if (direct?.id) {
+          // 숫자 직통 입장은 URL도 숫자(/board/123)를 유지
+          router.push(`/board/${encodeURIComponent(keyword)}`)
+          return
+        }
+      }
       const board = await getOrCreateBoardByKeyword(keyword)
       if (board) {
         router.push(`/board/${board.id}`)
@@ -183,8 +192,8 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         </Link>
       </header>
 
-      {/* Discovery Section - 방 제목 입력 + 시작하기 */}
-      <section className="mb-7 relative">
+      {/* Discovery Section - 방 제목 입력 + 시작하기 (플로팅 태그가 화면 끝까지 보이도록 overflow-visible) */}
+      <section className="mb-7 relative overflow-visible">
         <div className="relative z-10 mb-5 flex flex-col sm:flex-row gap-3">
           <input
             type="text"
@@ -224,10 +233,18 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           </motion.button>
         </div>
         
-        {/* 플로팅 태그: 컨테이너 — 블러/오버레이 없음, 선명한 배경 위에 태그만 표시 */}
+        {/* 플로팅 태그: 전체 가로폭(100vw), overflow visible로 우측 잘림 방지 */}
         <div
-          className="relative w-full min-h-[300px] h-56 sm:h-64 rounded-2xl overflow-visible floating-tags-container"
-          style={{ contain: 'layout', backdropFilter: 'none', WebkitBackdropFilter: 'none', filter: 'none' }}
+          className="relative min-h-[300px] h-56 sm:h-64 rounded-2xl overflow-visible floating-tags-container"
+          style={{
+            width: '100vw',
+            maxWidth: '100vw',
+            marginLeft: 'calc(-50vw + 50%)',
+            contain: 'layout',
+            backdropFilter: 'none',
+            WebkitBackdropFilter: 'none',
+            filter: 'none',
+          }}
         >
           <AnimatePresence initial={false}>
             {floatingTags.map((tag, index) => {
@@ -249,7 +266,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                   transition={{ duration: 2.5 }}
                 >
                   <motion.div
-                    className={`glass rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none whitespace-nowrap ${
+                    className={`floating-tag-pill rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none whitespace-nowrap ${
                       isFeatured ? 'floating-tag-glow' : 'floating-tag-soft'
                     }`}
                     style={{ willChange: 'transform', transform: 'translate3d(0,0,0)' }}

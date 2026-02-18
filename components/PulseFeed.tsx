@@ -16,6 +16,8 @@ import type { Message } from '@/lib/supabase/types'
 
 interface PulseFeedProps {
   boardId: string
+  /** 사용자용 숫자 방 번호 (No. 123). Supabase public_id가 있을 때 전달 */
+  boardPublicId?: number | null
   userCharacter: number
   userNickname: string
   onBack: () => void
@@ -29,7 +31,7 @@ interface PulseFeedProps {
 
 type SortType = 'latest' | 'popular'
 
-export default function PulseFeed({ boardId, userCharacter, userNickname, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
+export default function PulseFeed({ boardId, boardPublicId, userCharacter, userNickname, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
   const useSupabase = isSupabaseConfigured()
   /** Supabase 사용 시 반드시 UUID인 경우만 API 호출 (400 에러 방지) */
   const useSupabaseWithUuid = useSupabase && isValidUuid(boardId)
@@ -47,6 +49,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   const [boardExpiresAtOverride, setBoardExpiresAtOverride] = useState<Date | null>(null)
   const [showHourglassToast, setShowHourglassToast] = useState(false)
   const [showShareToast, setShowShareToast] = useState(false)
+  const [noCopyToast, setNoCopyToast] = useState<string | null>(null)
   const [extendingHourglass, setExtendingHourglass] = useState(false)
   const [timerLabel, setTimerLabel] = useState('0:00:00')
   const [isUnderOneMinute, setIsUnderOneMinute] = useState(false)
@@ -59,6 +62,12 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
   useEffect(() => {
     setHourglassesState(getHourglasses())
   }, [])
+
+  useEffect(() => {
+    if (!noCopyToast) return
+    const t = setTimeout(() => setNoCopyToast(null), 1200)
+    return () => clearTimeout(t)
+  }, [noCopyToast])
 
   const HEARTED_STORAGE_KEY = 'tdb-hearted'
 
@@ -335,7 +344,7 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
       const word = segment.split(/\s/)[0] || segment
       const rest = segment.slice(word.length)
       nodes.push(
-        <span key={i} className="text-blue-400 font-semibold">
+        <span key={i} className="font-semibold" style={{ color: '#FF6B00' }}>
           #{word}
         </span>
       )
@@ -361,6 +370,17 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
       setTimeout(() => setShowShareToast(false), 2500)
     }
   }, [boardId, displayBoard.name])
+
+  const roomNo = boardPublicId != null ? String(boardPublicId) : null
+  const handleCopyRoomNo = useCallback(async () => {
+    if (!roomNo) return
+    try {
+      await navigator.clipboard.writeText(roomNo)
+      setNoCopyToast('복사됨!')
+    } catch {
+      setNoCopyToast('복사 실패')
+    }
+  }, [roomNo])
 
   return (
     <div className="min-h-screen bg-midnight-black text-white safe-bottom">
@@ -417,9 +437,37 @@ export default function PulseFeed({ boardId, userCharacter, userNickname, onBack
             >
               ← 뒤로
             </button>
-            <h1 className="text-base sm:text-xl font-bold truncate flex-1 min-w-0 flex items-center gap-0.5 flex-wrap">
-              {renderBoardNameWithHashtag(displayBoard.name)}
-            </h1>
+            <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-xl font-bold truncate min-w-0">
+                {renderBoardNameWithHashtag(displayBoard.name)}
+              </h1>
+              {roomNo && (
+                <button
+                  type="button"
+                  onClick={handleCopyRoomNo}
+                  className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold cursor-pointer select-none transition-all hover:brightness-110"
+                  style={{ color: '#FF6B00' }}
+                  title={`No. ${roomNo} 복사`}
+                  aria-label={`방 번호 No. ${roomNo} 복사`}
+                >
+                  <span className="tabular-nums">No. {roomNo}</span>
+                  <AnimatePresence initial={false}>
+                    {noCopyToast && (
+                      <motion.span
+                        className="text-[0.7rem] sm:text-xs font-bold"
+                        initial={{ opacity: 0, y: -2 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -2 }}
+                        transition={{ duration: 0.18 }}
+                        style={{ color: '#FF6B00' }}
+                      >
+                        {noCopyToast}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </button>
+              )}
+            </div>
             <motion.button
               type="button"
               onClick={handleShare}

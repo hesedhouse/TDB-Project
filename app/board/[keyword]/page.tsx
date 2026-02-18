@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import PulseFeed from '@/components/PulseFeed'
 import { mockBoards } from '@/lib/mockData'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
-import { getOrCreateBoardByKeyword, getBoardById, type Board, type BoardRow } from '@/lib/supabase/boards'
+import { getBoardByPublicId, getOrCreateBoardByKeyword, getBoardById, type Board, type BoardRow } from '@/lib/supabase/boards'
 import { isValidUuid } from '@/lib/supabase/client'
 
 interface BoardByKeywordPageProps {
@@ -46,20 +46,33 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     }
   }, [matchedBoard])
 
-  // Supabase 사용 시: URL이 UUID면 getBoardById, 아니면 키워드로 조회/생성
+  // Supabase 사용 시:
+  // - 숫자만 입력: boards.id(숫자) 직통 조회 → 없으면 키워드로 조회/생성 fallback
+  // - UUID: getBoardById
+  // - 그 외: 키워드로 조회/생성
   useEffect(() => {
     if (!useSupabase) {
       setBoardLoading(false)
       return
     }
     let cancelled = false
-    const load: Promise<Board | null> = isValidUuid(decodedKeyword)
-      ? getBoardById(decodedKeyword)
-      : getOrCreateBoardByKeyword(decodedKeyword)
-    load.then((row: Board | null) => {
+    const isNumericOnly = /^[0-9]+$/.test(decodedKeyword)
+    const run = async () => {
+      let row: Board | null = null
+      if (isNumericOnly) {
+        row = await getBoardByPublicId(decodedKeyword)
+        if (!row) {
+          row = await getOrCreateBoardByKeyword(decodedKeyword)
+        }
+      } else if (isValidUuid(decodedKeyword)) {
+        row = await getBoardById(decodedKeyword)
+      } else {
+        row = await getOrCreateBoardByKeyword(decodedKeyword)
+      }
       if (!cancelled && row) setSupabaseBoard(row)
       setBoardLoading(false)
-    })
+    }
+    run()
     return () => { cancelled = true }
   }, [useSupabase, decodedKeyword])
 
@@ -69,6 +82,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
       <div className="min-h-screen bg-midnight-black text-white">
         <PulseFeed
           boardId={matchedBoard.id}
+          boardPublicId={/^\d+$/.test(String(matchedBoard.id)) ? Number(matchedBoard.id) : null}
           userCharacter={0}
           userNickname="게스트"
           onBack={() => router.push('/')}
@@ -110,6 +124,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
         </AnimatePresence>
         <PulseFeed
           boardId={supabaseBoard.id}
+          boardPublicId={supabaseBoard.public_id ?? null}
           userCharacter={0}
           userNickname="게스트"
           onBack={() => router.push('/')}

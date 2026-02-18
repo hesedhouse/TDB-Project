@@ -63,6 +63,14 @@ create policy "messages update heart"
   with check (true);
 ```
 
+## 3.5 boards 테이블 생성/마이그레이션 (방 생성/직통 입장)
+
+홈에서 방 생성/조회 및 **숫자 방 번호로 직통 입장(No. 123)** 기능을 사용하려면 `boards` 테이블이 필요합니다.
+
+- `supabase/boards_table.sql` 실행 (최초 생성)
+- `supabase/boards_migration_add_name.sql` 실행 (name 컬럼 보강)
+- `supabase/boards_migration_public_id.sql` 실행 (**숫자 방 번호(public_id)** 추가)
+
 ## 4. Realtime 활성화
 
 1. Supabase 대시보드 **Database → Replication** 이동

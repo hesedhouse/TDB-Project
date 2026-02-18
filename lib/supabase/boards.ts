@@ -7,6 +7,8 @@ export const EXTEND_MS_PER_HOURGLASS = 30 * 60 * 1000
 /** Supabase boards 행: id는 UUID, 검색은 keyword만 사용. 컬럼은 name으로 통일 (title 사용 안 함) */
 export type BoardRow = {
   id: string
+  /** 사용자용 숫자 방 번호 (직통 입장용). DB에 public_id 컬럼이 있을 때만 채워짐 */
+  public_id?: number | null
   keyword: string
   name: string | null
   expires_at: string
@@ -15,6 +17,46 @@ export type BoardRow = {
 
 /** BoardRow 별칭 (Board | null 리턴 타입용) */
 export type Board = BoardRow
+
+type BoardRowSelected = {
+  id: unknown
+  keyword: string
+  name: string | null
+  expires_at: string
+  created_at: string
+  public_id?: unknown
+}
+
+function normalizeBoardRow(row: BoardRowSelected): BoardRow {
+  const rawPublic = row.public_id
+  const publicIdNum =
+    rawPublic == null
+      ? null
+      : typeof rawPublic === 'number'
+        ? rawPublic
+        : Number.isFinite(Number(rawPublic))
+          ? Number(rawPublic)
+          : null
+  return {
+    id: String(row.id),
+    keyword: row.keyword,
+    name: row.name ?? null,
+    expires_at: row.expires_at,
+    created_at: row.created_at,
+    ...(rawPublic !== undefined ? { public_id: publicIdNum } : {}),
+  }
+}
+
+async function selectBoardMaybeWithPublicId<T extends { data: any; error: any }>(
+  queryWithPublicId: () => Promise<T>,
+  queryWithoutPublicId: () => Promise<T>
+): Promise<T> {
+  const r1 = await queryWithPublicId()
+  if (!r1.error) return r1
+  // public_id 컬럼이 없는 구버전 스키마에서도 동작하도록 fallback
+  const r2 = await queryWithoutPublicId()
+  return r2
+}
 
 /**
  * 방 조회·생성은 모두 keyword 컬럼 기준. id는 사용하지 않음.
@@ -31,26 +73,30 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
 
   // 1) keyword 컬럼으로만 조회 (DB에 keyword, name 컬럼이 있어야 함)
   const selectColumns = 'id, keyword, name, expires_at, created_at' as const
-  const { data: existing, error: selectErr } = await supabase
-    .from('boards')
-    .select(selectColumns)
-    .eq('keyword', normalizedKeyword)
-    .maybeSingle()
+  const selectColumnsWithPublicId = 'id, keyword, name, expires_at, created_at, public_id' as const
+  const existingRes = await selectBoardMaybeWithPublicId(
+    async () =>
+      await supabase
+        .from('boards')
+        .select(selectColumnsWithPublicId)
+        .eq('keyword', normalizedKeyword)
+        .maybeSingle(),
+    async () =>
+      await supabase
+        .from('boards')
+        .select(selectColumns)
+        .eq('keyword', normalizedKeyword)
+        .maybeSingle()
+  )
+  const existing = existingRes.data as BoardRowSelected | null
+  const selectErr = existingRes.error
 
   if (selectErr) {
     console.error('getOrCreateBoardByKeyword select error:', selectErr)
     return null
   }
 
-  if (existing != null) {
-    return {
-      id: existing.id,
-      keyword: existing.keyword,
-      name: existing.name ?? null,
-      expires_at: existing.expires_at,
-      created_at: existing.created_at,
-    }
-  }
+  if (existing != null) return normalizeBoardRow(existing)
 
   // 2) 없으면 생성. id는 넣지 않음(DB 자동 생성). keyword, name, title 동일 값으로 넣어 제약 충돌 방지.
   const displayTitle = `#${normalizedKeyword}`
@@ -60,11 +106,22 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
     title: displayTitle,
     expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
   }
-  const { data: inserted, error: insertErr } = await supabase
-    .from('boards')
-    .insert(insertPayload)
-    .select(selectColumns)
-    .single()
+  const insertedRes = await selectBoardMaybeWithPublicId(
+    async () =>
+      await supabase
+        .from('boards')
+        .insert(insertPayload)
+        .select(selectColumnsWithPublicId)
+        .single(),
+    async () =>
+      await supabase
+        .from('boards')
+        .insert(insertPayload)
+        .select(selectColumns)
+        .single()
+  )
+  const inserted = insertedRes.data as BoardRowSelected | null
+  const insertErr = insertedRes.error
 
   if (insertErr) {
     console.error('getOrCreateBoardByKeyword insert error:', insertErr)
@@ -72,13 +129,7 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
   }
 
   if (inserted == null) return null
-  return {
-    id: inserted.id,
-    keyword: inserted.keyword,
-    name: inserted.name ?? null,
-    expires_at: inserted.expires_at,
-    created_at: inserted.created_at,
-  }
+  return normalizeBoardRow(inserted)
 }
 
 /**
@@ -89,23 +140,57 @@ export async function getBoardById(id: string): Promise<BoardRow | null> {
   const supabase = createClient()
   if (!supabase) return null
 
-  const { data, error } = await supabase
-    .from('boards')
-    .select('id, keyword, name, expires_at, created_at')
-    .eq('id', id)
-    .maybeSingle()
+  const res = await selectBoardMaybeWithPublicId(
+    async () =>
+      await supabase
+        .from('boards')
+        .select('id, keyword, name, expires_at, created_at, public_id')
+        .eq('id', id)
+        .maybeSingle(),
+    async () =>
+      await supabase
+        .from('boards')
+        .select('id, keyword, name, expires_at, created_at')
+        .eq('id', id)
+        .maybeSingle()
+  )
+  const data = res.data as BoardRowSelected | null
+  const error = res.error
 
   if (error || data == null) {
     if (error) console.error('getBoardById error:', error)
     return null
   }
-  return {
-    id: data.id,
-    keyword: data.keyword,
-    name: data.name ?? null,
-    expires_at: data.expires_at,
-    created_at: data.created_at,
+  return normalizeBoardRow(data)
+}
+
+/**
+ * 숫자 방 번호(public_id)로 방을 조회합니다.
+ * - DB의 boards.id(UUID)는 그대로 유지하면서, 사용자에게는 public_id로 직통 입장을 제공합니다.
+ * - public_id 컬럼이 아직 없는 경우(null/에러)에는 null을 반환하여 상위 로직이 기존 플로우로 fallback 합니다.
+ */
+export async function getBoardByPublicId(rawId: string): Promise<BoardRow | null> {
+  const publicIdRaw = rawId.trim()
+  if (!/^\d+$/.test(publicIdRaw)) return null
+  const supabase = createClient()
+  if (!supabase) return null
+
+  const publicId = Number(publicIdRaw)
+  if (!Number.isFinite(publicId)) return null
+
+  const res = await supabase
+    .from('boards')
+    .select('id, keyword, name, expires_at, created_at, public_id')
+    .eq('public_id', publicId as never)
+    .maybeSingle()
+
+  const data = res.data as BoardRowSelected | null
+  const error = res.error
+  if (error || data == null) {
+    if (error) console.error('getBoardByPublicId error:', error)
+    return null
   }
+  return normalizeBoardRow(data)
 }
 
 /**
