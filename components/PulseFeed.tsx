@@ -408,10 +408,29 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
     return `${days}일 전`
   }
 
-  const displayBoard = board ?? (useSupabase ? { name: initialBoardName ?? `#${boardId}`, expiresAt: initialExpiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createdAt: initialCreatedAt ?? new Date() } : null)
+  const displayBoard =
+    board ??
+    (useSupabase
+      ? { name: initialBoardName ?? `#${boardId}`, expiresAt: initialExpiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createdAt: initialCreatedAt ?? new Date() }
+      : initialBoardName != null
+        ? { name: initialBoardName, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createdAt: new Date() }
+        : null)
 
-  /** 방 제목(name)에서 # 포함 구간을 파란색 해시태그로 렌더 */
+  /** #board-4 / board-4 형태면 "새 방"으로 표시, 아니면 원래 제목 */
+  const displayTitle =
+    displayBoard?.name != null && /^#?board-\d+$/i.test(displayBoard.name.trim())
+      ? '새 방'
+      : (displayBoard?.name ?? '방')
+
+  /** 방 번호: boardPublicId 우선, 없으면 boardId에서 board-N 추출 */
+  const roomNo =
+    boardPublicId != null
+      ? String(boardPublicId)
+      : (boardId.match(/^board-(\d+)$/i)?.[1] ?? null)
+
+  /** 방 제목(name)에서 # 포함 구간을 오렌지 해시태그로 렌더 (실제 키워드일 때만) */
   const renderBoardNameWithHashtag = (name: string) => {
+    if (/^#?board-\d+$/i.test(name.trim())) return name
     const parts = name.split('#')
     if (parts.length <= 1) return name
     const nodes: React.ReactNode[] = [parts[0]]
@@ -447,7 +466,6 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
     }
   }, [boardId, displayBoard.name])
 
-  const roomNo = boardPublicId != null ? String(boardPublicId) : null
   const handleCopyRoomNo = useCallback(async () => {
     if (!roomNo) return
     try {
@@ -531,14 +549,14 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
               ← 뒤로
             </button>
             <div className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3 flex-wrap items-center">
-              <h1 className="text-base sm:text-xl font-bold truncate min-w-0">
-                {renderBoardNameWithHashtag(displayBoard.name)}
+              <h1 className="text-base sm:text-xl font-bold truncate min-w-0 text-white">
+                {renderBoardNameWithHashtag(displayTitle)}
               </h1>
-              {roomNo ? (
+              {roomNo && (
                 <button
                   type="button"
                   onClick={handleCopyRoomNo}
-                  className="inline-flex items-center shrink-0 text-sm sm:text-base font-bold cursor-pointer select-none transition-all hover:brightness-110 rounded px-1 -mx-1"
+                  className="inline-flex items-center shrink-0 text-xs sm:text-sm font-bold cursor-pointer select-none transition-all hover:brightness-110 rounded px-1 -mx-1"
                   style={{
                     color: '#FF6B00',
                     textShadow: '0 0 8px rgba(255,107,0,0.8), 0 0 14px rgba(255,107,0,0.5)',
@@ -827,6 +845,14 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
                   )}
                 </motion.div>
               ))}
+            {messages.length === 0 && (
+              <div className="text-center py-14 px-4">
+                <p className="text-white/90 text-base sm:text-lg font-medium mb-1">
+                  첫 번째 글을 남겨보세요!
+                </p>
+                <p className="text-neon-orange/90 text-sm">✨</p>
+              </div>
+            )}
             <div ref={feedEndRef} />
           </div>
 
@@ -1071,8 +1097,11 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
         </AnimatePresence>
 
         {sortedPosts.length === 0 && (
-          <div className="text-center py-12 text-gray-400">
-            아직 게시물이 없습니다.
+          <div className="text-center py-14 px-4">
+            <p className="text-white/90 text-base sm:text-lg font-medium mb-1">
+              첫 번째 글을 남겨보세요!
+            </p>
+            <p className="text-neon-orange/90 text-sm">✨</p>
           </div>
         )}
       </div>
