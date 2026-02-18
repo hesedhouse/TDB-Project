@@ -435,13 +435,14 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
       : (displayBoard.name ?? '방')
   const headerTitle = String(displayTitle).replace(/^#\s*/, '').trim() || '익명의 떴다방'
 
-  /** 방 번호: boardPublicId(API) → URL 숫자(roomIdFromUrl) → board-N 패턴. 있으면 무조건 배지 표시 */
+  /** 방 번호: DB room_no(→ boardPublicId) → URL 숫자(roomIdFromUrl) → board-N. 로딩 끝나면 No. {room_no} 표시 */
   const roomNo =
     boardPublicId != null
       ? String(boardPublicId)
       : (roomIdFromUrl != null && roomIdFromUrl !== '' && /^\d+$/.test(String(roomIdFromUrl))
           ? String(roomIdFromUrl)
           : (boardId.match(/^board-(\d+)$/i)?.[1] ?? null))
+  const roomNoReady = roomNo != null && roomNo !== ''
 
   const effectiveExpiresAt = boardExpiresAtOverride ?? displayBoard.expiresAt
 
@@ -548,7 +549,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
               <h1 className="text-base sm:text-xl font-bold truncate min-w-0 text-white">
                 {headerTitle}
               </h1>
-              {/* 오렌지 No. ID 배지: 모든 방 강제 표시, 클릭 시 해당 방 링크 복사 */}
+              {/* 오렌지 No. room_no 배지: DB room_no 반영, 로딩 중엔 … 표시, 클릭 시 방 링크 복사 */}
               <button
                 type="button"
                 onClick={handleCopyRoomLink}
@@ -556,12 +557,22 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
                 style={{
                   background: '#FF6B00',
                   color: '#fff',
-                  boxShadow: '0 0 10px rgba(255,107,0,0.5), 0 0 18px rgba(255,107,0,0.25)',
+                  boxShadow: roomNoReady ? '0 0 10px rgba(255,107,0,0.5), 0 0 18px rgba(255,107,0,0.25)' : '0 0 8px rgba(255,107,0,0.35)',
                 }}
                 title="방 링크 복사"
-                aria-label={roomNo ? `방 번호 No. ${roomNo} - 클릭 시 방 링크 복사` : '방 링크 복사'}
+                aria-label={roomNoReady ? `방 번호 No. ${roomNo} - 클릭 시 방 링크 복사` : '방 링크 복사'}
               >
-                <span className="tabular-nums">No. {roomNo || '—'}</span>
+                {roomNoReady ? (
+                  <span className="tabular-nums">No. {roomNo}</span>
+                ) : (
+                  <motion.span
+                    className="tabular-nums opacity-80"
+                    animate={{ opacity: [0.6, 1, 0.6] }}
+                    transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    No. …
+                  </motion.span>
+                )}
               </button>
             </div>
             <motion.button
