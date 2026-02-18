@@ -150,7 +150,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     }, 500)
   }
 
-  /** 방 만들기/시작하기: API로 조회·생성 후 생성된 방 번호(public_id)로 즉시 이동 */
+  /** 방 만들기/시작하기: 방 제목(keyword) + 비밀번호(선택)를 API로 전달 → boards에 저장 후 생성된 ID(public_id)로 즉시 이동 */
   const handleCreateOrEnterRoom = useCallback(async () => {
     const keyword = searchQuery.trim()
     if (!keyword) return
@@ -184,6 +184,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         return
       }
       const board = await res.json()
+      // 생성된 방 번호(자동 부여 public_id)로 즉시 해당 방 페이지로 이동
       const path = board.public_id != null ? `/board/${board.public_id}` : `/board/${board.id}`
       router.push(path)
     } catch {
@@ -264,12 +265,12 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           {useSupabase && (
             <input
               type="password"
-              placeholder="비밀번호(선택)"
+              placeholder="비밀번호 (선택)"
               value={roomPassword}
               onChange={(e) => setRoomPassword(e.target.value)}
               disabled={creatingRoom}
-              className="w-full px-5 py-3 rounded-2xl bg-black/40 border-2 border-neon-orange/40 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm shadow-[0_0_12px_rgba(255,107,0,0.15)]"
-              aria-label="방 비밀번호 선택"
+              className="w-full px-5 py-3.5 rounded-2xl bg-black/50 border-2 border-neon-orange/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base shadow-[0_0_12px_rgba(255,107,0,0.2)] focus:shadow-[0_0_16px_rgba(255,107,0,0.35)] transition-shadow disabled:opacity-60"
+              aria-label="방 비밀번호 (선택)"
             />
           )}
         </div>
