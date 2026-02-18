@@ -98,7 +98,7 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
 
   if (existing != null) return normalizeBoardRow(existing)
 
-  // 2) 없으면 생성. id는 넣지 않음(DB 자동 생성). keyword, name, title 동일 값으로 넣어 제약 충돌 방지.
+  // 2) 없으면 생성. id는 넣지 않음(DB 자동 생성). public_id는 DB IDENTITY로 자동 부여·반환.
   const displayTitle = `#${normalizedKeyword}`
   const insertPayload = {
     keyword: normalizedKeyword,

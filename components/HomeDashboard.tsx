@@ -172,7 +172,9 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       }
       const board = await getOrCreateBoardByKeyword(keyword)
       if (board) {
-        router.push(`/board/${board.id}`)
+        // 생성된 방 번호(public_id)로 즉시 이동. 없으면 UUID로 이동
+        const path = board.public_id != null ? `/board/${board.public_id}` : `/board/${board.id}`
+        router.push(path)
       } else {
         setCreatingRoom(false)
       }
@@ -210,7 +212,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         </Link>
       </header>
 
-      {/* Discovery Section - 방 제목 입력 + 시작하기 (플로팅 태그가 화면 끝까지 보이도록 overflow-visible) */}
+      {/* Discovery Section - 방 제목·태그만 입력 (번호는 자동 부여됨) */}
       <section className="mb-7 relative overflow-visible">
         <div className="relative z-10 mb-5 flex flex-col sm:flex-row gap-3">
           <input

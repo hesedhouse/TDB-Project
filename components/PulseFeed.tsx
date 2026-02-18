@@ -161,7 +161,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
       setUploadingImage(true)
       let imageUrl: string | undefined
       if (writeImageFile) {
-        imageUrl = await uploadChatImage(writeImageFile, boardId)
+        imageUrl = (await uploadChatImage(writeImageFile, boardId)) ?? undefined
       }
       setUploadingImage(false)
       await send(text || '', imageUrl)
@@ -533,7 +533,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
               <h1 className="text-base sm:text-xl font-bold truncate min-w-0 text-white">
                 {headerTitle}
               </h1>
-              {roomNo != null && roomNo !== '' && (
+              {roomNo != null && roomNo !== '' ? (
                 <button
                   type="button"
                   onClick={handleCopyRoomNo}
