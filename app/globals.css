@@ -56,76 +56,58 @@
                 0 0 30px rgba(255, 95, 0, 0.2);
   }
 
-  /* 플로팅 태그 컨테이너: 전체 가로폭(100vw), 글자 잘림 방지 overflow visible */
+  /* 플로팅 태그 컨테이너: 너비 100%, 아우라 잘림 방지 overflow visible + 여백 */
   .floating-tags-container {
-    width: 100vw;
-    max-width: 100vw;
+    width: 100%;
+    max-width: 100%;
     background: transparent;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     filter: none;
     overflow: visible;
-    padding: 0.75rem;
+    padding: 1.25rem;
     box-sizing: border-box;
   }
 
-  /* 플로팅 태그 Pill: 배경 유지, blur 없음(글자 선명도) */
+  /* 플로팅 태그: Pill 배경 + box-shadow로 은은한 타원형 오렌지 아우라(테두리 아님) */
   .floating-tag-pill {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-  /* 플로팅 태그: 배경/박스/테두리 제거, 방사형 광원만 글자 뒤에 */
-  .floating-tag-glow,
-  .floating-tag-soft {
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     text-align: center;
-    background: transparent !important;
     border: none !important;
-    box-shadow: none !important;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     filter: none;
     overflow: visible;
-    padding: 0.5em 0.85em;
+    padding: 0.65em 1.2em;
+    background: rgba(14, 14, 14, 0.9);
+    border-radius: 9999px;
+    box-shadow:
+      0 0 12px rgba(255, 107, 0, 0.32),
+      0 0 28px rgba(255, 107, 0, 0.18),
+      0 0 44px rgba(255, 107, 0, 0.08);
   }
-  /* 글자 뒤쪽 방사형 오라: 가운데서 바깥으로 투명하게 퍼짐, 경계 없음 */
-  .floating-tag-glow::before,
-  .floating-tag-soft::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 220%;
-    height: 220%;
-    min-width: 4em;
-    min-height: 4em;
-    transform: translate(-50%, -50%);
-    background: radial-gradient(
-      circle,
-      rgba(255, 107, 0, 0.35) 0%,
-      rgba(255, 107, 0, 0.12) 45%,
-      rgba(255, 107, 0, 0) 70%
-    );
-    pointer-events: none;
-    z-index: -1;
+  /* featured: 아우라 더 풍성하게 */
+  .floating-tag-glow {
+    box-shadow:
+      0 0 14px rgba(255, 107, 0, 0.4),
+      0 0 32px rgba(255, 107, 0, 0.22),
+      0 0 50px rgba(255, 107, 0, 0.1) !important;
   }
-  /* 글자: 시작하기 버튼과 동일한 선명한 오렌지(#FF6B00), blur 없음, 뚜렷한 폰트 */
+  /* 글자: 시작하기 버튼과 동일한 선명한 오렌지(#FF6B00), text-shadow 최소화로 가독성 확보 */
   .floating-tag-text {
     position: relative;
     z-index: 1;
     display: inline-block;
     color: #FF6B00 !important;
     opacity: 1 !important;
-    font-weight: 700;
+    font-weight: 800;
     text-align: center;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    text-shadow: 0 0 1px rgba(0, 0, 0, 0.5);
+    text-shadow: none;
   }
   .floating-tag-text::after {
     display: none;

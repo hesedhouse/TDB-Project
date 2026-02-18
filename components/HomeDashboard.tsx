@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, memo, useMemo } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -15,12 +15,18 @@ import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywor
 import { useTick } from '@/lib/TickContext'
 import type { Board } from '@/lib/mockData'
 
-/** 1초마다 갱신되는 남은 시간 라벨 (context만 구독해 리스트 전체 리렌더 방지) */
+/** 남은 시간 라벨. 하이드레이션 방지: 마운트된 후에만 시간 표시(서버/클라이언트 동일 초기값) */
 const BoardTimeLabel = memo(function BoardTimeLabel({ expiresAt }: { expiresAt: Date }) {
-  useTick()
+  const [mounted, setMounted] = useState(false)
+  useTick() /* 1초마다 리렌더로 타이머 갱신 */
+  useEffect(() => setMounted(true), [])
   const date = expiresAt instanceof Date ? expiresAt : new Date(expiresAt)
-  const { label } = formatRemainingTimer(date)
-  return <span className="font-mono tabular-nums text-neon-orange">{label}</span>
+  const label = mounted ? formatRemainingTimer(date).label : ''
+  return (
+    <span className="font-mono tabular-nums text-neon-orange" aria-hidden={!mounted}>
+      {label || '\u00A0'}
+    </span>
+  )
 })
 
 interface HomeDashboardProps {
@@ -88,8 +94,16 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   /** 해시태그 없으면 앞에 # 붙여서 표시 (방 내부와 통일) */
   const displayBoardName = (name: string) => (name.startsWith('#') ? name : `#${name}`)
 
-  /** 플로팅 태그 위치: 0~90% left, 0~80% top, 시드 기반 난수 + 최소 간격으로 겹침 방지 */
-  const tagPositions = useMemo(() => {
+  /** 하이드레이션 방지: 마운트된 후에만 랜덤 위치 적용 (서버/클라이언트 첫 렌더는 동일한 fallback 사용) */
+  const [mounted, setMounted] = useState(false)
+  const [tagPositions, setTagPositions] = useState<{ left: number; top: number }[]>([])
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!mounted || floatingTags.length === 0) return
     const seed = floatingTags.map((t) => t.word).join('|').length
     const rnd = (s: number) => ((Math.sin(s) * 10000) % 1 + 1) % 1
     const MIN_GAP = 7
@@ -108,8 +122,8 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       )
       positions.push({ left, top })
     }
-    return positions
-  }, [floatingTags])
+    setTagPositions(positions)
+  }, [mounted, floatingTags])
 
   const handleWarp = (board: Board) => {
     setWarpingBoardId(board.id)
@@ -233,14 +247,11 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           </motion.button>
         </div>
         
-        {/* 플로팅 태그: 전체 가로폭(100vw), overflow visible로 우측 잘림 방지 */}
+        {/* 플로팅 태그: 너비 100%, overflow visible로 우측 잘림 없이 가로폭 전체 유영 */}
         <div
-          className="relative min-h-[300px] h-56 sm:h-64 rounded-2xl overflow-visible floating-tags-container"
+          className="relative min-h-[300px] h-56 sm:h-64 rounded-2xl overflow-visible floating-tags-container w-full"
           style={{
-            width: '100vw',
-            maxWidth: '100vw',
-            marginLeft: 'calc(-50vw + 50%)',
-            contain: 'layout',
+            maxWidth: '100%',
             backdropFilter: 'none',
             WebkitBackdropFilter: 'none',
             filter: 'none',
@@ -255,7 +266,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
               return (
                 <motion.div
                   key={`tag-${index}-${word}`}
-                  className="absolute w-0 h-0"
+                  className="absolute w-0 h-0 overflow-visible"
                   style={{
                     left: `${pos.left}%`,
                     top: `${pos.top}%`,
