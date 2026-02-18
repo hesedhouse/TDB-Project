@@ -60,6 +60,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
   const [showHourglassToast, setShowHourglassToast] = useState(false)
   const [showShareToast, setShowShareToast] = useState(false)
   const [noCopyToast, setNoCopyToast] = useState<string | null>(null)
+  const [showRoomNoCopyToast, setShowRoomNoCopyToast] = useState(false)
   const [extendingHourglass, setExtendingHourglass] = useState(false)
   const [timerLabel, setTimerLabel] = useState('0:00:00')
   const [isUnderOneMinute, setIsUnderOneMinute] = useState(false)
@@ -82,6 +83,12 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
     const t = setTimeout(() => setNoCopyToast(null), 1200)
     return () => clearTimeout(t)
   }, [noCopyToast])
+
+  useEffect(() => {
+    if (!showRoomNoCopyToast) return
+    const t = setTimeout(() => setShowRoomNoCopyToast(false), 2200)
+    return () => clearTimeout(t)
+  }, [showRoomNoCopyToast])
 
   const HEARTED_STORAGE_KEY = 'tdb-hearted'
   const POST_HEARTED_STORAGE_KEY = 'tdb-hearted-posts'
@@ -445,7 +452,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
     if (!roomNo) return
     try {
       await navigator.clipboard.writeText(roomNo)
-      setNoCopyToast('복사됨!')
+      setShowRoomNoCopyToast(true)
     } catch {
       setNoCopyToast('복사 실패')
     }
@@ -494,6 +501,23 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
             링크가 클립보드에 복사되었습니다!
           </motion.div>
         )}
+        {showRoomNoCopyToast && (
+          <motion.div
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl font-bold text-center safe-bottom"
+            style={{
+              background: 'rgba(18,18,18,0.95)',
+              border: '1px solid rgba(255,107,0,0.5)',
+              color: '#FF6B00',
+              boxShadow: '0 0 20px rgba(255,107,0,0.3), 0 0 40px rgba(255,107,0,0.15)',
+            }}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.25 }}
+          >
+            방 번호가 복사되었습니다!
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Top Bar with Progress */}
@@ -506,34 +530,32 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
             >
               ← 뒤로
             </button>
-            <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+            <div className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3 flex-wrap items-center">
               <h1 className="text-base sm:text-xl font-bold truncate min-w-0">
                 {renderBoardNameWithHashtag(displayBoard.name)}
               </h1>
-              {roomNo && (
+              {roomNo ? (
                 <button
                   type="button"
                   onClick={handleCopyRoomNo}
-                  className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold cursor-pointer select-none transition-all hover:brightness-110"
-                  style={{ color: '#FF6B00' }}
+                  className="inline-flex items-center shrink-0 text-sm sm:text-base font-bold cursor-pointer select-none transition-all hover:brightness-110 rounded px-1 -mx-1"
+                  style={{
+                    color: '#FF6B00',
+                    textShadow: '0 0 8px rgba(255,107,0,0.8), 0 0 14px rgba(255,107,0,0.5)',
+                  }}
                   title={`No. ${roomNo} 복사`}
                   aria-label={`방 번호 No. ${roomNo} 복사`}
                 >
                   <span className="tabular-nums">No. {roomNo}</span>
-                  <AnimatePresence initial={false}>
-                    {noCopyToast && (
-                      <motion.span
-                        className="text-[0.7rem] sm:text-xs font-bold"
-                        initial={{ opacity: 0, y: -2 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -2 }}
-                        transition={{ duration: 0.18 }}
-                        style={{ color: '#FF6B00' }}
-                      >
-                        {noCopyToast}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleShare()}
+                  className="inline-flex items-center shrink-0 text-xs sm:text-sm font-semibold text-[#FF6B00] hover:brightness-110 cursor-pointer"
+                  title="방 링크 복사"
+                >
+                  링크 복사
                 </button>
               )}
             </div>
