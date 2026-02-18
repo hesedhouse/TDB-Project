@@ -544,22 +544,21 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
               <h1 className="text-base sm:text-xl font-bold truncate min-w-0 text-white">
                 {headerTitle}
               </h1>
-              {roomNo != null && roomNo !== '' && (
-                <button
-                  type="button"
-                  onClick={handleCopyRoomLink}
-                  className="inline-flex items-center shrink-0 text-xs sm:text-sm font-bold select-none transition-all hover:brightness-110 rounded px-1 -mx-1 cursor-pointer"
-                  style={{
-                    color: '#FF6B00',
-                    textShadow: '0 0 8px rgba(255,107,0,0.8), 0 0 14px rgba(255,107,0,0.5)',
-                    boxShadow: '0 0 12px rgba(255,107,0,0.25)',
-                  }}
-                  title="방 링크 복사"
-                  aria-label={`방 번호 No. ${roomNo} - 클릭 시 방 링크 복사`}
-                >
-                  <span className="tabular-nums">No. {roomNo}</span>
-                </button>
-              )}
+              {/* 주황색 배경 No. ID 배지 (모든 방 통일, 클릭 시 방 링크 복사) */}
+              <button
+                type="button"
+                onClick={handleCopyRoomLink}
+                className="inline-flex items-center shrink-0 text-xs sm:text-sm font-bold select-none transition-all hover:brightness-110 rounded-md px-2 py-0.5 cursor-pointer border-0"
+                style={{
+                  background: '#FF6B00',
+                  color: '#fff',
+                  boxShadow: '0 0 10px rgba(255,107,0,0.5), 0 0 18px rgba(255,107,0,0.25)',
+                }}
+                title="방 링크 복사"
+                aria-label={roomNo ? `방 번호 No. ${roomNo} - 클릭 시 방 링크 복사` : '방 링크 복사'}
+              >
+                <span className="tabular-nums">No. {roomNo ?? '—'}</span>
+              </button>
             </div>
             <motion.button
               type="button"
