@@ -31,6 +31,16 @@ interface PulseFeedProps {
 
 type SortType = 'latest' | 'popular'
 
+/** 포스트/메시지별 댓글 (로컬 상태, image_c91edc 스타일) */
+export interface Comment {
+  id: string
+  postId: string
+  authorNickname: string
+  authorCharacter: number
+  content: string
+  createdAt: Date
+}
+
 export default function PulseFeed({ boardId, boardPublicId, userCharacter, userNickname, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
   const useSupabase = isSupabaseConfigured()
   /** Supabase 사용 시 반드시 UUID인 경우만 API 호출 (400 에러 방지) */
@@ -55,9 +65,13 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
   const [isUnderOneMinute, setIsUnderOneMinute] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
   const [topContributors, setTopContributors] = useState<TopContributor[]>([])
+  const [showWriteModal, setShowWriteModal] = useState(false)
+  const [writeContent, setWriteContent] = useState('')
+  const [writeImageFile, setWriteImageFile] = useState<File | null>(null)
   const feedEndRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const writeModalFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setHourglassesState(getHourglasses())
@@ -70,6 +84,7 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
   }, [noCopyToast])
 
   const HEARTED_STORAGE_KEY = 'tdb-hearted'
+  const POST_HEARTED_STORAGE_KEY = 'tdb-hearted-posts'
 
   const [heartedIds, setHeartedIds] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set()
@@ -80,6 +95,24 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
       return new Set()
     }
   })
+
+  /** 목업 포스트: 사용자가 좋아요 한 postId 집합 (토글용, 로컬 저장) */
+  const [postHeartedIds, setPostHeartedIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const raw = localStorage.getItem(POST_HEARTED_STORAGE_KEY)
+      return new Set((raw ? JSON.parse(raw) : []) as string[])
+    } catch {
+      return new Set()
+    }
+  })
+
+  /** 포스트/메시지별 댓글 목록 (postId 또는 messageId → Comment[]) */
+  const [commentsByTargetId, setCommentsByTargetId] = useState<Record<string, Comment[]>>({})
+  /** 댓글 펼침 여부 (아코디언) */
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
+  /** 댓글 입력값 (targetId → text) */
+  const [commentInputByTarget, setCommentInputByTarget] = useState<Record<string, string>>({})
 
   const { messages, send, toggleHeart, sending } = useBoardChat(boardId, {
     userCharacter,
@@ -107,6 +140,41 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
     },
     [useSupabaseWithUuid, boardId, send, sending, uploadingImage, chatInput]
   )
+
+  const handleCloseWriteModal = useCallback(() => {
+    setShowWriteModal(false)
+    setWriteContent('')
+    setWriteImageFile(null)
+  }, [])
+
+  const handleSubmitWriteModal = useCallback(async () => {
+    const text = writeContent.trim()
+    if (useSupabaseWithUuid) {
+      if (!text && !writeImageFile) return
+      setUploadingImage(true)
+      let imageUrl: string | undefined
+      if (writeImageFile) {
+        imageUrl = await uploadChatImage(writeImageFile, boardId)
+      }
+      setUploadingImage(false)
+      await send(text || '', imageUrl)
+      handleCloseWriteModal()
+      return
+    }
+    if (!text) return
+    const newPost: Post = {
+      id: `post-${Date.now()}`,
+      boardId,
+      authorCharacter: userCharacter,
+      authorNickname: userNickname,
+      content: text,
+      images: writeImageFile ? [URL.createObjectURL(writeImageFile)] : undefined,
+      heartCount: 0,
+      createdAt: new Date(),
+    }
+    setPosts((prev) => [newPost, ...prev])
+    handleCloseWriteModal()
+  }, [writeContent, writeImageFile, useSupabaseWithUuid, boardId, send, userCharacter, userNickname, handleCloseWriteModal])
 
   const handleMessageHeart = useCallback(
     async (messageId: string) => {
@@ -252,25 +320,26 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
     return b.createdAt.getTime() - a.createdAt.getTime()
   })
 
+  /** 목업 포스트: 하트 토글 (+1 / -1), 로컬에 선택 저장 */
   const handleHeart = (postId: string) => {
-    setPosts(posts.map(post => 
-      post.id === postId 
-        ? { ...post, heartCount: post.heartCount + 1 }
+    const isHearted = postHeartedIds.has(postId)
+    setPostHeartedIds((prev) => {
+      const next = new Set(prev)
+      if (isHearted) next.delete(postId)
+      else next.add(postId)
+      try {
+        localStorage.setItem(POST_HEARTED_STORAGE_KEY, JSON.stringify([...next]))
+      } catch {}
+      return next
+    })
+    setPosts(posts.map(post =>
+      post.id === postId
+        ? { ...post, heartCount: Math.max(0, post.heartCount + (isHearted ? -1 : 1)) }
         : post
     ))
-    
-    // 하트 애니메이션 효과
-    setHeartAnimations(new Set([...heartAnimations, postId]))
-    setTimeout(() => {
-      setHeartAnimations(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(postId)
-        return newSet
-      })
-    }, 600)
-    
-    // 하트를 받으면 게시판 수명 연장
-    if (board) {
+    setHeartAnimations((prev) => new Set([...prev, postId]))
+    setTimeout(() => setHeartAnimations((p) => { const n = new Set(p); n.delete(postId); return n }), 500)
+    if (board && !isHearted) {
       const newBoard = extendBoardLifespan(board, 1)
       setBoard(newBoard)
       setShowLifespanExtended(true)
@@ -595,12 +664,12 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
         </motion.button>
       </div>
 
-      {/* 실시간 채팅 (Supabase 연동 시, UUID 보드만) */}
+      {/* 포스트/메시지 리스트 (Supabase 연동 시 포스트 스타일 카드로 통일) */}
       {useSupabaseWithUuid && (
         <>
           <div
             ref={listRef}
-            className="px-3 py-4 sm:p-4 space-y-3 pb-28 sm:pb-24 overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-hide"
+            className="px-3 py-4 sm:p-4 space-y-4 pb-32 sm:pb-28 overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-hide"
           >
             {[...messages]
               .sort((a, b) =>
@@ -608,103 +677,140 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
                   ? b.heartCount - a.heartCount
                   : a.createdAt.getTime() - b.createdAt.getTime()
               )
-              .map((msg) => {
-                const isMine =
-                  msg.authorNickname === userNickname &&
-                  msg.authorCharacter === userCharacter
-                return (
-                  <motion.div
-                    key={msg.id}
-                    className={`flex gap-2 ${isMine ? 'flex-row-reverse' : ''}`}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25 }}
-                  >
-                    {!isMine && (
-                      <div className="flex-shrink-0 pt-0.5">
-                        <DotCharacter characterId={msg.authorCharacter} size={36} />
-                      </div>
-                    )}
-                    <div
-                      className={`flex flex-col max-w-[85%] sm:max-w-[75%] ${isMine ? 'items-end' : 'items-start'}`}
-                    >
-                      {!isMine && (
-                        <span className="text-xs text-gray-400 mb-0.5">
-                          {msg.authorNickname}
-                        </span>
-                      )}
-                      <div
-                        className={`rounded-2xl px-4 py-2.5 glass-strong ${
-                          isMine
-                            ? 'bg-neon-orange/20 border-neon-orange/40'
-                            : 'border-white/10'
-                        }`}
-                      >
-                        {msg.imageUrl && (
-                          <a
-                            href={msg.imageUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block mb-2 rounded-xl overflow-hidden border border-white/10 focus:outline-none focus:ring-2 focus:ring-neon-orange/50"
-                          >
-                            <motion.img
-                              src={msg.imageUrl}
-                              alt=""
-                              className="w-full max-w-[280px] sm:max-w-[320px] h-auto max-h-[240px] object-cover"
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              transition={{ duration: 0.2 }}
-                            />
-                          </a>
-                        )}
-                        {(msg.content?.trim() ?? '') !== '' && (
-                          <p className="text-sm sm:text-base text-white/95 whitespace-pre-wrap break-words">
-                            {msg.content}
-                          </p>
-                        )}
-                        <div className="flex items-center justify-end gap-1.5 mt-2">
-                          <motion.button
-                            type="button"
-                            onClick={() => handleMessageHeart(msg.id)}
-                            className={`flex items-center gap-1 text-xs ${
-                              heartedIds.has(msg.id)
-                                ? 'text-red-500 hover:text-red-400'
-                                : 'text-neon-orange/90 hover:text-neon-orange'
-                            }`}
-                            whileTap={{ scale: 0.9 }}
-                          >
-                            <motion.span
-                              animate={
-                                heartAnimations.has(msg.id)
-                                  ? { scale: [1, 1.3, 1] }
-                                  : {}
-                              }
-                              transition={{ duration: 0.3 }}
-                            >
-                              ❤️
-                            </motion.span>
-                            <span className="font-semibold">{msg.heartCount}</span>
-                          </motion.button>
-                        </div>
-                      </div>
-                      <span className="text-[10px] text-gray-500 mt-0.5">
-                        {formatTimeAgo(msg.createdAt)}
-                      </span>
+              .map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  className="post-card p-4 sm:p-5"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <div className="flex items-start gap-3 mb-3">
+                    <DotCharacter characterId={msg.authorCharacter} size={40} className="flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-white">{msg.authorNickname}</div>
+                      <div className="text-xs text-gray-400">{formatTimeAgo(msg.createdAt)}</div>
                     </div>
-                    {isMine && (
-                      <div className="flex-shrink-0 pt-0.5">
-                        <DotCharacter characterId={msg.authorCharacter} size={36} />
+                  </div>
+                  {(msg.content?.trim() ?? '') !== '' && (
+                    <div className="mb-3 text-white/95 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
+                      {msg.content}
+                    </div>
+                  )}
+                  {msg.imageUrl && (
+                    <div className="mb-3 overflow-x-auto scrollbar-hide">
+                      <div className="flex gap-3" style={{ width: 'max-content' }}>
+                        <a
+                          href={msg.imageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block rounded-xl overflow-hidden border border-white/10 focus:outline-none focus:ring-2 focus:ring-neon-orange/50"
+                        >
+                          <img
+                            src={msg.imageUrl}
+                            alt=""
+                            className="w-56 h-40 object-cover flex-shrink-0"
+                          />
+                        </a>
                       </div>
-                    )}
-                  </motion.div>
-                )
-              })}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-2 border-t border-white/10 flex-wrap gap-y-2">
+                    <motion.button
+                      type="button"
+                      onClick={() => handleMessageHeart(msg.id)}
+                      className={`flex items-center gap-2 ${heartedIds.has(msg.id) ? 'text-[#FF6B00]' : 'text-gray-500 hover:text-gray-400'}`}
+                      whileTap={{ scale: 0.9 }}
+                    >
+                      <motion.span
+                        className={`text-xl ${heartedIds.has(msg.id) ? 'drop-shadow-[0_0_6px_rgba(255,107,0,0.6)]' : ''}`}
+                        animate={heartAnimations.has(msg.id) ? { scale: [1, 1.3, 1] } : {}}
+                        transition={{ duration: 0.3 }}
+                      >
+                        {heartedIds.has(msg.id) ? '❤️' : '🤍'}
+                      </motion.span>
+                      <span className="font-bold">{msg.heartCount}</span>
+                    </motion.button>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>클릭하여 하트 보내기</span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id); return n }); }}
+                        className="flex items-center gap-1 text-gray-400 hover:text-neon-orange transition-colors"
+                      >
+                        <span>💬</span>
+                        <span>댓글 {(commentsByTargetId[msg.id]?.length ?? 0)}개</span>
+                      </button>
+                    </div>
+                  </div>
+                  {expandedComments.has(msg.id) && (
+                    <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                      {(commentsByTargetId[msg.id] ?? []).map((c) => (
+                        <div key={c.id} className="flex items-start gap-2">
+                          <DotCharacter characterId={c.authorCharacter} size={24} className="flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium text-gray-300">{c.authorNickname}</span>
+                            <p className="text-sm text-white/90 break-words">{c.content}</p>
+                            <span className="text-[10px] text-gray-500">{formatTimeAgo(c.createdAt)}</span>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={commentInputByTarget[msg.id] ?? ''}
+                          onChange={(e) => setCommentInputByTarget((prev) => ({ ...prev, [msg.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              const text = (commentInputByTarget[msg.id] ?? '').trim()
+                              if (!text) return
+                              const newComment: Comment = {
+                                id: `c-${Date.now()}-${msg.id}`,
+                                postId: msg.id,
+                                authorNickname: userNickname,
+                                authorCharacter: userCharacter,
+                                content: text,
+                                createdAt: new Date(),
+                              }
+                              setCommentsByTargetId((prev) => ({ ...prev, [msg.id]: [...(prev[msg.id] ?? []), newComment] }))
+                              setCommentInputByTarget((prev) => ({ ...prev, [msg.id]: '' }))
+                            }
+                          }}
+                          placeholder="댓글 입력..."
+                          className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/30 border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm"
+                        />
+                        <motion.button
+                          type="button"
+                          onClick={() => {
+                            const text = (commentInputByTarget[msg.id] ?? '').trim()
+                            if (!text) return
+                            const newComment: Comment = {
+                              id: `c-${Date.now()}-${msg.id}`,
+                              postId: msg.id,
+                              authorNickname: userNickname,
+                              authorCharacter: userCharacter,
+                              content: text,
+                              createdAt: new Date(),
+                            }
+                            setCommentsByTargetId((prev) => ({ ...prev, [msg.id]: [...(prev[msg.id] ?? []), newComment] }))
+                            setCommentInputByTarget((prev) => ({ ...prev, [msg.id]: '' }))
+                          }}
+                          className="px-3 py-2 rounded-lg bg-neon-orange/80 text-white text-sm font-medium"
+                        >
+                          입력
+                        </motion.button>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              ))}
             <div ref={feedEndRef} />
           </div>
 
-          {/* 하단 메시지 입력 */}
-          <div className="fixed bottom-0 left-0 right-0 glass-strong border-t border-neon-orange/20 safe-bottom px-3 py-3 sm:px-4 sm:py-3">
-            <div className="app-shell mx-auto flex gap-2 items-end">
+          {/* 하단 간단 댓글 입력 */}
+          <div className="fixed bottom-0 left-0 right-0 glass-strong border-t border-neon-orange/20 safe-bottom px-3 py-2.5 sm:px-4 sm:py-3">
+            <div className="app-shell mx-auto flex gap-2 items-center">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -716,16 +822,10 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={sending || uploadingImage}
-                className="flex-shrink-0 w-12 h-12 rounded-2xl glass border border-neon-orange/30 flex items-center justify-center text-neon-orange hover:bg-neon-orange/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                whileHover={!(sending || uploadingImage) ? { scale: 1.05 } : {}}
-                whileTap={!(sending || uploadingImage) ? { scale: 0.95 } : {}}
+                className="flex-shrink-0 w-10 h-10 rounded-xl glass border border-neon-orange/30 flex items-center justify-center text-neon-orange hover:bg-neon-orange/10 disabled:opacity-50"
                 title="사진 추가"
               >
-                {uploadingImage ? (
-                  <span className="text-lg animate-pulse">⏳</span>
-                ) : (
-                  <span className="text-xl">📷</span>
-                )}
+                {uploadingImage ? <span className="text-sm animate-pulse">⏳</span> : <span>📷</span>}
               </motion.button>
               <input
                 type="text"
@@ -737,42 +837,31 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
                     handleSendMessage()
                   }
                 }}
-                placeholder="메시지 입력..."
-                className="flex-1 min-w-0 px-4 py-3 rounded-2xl glass border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm sm:text-base"
+                placeholder="간단 댓글 입력..."
+                className="flex-1 min-w-0 px-3 py-2.5 rounded-xl glass border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm"
                 maxLength={500}
               />
               <motion.button
                 type="button"
                 onClick={handleSendMessage}
                 disabled={!chatInput.trim() || sending}
-                className="flex-shrink-0 w-12 h-12 rounded-2xl bg-neon-orange text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                whileHover={!sending ? { scale: 1.05 } : {}}
-                whileTap={!sending ? { scale: 0.95 } : {}}
+                className="flex-shrink-0 w-10 h-10 rounded-xl bg-neon-orange/80 text-white flex items-center justify-center disabled:opacity-50"
               >
-                {sending ? (
-                  <span className="text-lg">⏳</span>
-                ) : (
-                  <span className="text-lg">➤</span>
-                )}
+                {sending ? <span className="text-sm animate-pulse">⏳</span> : <span>➤</span>}
               </motion.button>
             </div>
           </div>
         </>
       )}
 
-      {/* Feed - 왼쪽 정렬 말풍선 스타일 (Supabase 미사용 시 목업) */}
+      {/* Feed - 포스트 리스트 (Supabase 미사용 시 목업, image_c91edc 스타일) */}
       {!useSupabase && (
-      <div className="px-3 py-4 sm:p-4 space-y-4 pb-24 sm:pb-20">
+      <div className="px-3 py-4 sm:p-4 space-y-4 pb-28 sm:pb-24">
         <AnimatePresence>
           {sortedPosts.map((post) => (
             <motion.div
               key={post.id}
-              className="glass-strong rounded-3xl p-4 sm:p-5 relative"
-              style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255, 95, 0, 0.2)',
-              }}
+              className="post-card p-4 sm:p-5 relative"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
@@ -780,34 +869,29 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
               {...handleLongPress(post.id)}
               whileTap={{ scale: 0.98 }}
             >
-              {/* Author Info - 왼쪽 정렬 */}
               <div className="flex items-start gap-3 mb-3">
-                <DotCharacter characterId={post.authorCharacter} size={40} />
+                <DotCharacter characterId={post.authorCharacter} size={40} className="flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-white">{post.authorNickname}</div>
-                  <div className="text-xs text-gray-400">
-                    {formatTimeAgo(post.createdAt)}
-                  </div>
+                  <div className="text-xs text-gray-400">{formatTimeAgo(post.createdAt)}</div>
                 </div>
               </div>
 
-              {/* Content - 말풍선 스타일 */}
-              <div className="mb-3 text-white/95 leading-relaxed whitespace-pre-wrap break-words">
+              <div className="mb-3 text-white/95 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
                 {post.content}
               </div>
 
-              {/* Images Carousel - 가로 슬라이드, 최대 5장 */}
               {post.images && post.images.length > 0 && (
-                <div className="mb-3 overflow-x-auto scrollbar-hide snap-x snap-mandatory">
+                <div className="mb-3 overflow-x-auto scrollbar-hide">
                   <div className="flex gap-3" style={{ width: 'max-content' }}>
                     {post.images.slice(0, 5).map((img, idx) => (
                       <motion.img
                         key={idx}
                         src={img}
                         alt={`Image ${idx + 1}`}
-                        className="w-56 h-40 object-cover rounded-2xl flex-shrink-0 snap-start cursor-pointer"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        className="w-56 h-40 object-cover rounded-xl flex-shrink-0 cursor-pointer border border-white/10"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={(e) => e.stopPropagation()}
                       />
                     ))}
@@ -856,58 +940,110 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
                 </div>
               )}
 
-              {/* Heart Button with Animation */}
-              <div className="flex items-center justify-between pt-2 border-t border-white/10 relative">
+              <div className="flex items-center justify-between pt-2 border-t border-white/10 relative flex-wrap gap-y-2">
                 <motion.button
                   onClick={(e) => {
                     e.stopPropagation()
                     handleHeart(post.id)
                   }}
-                  className="flex items-center gap-2 text-neon-orange hover:text-neon-orange/80 transition-colors relative z-10"
-                  whileHover={{ scale: 1.15 }}
-                  whileTap={{ scale: 0.85 }}
+                  className={`flex items-center gap-2 relative z-10 ${postHeartedIds.has(post.id) ? 'text-[#FF6B00]' : 'text-gray-500 hover:text-gray-400'}`}
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.92 }}
                 >
                   <motion.span
-                    className="text-2xl"
-                    animate={heartAnimations.has(post.id) ? { 
-                      scale: [1, 1.5, 1],
-                      rotate: [0, -10, 10, 0]
-                    } : {}}
+                    className={`text-xl ${postHeartedIds.has(post.id) ? 'drop-shadow-[0_0_6px_rgba(255,107,0,0.6)]' : ''}`}
+                    animate={heartAnimations.has(post.id) ? { scale: [1, 1.4, 1] } : {}}
                     transition={{ duration: 0.4 }}
                   >
-                    ❤️
+                    {postHeartedIds.has(post.id) ? '❤️' : '🤍'}
                   </motion.span>
-                  <motion.span 
-                    className="font-bold text-lg"
-                    animate={heartAnimations.has(post.id) ? { 
-                      scale: [1, 1.2, 1],
-                      color: ['#FF5F00', '#FF8C42', '#FF5F00']
-                    } : {}}
-                    transition={{ duration: 0.4 }}
-                  >
-                    {post.heartCount}
-                  </motion.span>
+                  <span className="font-bold">{post.heartCount}</span>
                 </motion.button>
-                
-                {/* 더블탭 시 하트 이펙트 */}
                 <AnimatePresence>
                   {heartAnimations.has(post.id) && (
                     <motion.div
                       className="absolute left-0 top-0 pointer-events-none"
-                      initial={{ opacity: 0, scale: 0, y: 0 }}
-                      animate={{ opacity: [0, 1, 0], scale: [0, 1.5, 2], y: -30 }}
+                      initial={{ opacity: 0, scale: 0 }}
+                      animate={{ opacity: [0, 1, 0], scale: [0, 1.5, 2], y: -24 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.6 }}
+                      transition={{ duration: 0.5 }}
                     >
-                      <span className="text-4xl">❤️</span>
+                      <span className="text-3xl">❤️</span>
                     </motion.div>
                   )}
                 </AnimatePresence>
-                
-                <span className="text-xs text-gray-500">
-                  더블탭 또는 길게 눌러서 하트 보내기
-                </span>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>클릭하여 하트 보내기</span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(post.id)) n.delete(post.id); else n.add(post.id); return n }); }}
+                    className="flex items-center gap-1 text-gray-400 hover:text-neon-orange transition-colors"
+                  >
+                    <span>💬</span>
+                    <span>댓글 {(commentsByTargetId[post.id]?.length ?? 0)}개</span>
+                  </button>
+                </div>
               </div>
+              {expandedComments.has(post.id) && (
+                <div className="mt-3 pt-3 border-t border-white/10 space-y-2" onClick={(e) => e.stopPropagation()}>
+                  {(commentsByTargetId[post.id] ?? []).map((c) => (
+                    <div key={c.id} className="flex items-start gap-2">
+                      <DotCharacter characterId={c.authorCharacter} size={24} className="flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-medium text-gray-300">{c.authorNickname}</span>
+                        <p className="text-sm text-white/90 break-words">{c.content}</p>
+                        <span className="text-[10px] text-gray-500">{formatTimeAgo(c.createdAt)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={commentInputByTarget[post.id] ?? ''}
+                      onChange={(e) => setCommentInputByTarget((prev) => ({ ...prev, [post.id]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          const text = (commentInputByTarget[post.id] ?? '').trim()
+                          if (!text) return
+                          const newComment: Comment = {
+                            id: `c-${Date.now()}-${post.id}`,
+                            postId: post.id,
+                            authorNickname: userNickname,
+                            authorCharacter: userCharacter,
+                            content: text,
+                            createdAt: new Date(),
+                          }
+                          setCommentsByTargetId((prev) => ({ ...prev, [post.id]: [...(prev[post.id] ?? []), newComment] }))
+                          setCommentInputByTarget((prev) => ({ ...prev, [post.id]: '' }))
+                        }
+                      }}
+                      placeholder="댓글 입력..."
+                      className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/30 border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm"
+                    />
+                    <motion.button
+                      type="button"
+                      onClick={() => {
+                        const text = (commentInputByTarget[post.id] ?? '').trim()
+                        if (!text) return
+                        const newComment: Comment = {
+                          id: `c-${Date.now()}-${post.id}`,
+                          postId: post.id,
+                          authorNickname: userNickname,
+                          authorCharacter: userCharacter,
+                          content: text,
+                          createdAt: new Date(),
+                        }
+                        setCommentsByTargetId((prev) => ({ ...prev, [post.id]: [...(prev[post.id] ?? []), newComment] }))
+                        setCommentInputByTarget((prev) => ({ ...prev, [post.id]: '' }))
+                      }}
+                      className="px-3 py-2 rounded-lg bg-neon-orange/80 text-white text-sm font-medium"
+                    >
+                      입력
+                    </motion.button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
@@ -919,6 +1055,93 @@ export default function PulseFeed({ boardId, boardPublicId, userCharacter, userN
         )}
       </div>
       )}
+
+      {/* FAB 글쓰기 버튼 (오렌지 원형 + 글로우) */}
+      <motion.button
+        type="button"
+        onClick={() => setShowWriteModal(true)}
+        className="fab-write fixed right-4 sm:right-6 bottom-20 sm:bottom-24 safe-bottom flex items-center justify-center z-40"
+        style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
+        aria-label="글쓰기"
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.95 }}
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </motion.button>
+
+      {/* 글쓰기 모달 */}
+      <AnimatePresence>
+        {showWriteModal && (
+          <motion.div
+            className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={handleCloseWriteModal}
+          >
+            <motion.div
+              className="w-full sm:max-w-lg glass-strong rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 max-h-[85vh] overflow-y-auto safe-bottom"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-white">글쓰기</h2>
+                <button
+                  type="button"
+                  onClick={handleCloseWriteModal}
+                  className="text-gray-400 hover:text-white p-1"
+                  aria-label="닫기"
+                >
+                  ✕
+                </button>
+              </div>
+              <textarea
+                value={writeContent}
+                onChange={(e) => setWriteContent(e.target.value)}
+                placeholder="내용을 입력하세요..."
+                className="w-full px-4 py-3 rounded-xl glass border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm sm:text-base min-h-[120px] resize-y"
+                maxLength={2000}
+              />
+              <input
+                ref={writeModalFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => setWriteImageFile(e.target.files?.[0] ?? null)}
+              />
+              <div className="flex gap-2 mt-3">
+                <motion.button
+                  type="button"
+                  onClick={() => writeModalFileRef.current?.click()}
+                  className="px-4 py-2.5 rounded-xl glass border border-neon-orange/30 text-neon-orange text-sm font-medium hover:bg-neon-orange/10"
+                >
+                  {writeImageFile ? '📷 사진 변경' : '📷 사진 추가'}
+                </motion.button>
+                {writeImageFile && (
+                  <span className="text-xs text-gray-400 self-center truncate max-w-[140px]">
+                    {writeImageFile.name}
+                  </span>
+                )}
+              </div>
+              <motion.button
+                type="button"
+                onClick={handleSubmitWriteModal}
+                disabled={(!writeContent.trim() && !writeImageFile) || uploadingImage}
+                className="w-full mt-4 py-3.5 rounded-xl font-semibold bg-neon-orange text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={writeContent.trim() || writeImageFile ? { scale: 1.01 } : {}}
+                whileTap={writeContent.trim() || writeImageFile ? { scale: 0.99 } : {}}
+              >
+                {uploadingImage ? '업로드 중...' : '올리기'}
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
