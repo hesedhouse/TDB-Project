@@ -62,9 +62,10 @@ export async function GET(
     }
 
     const r = row
+    const numericId = /^\d+$/.test(raw) ? Number(raw) : null
     const response: BoardApiResponse = {
       id: String(r.id),
-      public_id: r.public_id != null ? Number(r.public_id) : null,
+      public_id: r.public_id != null ? Number(r.public_id) : numericId,
       keyword: String(r.keyword),
       name: r.name != null ? String(r.name) : null,
       expires_at: String(r.expires_at),
