@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import DotCharacter from './DotCharacter'
 import { mockBoards, getTrendKeywords, filterActiveBoards, formatRemainingTimer } from '@/lib/mockData'
 import { getHourglasses } from '@/lib/hourglass'
@@ -47,6 +47,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const [hourglasses, setHourglasses] = useState(0)
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [roomPassword, setRoomPassword] = useState('')
+  const [showRoomPassword, setShowRoomPassword] = useState(false)
 
   useEffect(() => {
     setHourglasses(getHourglasses())
@@ -262,17 +263,31 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
             )}
           </motion.button>
           </div>
-          {useSupabase && (
-            <input
-              type="password"
-              placeholder="비밀번호 (선택)"
-              value={roomPassword}
-              onChange={(e) => setRoomPassword(e.target.value)}
-              disabled={creatingRoom}
-              className="w-full px-5 py-3.5 rounded-2xl bg-black/50 border-2 border-neon-orange/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base shadow-[0_0_12px_rgba(255,107,0,0.2)] focus:shadow-[0_0_16px_rgba(255,107,0,0.35)] transition-shadow disabled:opacity-60"
-              aria-label="방 비밀번호 (선택)"
-            />
-          )}
+          {/* 비밀번호 (선택) - 어두운 배경 + 오렌지 네온 테두리 + 보기/숨기기 토글 */}
+          <div className="flex flex-col gap-1.5">
+            <div className="relative flex items-center">
+              <input
+                type={showRoomPassword ? 'text' : 'password'}
+                placeholder="비밀번호 (선택)"
+                value={roomPassword}
+                onChange={(e) => setRoomPassword(e.target.value)}
+                disabled={creatingRoom}
+                className="w-full pl-5 pr-12 py-3.5 rounded-2xl bg-black/60 border-2 border-[#FF6B00]/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base shadow-[0_0_12px_rgba(255,107,0,0.2)] focus:shadow-[0_0_16px_rgba(255,107,0,0.35)] transition-shadow disabled:opacity-60"
+                aria-label="방 비밀번호 (선택)"
+              />
+              <button
+                type="button"
+                onClick={() => setShowRoomPassword((v) => !v)}
+                className="absolute right-3 p-1.5 rounded-lg text-[#FF6B00] hover:bg-[#FF6B00]/10 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40"
+                aria-label={showRoomPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
+              >
+                {showRoomPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 px-1">
+              비밀번호를 설정하면 아는 사람만 들어올 수 있습니다.
+            </p>
+          </div>
         </div>
         
         {/* 플로팅 태그: 너비 100%, overflow visible로 우측 잘림 없이 가로폭 전체 유영 */}

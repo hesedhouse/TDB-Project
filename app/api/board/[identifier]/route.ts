@@ -48,6 +48,7 @@ export async function GET(
       row = data as Record<string, unknown>
       has_password = Boolean(row?.password_hash)
     } else if (resWith.error) {
+      console.warn('[api/board] boards.password_hash 컬럼 없음 또는 오류. Supabase에서 boards_migration_password.sql 실행 여부 확인.', resWith.error?.message ?? resWith.error)
       const resWithout = await buildQuery(selectColsWithoutPassword).maybeSingle()
       if (resWithout.error) {
         console.error('[api/board/[identifier]]', resWithout.error)
