@@ -10,6 +10,7 @@ import { mockBoards, getTrendKeywords, filterActiveBoards, formatRemainingTimer 
 import { getHourglasses } from '@/lib/hourglass'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/lib/supabase/auth'
 import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
 import { useTick } from '@/lib/TickContext'
 import type { Board } from '@/lib/mockData'
@@ -32,8 +33,17 @@ interface HomeDashboardProps {
   onEnterBoard: (boardId: string) => void
 }
 
+/** 이메일 마스킹: 앞 5자 + *** + @ 이후 (예: hesed***@gmail.com) */
+function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) return email
+  const [local, domain] = email.split('@')
+  if (local.length <= 5) return `${local}***@${domain}`
+  return `${local.slice(0, 5)}***@${domain}`
+}
+
 function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const router = useRouter()
+  const { user, signOut } = useAuth()
   const useSupabase = isSupabaseConfigured()
   const [searchQuery, setSearchQuery] = useState('')
   const [floatingTags, setFloatingTags] = useState<FloatingTag[]>(() =>
@@ -211,7 +221,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom">
-      {/* Header */}
+      {/* Header: 좌측 TDB/떴다방, 우측 이메일·로그아웃·모래시계 */}
       <header className="flex items-center justify-between mb-5 pt-4 safe-top">
         <div className="flex items-center gap-3">
           <motion.div
@@ -227,15 +237,40 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           </motion.div>
           <span className="text-xs sm:text-sm text-gray-400">떴다방</span>
         </div>
-        <Link
-          href="/store"
-          className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 sm:py-2 rounded-full bg-white/[0.06] border border-white/10 min-w-0 hover:border-amber-500/30 transition-colors"
-          role="status"
-          aria-label={`보유 모래시계 ${hourglasses}개, 상점으로 이동`}
-        >
-          <span className="text-lg sm:text-xl leading-none flex-shrink-0" aria-hidden>⏳</span>
-          <span className="font-semibold text-sm sm:text-base tabular-nums text-white">{hourglasses}</span>
-        </Link>
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0">
+          {useSupabase && user?.email && (
+            <>
+              <span className="text-gray-300 text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[160px]" title={user.email}>
+                {maskEmail(user.email)}
+              </span>
+              <motion.button
+                type="button"
+                onClick={async () => {
+                  await signOut()
+                  router.replace('/login')
+                }}
+                className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-medium border-2 border-[#FF6B00] text-gray-200 bg-transparent hover:bg-[#FF6B00] hover:text-white transition-colors whitespace-nowrap"
+                style={{ boxShadow: 'none' }}
+                whileHover={{
+                  boxShadow: '0 0 12px rgba(255,107,0,0.5), 0 0 20px rgba(255,107,0,0.25)',
+                  transition: { duration: 0.2 },
+                }}
+                whileTap={{ scale: 0.98 }}
+              >
+                로그아웃
+              </motion.button>
+            </>
+          )}
+          <Link
+            href="/store"
+            className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 sm:py-2 rounded-full bg-white/[0.06] border border-white/10 min-w-0 hover:border-amber-500/30 transition-colors"
+            role="status"
+            aria-label={`보유 모래시계 ${hourglasses}개, 상점으로 이동`}
+          >
+            <span className="text-lg sm:text-xl leading-none flex-shrink-0" aria-hidden>⏳</span>
+            <span className="font-semibold text-sm sm:text-base tabular-nums text-white">{hourglasses}</span>
+          </Link>
+        </div>
       </header>
 
       {/* Discovery Section - 방 제목·태그만 입력 (번호 자동 부여, 비밀번호 선택) */}
