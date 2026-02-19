@@ -42,17 +42,18 @@ export async function sendMessage(params: {
     row.user_id = params.userId
   }
 
-  const { data, error } = await supabase
-    .from('messages')
-    .insert(row)
-    .select()
-    .single()
+  let result = await supabase.from('messages').insert(row).select().single()
 
-  if (error) {
-    console.error('sendMessage error:', error)
+  if (result.error?.code === 'PGRST204' && row.user_id != null) {
+    delete row.user_id
+    result = await supabase.from('messages').insert(row).select().single()
+  }
+
+  if (result.error) {
+    console.error('sendMessage error:', result.error)
     return null
   }
-  return dbMessageToMessage(data as DbMessage)
+  return dbMessageToMessage(result.data as DbMessage)
 }
 
 /** 하트 수 1 증가. 반환: 갱신된 heart_count */
