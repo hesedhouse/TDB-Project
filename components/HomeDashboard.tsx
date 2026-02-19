@@ -254,7 +254,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom">
       {/* Header: 좌측 TDB/떴다방, 우측 이메일·로그아웃·모래시계 */}
-      <header className="flex items-center justify-between mb-5 pt-8 safe-top">
+      <header className="flex items-center justify-between mb-6 pt-12 safe-top">
         <div className="flex items-center gap-3">
           <motion.div
             className="text-2xl sm:text-3xl font-bold pixel-art"
@@ -307,7 +307,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
       {/* Discovery Section - 방 제목·태그만 입력 (번호 자동 부여, 비밀번호 선택) */}
       <section className="mb-7 relative overflow-visible">
-        <div className="relative z-10 mb-5 flex flex-col gap-3">
+        <div className="relative z-10 mb-5 flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="text"
