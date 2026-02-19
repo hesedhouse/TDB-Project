@@ -796,6 +796,16 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               <span className="text-base leading-none flex-shrink-0" aria-hidden>⏳</span>
               <span>보유 모래시계: {hourglasses}개</span>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowNicknameModal(true)}
+              className="flex-shrink-0 min-w-0 max-w-[88px] sm:max-w-[140px] flex items-center gap-1 text-sm text-neon-orange hover:brightness-110 truncate"
+              title="닉네임 변경"
+              aria-label={`활동명: ${authorNickname}. 클릭하면 닉네임을 변경할 수 있습니다.`}
+            >
+              <span className="flex-shrink-0" aria-hidden>👤</span>
+              <span className="truncate">{authorNickname || '게스트'}</span>
+            </button>
           </div>
           
           {/* Progress Bar */}
