@@ -14,7 +14,6 @@ import { useAuth } from '@/lib/supabase/auth'
 import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
 import { useTick } from '@/lib/TickContext'
 import { getActiveSessions, removeExpiredSessions, removeSessionByBoardId, type ActiveSession } from '@/lib/activeSessions'
-import { formatRemainingTimer } from '@/lib/mockData'
 import type { Board } from '@/lib/mockData'
 
 /** 남은 시간 라벨. 하이드레이션 방지: 마운트된 후에만 시간 표시(서버/클라이언트 동일 초기값) */
@@ -513,20 +512,18 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-sm truncate text-blue-400">
                         {session.boardName.startsWith('#') ? session.boardName : `#${session.boardName}`}
+                        <span className="text-xs text-neon-orange/90 font-normal ml-1">[닉네임: {session.nickname}]</span>
                       </div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">
-                        <span className="text-neon-orange/90">닉네임: {session.nickname}</span>
-                      </div>
+                      {session.expiresAt != null && session.expiresAt > Date.now() ? (
+                        <div className="text-xs text-gray-500 mt-1">
+                          폭파까지 <span className="font-mono text-neon-orange/90 tabular-nums">{formatRemainingTimer(new Date(session.expiresAt)).label}</span>
+                        </div>
+                      ) : session.expiresAt != null ? null : (
+                        <div className="text-xs text-gray-500 mt-1">—</div>
+                      )}
                     </div>
                   </div>
-                  {session.expiresAt != null && session.expiresAt > Date.now() ? (
-                    <div className="text-[11px] text-gray-500 mt-1">
-                      폭파까지 <span className="font-mono text-neon-orange/90 tabular-nums">{formatRemainingTimer(new Date(session.expiresAt)).label}</span>
-                    </div>
-                  ) : session.expiresAt != null ? null : (
-                    <div className="text-[11px] text-gray-500 mt-1">—</div>
-                  )}
-                  <div className="text-[11px] text-neon-orange mt-1">
+                  <div className="text-xs text-neon-orange mt-1">
                     클릭 시 바로 입장
                   </div>
                 </motion.div>
