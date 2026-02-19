@@ -569,7 +569,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt])
 
   return (
-    <div className="min-h-screen bg-midnight-black text-white safe-bottom">
+    <div className="min-h-screen bg-midnight-black text-white safe-bottom pt-6">
       <AnimatePresence>
         {nicknameModalMounted && showNicknameModal && (
           <motion.div
@@ -920,12 +920,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 return (
                 <motion.div
                   key={msg.id}
-                  className="post-card p-4 sm:p-5 relative"
+                  className="post-card p-4 sm:p-5 relative flex flex-col gap-y-3"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25 }}
                 >
-                  <div className="flex items-start gap-3 mb-3">
+                  <div className="flex items-start gap-3">
                     <DotCharacter characterId={msg.authorCharacter} size={40} className="flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-white">{msg.authorNickname}</div>
@@ -953,7 +953,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                     )}
                   </div>
                   {editingMessageId === msg.id ? (
-                    <div className="mb-3">
+                    <div>
                       <textarea
                         value={editingContent}
                         onChange={(e) => setEditingContent(e.target.value)}
@@ -985,26 +985,24 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                       </div>
                     </div>
                   ) : (msg.content?.trim() ?? '') !== '' ? (
-                    <div className="mb-3 text-white/95 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
+                    <div className="text-white/95 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
                       {msg.content}
                     </div>
                   ) : null}
                   {msg.imageUrl && (
-                    <div className="mb-3 overflow-x-auto scrollbar-hide">
-                      <div className="flex gap-3" style={{ width: 'max-content' }}>
-                        <a
-                          href={msg.imageUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block rounded-xl overflow-hidden border border-white/10 focus:outline-none focus:ring-2 focus:ring-neon-orange/50"
-                        >
-                          <img
-                            src={msg.imageUrl}
-                            alt=""
-                            className="w-56 h-40 object-cover flex-shrink-0"
-                          />
-                        </a>
-                      </div>
+                    <div className="rounded-xl overflow-hidden border border-white/10 bg-black/20">
+                      <a
+                        href={msg.imageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block focus:outline-none focus:ring-2 focus:ring-neon-orange/50"
+                      >
+                        <img
+                          src={msg.imageUrl}
+                          alt=""
+                          className="max-h-[500px] w-full object-contain"
+                        />
+                      </a>
                     </div>
                   )}
                   <div className="flex items-center justify-between pt-2 border-t border-white/10 flex-wrap gap-y-2">
@@ -1157,7 +1155,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
           {sortedPosts.map((post) => (
             <motion.div
               key={post.id}
-              className="post-card p-4 sm:p-5 relative"
+              className="post-card p-4 sm:p-5 relative flex flex-col gap-y-3"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
@@ -1165,7 +1163,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               {...handleLongPress(post.id)}
               whileTap={{ scale: 0.98 }}
             >
-              <div className="flex items-start gap-3 mb-3">
+              <div className="flex items-start gap-3">
                 <DotCharacter characterId={post.authorCharacter} size={40} className="flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-white">{post.authorNickname}</div>
@@ -1173,31 +1171,33 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 </div>
               </div>
 
-              <div className="mb-3 text-white/95 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
+              <div className="text-white/95 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
                 {post.content}
               </div>
 
               {post.images && post.images.length > 0 && (
-                <div className="mb-3 overflow-x-auto scrollbar-hide">
-                  <div className="flex gap-3" style={{ width: 'max-content' }}>
-                    {post.images.slice(0, 5).map((img, idx) => (
-                      <motion.img
-                        key={idx}
+                <div className="space-y-3">
+                  {post.images.slice(0, 5).map((img, idx) => (
+                    <motion.div
+                      key={idx}
+                      className="rounded-xl overflow-hidden border border-white/10 bg-black/20"
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <img
                         src={img}
                         alt={`Image ${idx + 1}`}
-                        className="w-56 h-40 object-cover rounded-xl flex-shrink-0 cursor-pointer border border-white/10"
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={(e) => e.stopPropagation()}
+                        className="max-h-[500px] w-full object-contain"
                       />
-                    ))}
-                  </div>
+                    </motion.div>
+                  ))}
                 </div>
               )}
 
               {/* Links - 썸네일 카드 스타일 */}
               {post.links && post.links.length > 0 && (
-                <div className="mb-3 space-y-2">
+                <div className="space-y-2">
                   {post.links.map((link, idx) => (
                     <motion.a
                       key={idx}
