@@ -78,8 +78,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [isExpired, setIsExpired] = useState(false)
   const [topContributors, setTopContributors] = useState<TopContributor[]>([])
   const [showWriteModal, setShowWriteModal] = useState(false)
+  /** 카메라 버튼으로 모달을 연 경우, 모달이 뜨자마자 파일 선택창을 띄우기 위한 플래그 */
+  const [openPhotoPickerWhenModalOpens, setOpenPhotoPickerWhenModalOpens] = useState(false)
   const [writeContent, setWriteContent] = useState('')
   const [writeImageFile, setWriteImageFile] = useState<File | null>(null)
+  /** 모달 내 이미지 미리보기용 object URL (revoke 책임) */
+  const [writePreviewUrl, setWritePreviewUrl] = useState<string | null>(null)
   /** 방 입장 시 닉네임 설정 모달: 클라이언트 마운트 후에만 표시 (Hydration 방지) */
   const ROOM_NICKNAME_KEY_PREFIX = 'tdb-room-nickname-'
   const [nicknameModalMounted, setNicknameModalMounted] = useState(false)
@@ -91,7 +95,6 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [deleteConfirmMessageId, setDeleteConfirmMessageId] = useState<string | null>(null)
   const feedEndRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const writeModalFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -102,6 +105,30 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   useEffect(() => {
     setNicknameModalMounted(true)
   }, [])
+
+  /** 글쓰기 모달이 카메라로 열렸을 때, 모달이 뜬 뒤 파일 선택창 자동 오픈 */
+  useEffect(() => {
+    if (!showWriteModal || !openPhotoPickerWhenModalOpens) return
+    const t = setTimeout(() => {
+      writeModalFileRef.current?.click()
+      setOpenPhotoPickerWhenModalOpens(false)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [showWriteModal, openPhotoPickerWhenModalOpens])
+
+  /** 모달 내 선택 사진에 대한 미리보기 URL 생성/해제 */
+  useEffect(() => {
+    if (!writeImageFile) {
+      setWritePreviewUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+      return
+    }
+    const url = URL.createObjectURL(writeImageFile)
+    setWritePreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [writeImageFile])
 
   /** 방 입장 시 세션/워프존 저장 닉네임 있으면 pre-fill; 워프존으로 입장 시 모달 스킵 */
   useEffect(() => {
@@ -197,23 +224,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [chatInput, sending, uploadingImage, useSupabaseWithUuid, send])
 
-  const handlePhotoSelect = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (!file || !useSupabaseWithUuid || sending || uploadingImage) return
-      if (!file.type.startsWith('image/')) return
-      e.target.value = ''
-      setUploadingImage(true)
-      const imageUrl = await uploadChatImage(file, boardId)
-      setUploadingImage(false)
-      if (imageUrl) await send(chatInput.trim(), imageUrl)
-      if (chatInput.trim()) setChatInput('')
-    },
-    [useSupabaseWithUuid, boardId, send, sending, uploadingImage, chatInput]
-  )
-
   const handleCloseWriteModal = useCallback(() => {
     setShowWriteModal(false)
+    setOpenPhotoPickerWhenModalOpens(false)
     setWriteContent('')
     setWriteImageFile(null)
   }, [])
@@ -1098,19 +1111,15 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
           {/* 하단 간단 댓글 입력 */}
           <div className="fixed bottom-0 left-0 right-0 glass-strong border-t border-neon-orange/20 safe-bottom px-3 py-2.5 sm:px-4 sm:py-3">
             <div className="app-shell mx-auto flex gap-2 items-center">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handlePhotoSelect}
-              />
               <motion.button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  setOpenPhotoPickerWhenModalOpens(true)
+                  setShowWriteModal(true)
+                }}
                 disabled={sending || uploadingImage}
                 className="flex-shrink-0 w-10 h-10 rounded-xl glass border border-neon-orange/30 flex items-center justify-center text-neon-orange hover:bg-neon-orange/10 disabled:opacity-50"
-                title="사진 추가"
+                title="사진·글쓰기"
               >
                 {uploadingImage ? <span className="text-sm animate-pulse">⏳</span> : <span>📷</span>}
               </motion.button>
@@ -1390,6 +1399,23 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   ✕
                 </button>
               </div>
+              {writePreviewUrl && (
+                <div className="relative mb-3 rounded-xl overflow-hidden bg-black/30 border border-neon-orange/30 inline-block">
+                  <img
+                    src={writePreviewUrl}
+                    alt="미리보기"
+                    className="max-h-48 w-auto object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setWriteImageFile(null)}
+                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-neon-orange text-sm"
+                    aria-label="사진 취소"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
               <textarea
                 value={writeContent}
                 onChange={(e) => setWriteContent(e.target.value)}
@@ -1408,15 +1434,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 <motion.button
                   type="button"
                   onClick={() => writeModalFileRef.current?.click()}
-                  className="px-4 py-2.5 rounded-xl glass border border-neon-orange/30 text-neon-orange text-sm font-medium hover:bg-neon-orange/10"
+                  className={`px-4 py-2.5 rounded-xl glass border text-sm font-medium hover:bg-neon-orange/10 ${writeImageFile ? 'border-neon-orange bg-neon-orange/20 text-neon-orange' : 'border-neon-orange/30 text-neon-orange'}`}
                 >
                   {writeImageFile ? '📷 사진 변경' : '📷 사진 추가'}
                 </motion.button>
-                {writeImageFile && (
-                  <span className="text-xs text-gray-400 self-center truncate max-w-[140px]">
-                    {writeImageFile.name}
-                  </span>
-                )}
               </div>
               <motion.button
                 type="button"
@@ -1426,7 +1447,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 whileHover={writeContent.trim() || writeImageFile ? { scale: 1.01 } : {}}
                 whileTap={writeContent.trim() || writeImageFile ? { scale: 0.99 } : {}}
               >
-                {uploadingImage ? '업로드 중...' : '올리기'}
+                {uploadingImage ? '업로드 중...' : '작성하기'}
               </motion.button>
             </motion.div>
           </motion.div>
