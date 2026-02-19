@@ -79,9 +79,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [showWriteModal, setShowWriteModal] = useState(false)
   const [writeContent, setWriteContent] = useState('')
   const [writeImageFile, setWriteImageFile] = useState<File | null>(null)
-  /** 방 입장 시 닉네임 설정 모달: 입장할 때마다 표시, 해당 방 세션(sessionStorage) 동안만 유효 */
+  /** 방 입장 시 닉네임 설정 모달: 클라이언트 마운트 후에만 표시 (Hydration 방지) */
   const ROOM_NICKNAME_KEY_PREFIX = 'tdb-room-nickname-'
-  const [showNicknameModal, setShowNicknameModal] = useState(true)
+  const [nicknameModalMounted, setNicknameModalMounted] = useState(false)
+  const [showNicknameModal, setShowNicknameModal] = useState(false)
   const [effectiveNickname, setEffectiveNickname] = useState('')
   const [nicknameInput, setNicknameInput] = useState('')
   const feedEndRef = useRef<HTMLDivElement>(null)
@@ -93,9 +94,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     setHourglassesState(getHourglasses())
   }, [])
 
-  /** 방 입장 시 해당 방의 세션 닉네임 있으면 pre-fill. boardId가 준비된 후에만 모달 표시 (에러 방지) */
+  /** 클라이언트 마운트 완료 후에만 닉네임 모달 로직 실행 (Vercel/SSR Hydration 방지) */
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    setNicknameModalMounted(true)
+  }, [])
+
+  /** 방 입장 시 해당 방의 세션 닉네임 있으면 pre-fill. boardId 준비 후 + 마운트 후에만 모달 표시 */
+  useEffect(() => {
+    if (!nicknameModalMounted || typeof window === 'undefined') return
     if (!boardId) {
       setEffectiveNickname(userNickname)
       setShowNicknameModal(false)
@@ -111,7 +117,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setEffectiveNickname(userNickname)
       setShowNicknameModal(true)
     }
-  }, [boardId, userNickname])
+  }, [nicknameModalMounted, boardId, userNickname])
 
   useEffect(() => {
     if (!noCopyToast) return
@@ -250,9 +256,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
           const next = new Set(prev)
           if (result.isHearted) next.add(messageId)
           else next.delete(messageId)
-          try {
-            localStorage.setItem(HEARTED_STORAGE_KEY, JSON.stringify([...next]))
-          } catch (_) {}
+          if (typeof window !== 'undefined') {
+            try {
+              window.localStorage.setItem(HEARTED_STORAGE_KEY, JSON.stringify([...next]))
+            } catch (_) {}
+          }
           return next
         })
       }
@@ -358,10 +366,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   // 하트를 받으면 게시판 수명 연장
   useEffect(() => {
     if (!board) return
-    
-    const totalHearts = posts.reduce((sum, post) => sum + post.heartCount, 0)
-    const originalHearts = board.heartCount
-    
+    const totalHearts = (posts ?? []).reduce((sum, post) => sum + (post?.heartCount ?? 0), 0)
+    const originalHearts = board?.heartCount ?? 0
     if (totalHearts > originalHearts) {
       const newBoard = extendBoardLifespan(board, totalHearts - originalHearts)
       setBoard(newBoard)
@@ -372,11 +378,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [posts, board])
 
-  const sortedPosts = [...posts].sort((a, b) => {
+  const sortedPosts = [...(posts ?? [])].sort((a, b) => {
     if (sortType === 'popular') {
-      return b.heartCount - a.heartCount
+      return (b?.heartCount ?? 0) - (a?.heartCount ?? 0)
     }
-    return b.createdAt.getTime() - a.createdAt.getTime()
+    return (b?.createdAt ? new Date(b.createdAt).getTime() : 0) - (a?.createdAt ? new Date(a.createdAt).getTime() : 0)
   })
 
   /** 목업 포스트: 하트 토글 (+1 / -1), 로컬에 선택 저장 */
@@ -386,12 +392,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       const next = new Set(prev)
       if (isHearted) next.delete(postId)
       else next.add(postId)
-      try {
-        localStorage.setItem(POST_HEARTED_STORAGE_KEY, JSON.stringify([...next]))
-      } catch {}
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(POST_HEARTED_STORAGE_KEY, JSON.stringify([...next]))
+        } catch {}
+      }
       return next
     })
-    setPosts(posts.map(post =>
+    setPosts((posts ?? []).map(post =>
       post.id === postId
         ? { ...post, heartCount: Math.max(0, post.heartCount + (isHearted ? -1 : 1)) }
         : post
@@ -518,9 +526,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const handleNicknameSubmit = useCallback(() => {
     const name = nicknameInput.trim()
     if (!name) return
-    try {
-      window.sessionStorage.setItem(`${ROOM_NICKNAME_KEY_PREFIX}${boardId}`, name)
-    } catch {}
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.setItem(`${ROOM_NICKNAME_KEY_PREFIX}${boardId}`, name)
+      } catch {}
+    }
     setEffectiveNickname(name)
     setShowNicknameModal(false)
   }, [nicknameInput, boardId])
@@ -528,7 +538,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   return (
     <div className="min-h-screen bg-midnight-black text-white safe-bottom">
       <AnimatePresence>
-        {showNicknameModal && (
+        {nicknameModalMounted && showNicknameModal && (
           <motion.div
             className="fixed inset-0 z-[90] flex items-center justify-center p-4"
             initial={{ opacity: 0 }}

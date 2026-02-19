@@ -29,19 +29,27 @@ function getSupabaseEnv(): { url: string; anonKey: string } | null {
  * - .env.local 의 URL·anon key 가 있어야 하며, 없으면 null 반환 (No API key found 방지).
  */
 export function createClient(): SupabaseClient | null {
-  const env = getSupabaseEnv()
-  if (!env) {
+  try {
+    const env = getSupabaseEnv()
+    if (!env) {
+      supabaseInstance = null
+      return null
+    }
+    if (supabaseInstance) return supabaseInstance
+    supabaseInstance = createSupabaseClient(env.url, env.anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
+    return supabaseInstance
+  } catch (e) {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      console.warn('[Supabase] createClient 실패:', e)
+    }
     supabaseInstance = null
     return null
   }
-  if (supabaseInstance) return supabaseInstance
-  supabaseInstance = createSupabaseClient(env.url, env.anonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  })
-  return supabaseInstance
 }
 
 export function isSupabaseConfigured(): boolean {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import PulseFeed from '@/components/PulseFeed'
@@ -50,10 +50,12 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   const useSupabase = isSupabaseConfigured()
 
   const matchedBoard = useMemo(() => {
-    const keyword = decodedKeyword
+    const keyword = (decodedKeyword ?? '').toString().trim()
+    if (!keyword) return undefined
     return (
-      mockBoards.find((b) => b.trendKeywords.includes(keyword)) ||
-      mockBoards.find((b) => b.name.includes(keyword))
+      mockBoards?.find((b) => b?.trendKeywords?.includes(keyword)) ??
+      mockBoards?.find((b) => b?.name?.includes(keyword)) ??
+      undefined
     )
   }, [decodedKeyword])
 
@@ -116,7 +118,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     return () => { cancelled = true }
   }, [useSupabase, decodedKeyword, router])
 
-  const handlePasswordSubmit = async () => {
+  const handlePasswordSubmit = useCallback(async () => {
     if (!supabaseBoard || !passwordInput.trim() || verifying) return
     setVerifying(true)
     setPasswordError(false)
@@ -132,7 +134,11 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
       })
       const data = await res.json()
       if (data?.ok) {
-        sessionStorage.setItem(`${UNLOCK_STORAGE_PREFIX}${supabaseBoard.id}`, '1')
+        if (typeof window !== 'undefined') {
+          try {
+            window.sessionStorage.setItem(`${UNLOCK_STORAGE_PREFIX}${supabaseBoard.id}`, '1')
+          } catch {}
+        }
         setPasswordUnlocked(true)
         setPasswordInput('')
       } else {
@@ -143,9 +149,16 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     } finally {
       setVerifying(false)
     }
-  }
+  }, [supabaseBoard, passwordInput, verifying])
 
   // ——— 조건부 렌더링: 모든 훅 선언 이후에만 실행 ———
+  if (!decodedKeyword || (typeof decodedKeyword === 'string' && decodedKeyword.trim() === '')) {
+    return (
+      <div className="min-h-screen bg-midnight-black text-white flex items-center justify-center">
+        <p className="text-gray-400">잘못된 접근입니다.</p>
+      </div>
+    )
+  }
   if (useSupabase && (authLoading || !authUser)) {
     return (
       <div className="min-h-screen bg-midnight-black text-white flex items-center justify-center">
