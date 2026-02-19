@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 export const metadata: Metadata = {
   title: 'TDB - 떴다방',
@@ -19,7 +20,9 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className="bg-midnight-black min-h-screen">
-        <div className="app-shell min-h-screen px-3 sm:px-6">{children}</div>
+        <ErrorBoundary>
+          <div className="app-shell min-h-screen px-3 sm:px-6">{children}</div>
+        </ErrorBoundary>
       </body>
     </html>
   )

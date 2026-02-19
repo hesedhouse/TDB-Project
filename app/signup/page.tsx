@@ -2,12 +2,14 @@
 
 import { useState, Suspense } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useAuth } from '@/lib/supabase/auth'
 
 function SignupForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnUrl = searchParams.get('returnUrl') ?? '/'
   const { user, loading, signUpWithEmail } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -39,7 +41,8 @@ function SignupForm() {
       return
     }
     alert('환영합니다! 가입이 완료되었습니다.')
-    router.replace('/')
+    const path = returnUrl.startsWith('/') ? returnUrl : '/'
+    router.replace(path)
   }
 
   if (loading) {
@@ -51,7 +54,8 @@ function SignupForm() {
   }
 
   if (user) {
-    router.replace('/')
+    const path = returnUrl.startsWith('/') ? returnUrl : '/'
+    router.replace(path)
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <p className="text-gray-400">이동 중...</p>

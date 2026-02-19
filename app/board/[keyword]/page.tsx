@@ -36,6 +36,7 @@ function safeDecodeKeyword(raw: string): string {
 }
 
 export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) {
+  // ——— 훅은 항상 최상단, 조건/return 이전에 모두 호출 ———
   const router = useRouter()
   const decodedKeyword = safeDecodeKeyword(params.keyword ?? '')
   const { user: authUser, loading: authLoading } = useAuth()
@@ -48,22 +49,6 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   const [verifying, setVerifying] = useState(false)
   const useSupabase = isSupabaseConfigured()
 
-  useEffect(() => {
-    if (!useSupabase || authLoading) return
-    if (!authUser) {
-      const path = `/board/${encodeURIComponent(decodedKeyword)}`
-      router.replace(`/login?returnUrl=${encodeURIComponent(path)}`)
-    }
-  }, [useSupabase, authLoading, authUser, router, decodedKeyword])
-
-  if (useSupabase && (authLoading || !authUser)) {
-    return (
-      <div className="min-h-screen bg-midnight-black text-white flex items-center justify-center">
-        <p className="text-gray-400">로그인 확인 중...</p>
-      </div>
-    )
-  }
-
   const matchedBoard = useMemo(() => {
     const keyword = decodedKeyword
     return (
@@ -73,6 +58,14 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   }, [decodedKeyword])
 
   useEffect(() => {
+    if (!useSupabase || authLoading) return
+    if (!authUser) {
+      const path = `/board/${encodeURIComponent(decodedKeyword)}`
+      router.replace(`/login?returnUrl=${encodeURIComponent(path)}`)
+    }
+  }, [useSupabase, authLoading, authUser, router, decodedKeyword])
+
+  useEffect(() => {
     if (!matchedBoard) {
       setShowToast(true)
       const timer = setTimeout(() => setShowToast(false), 2800)
@@ -80,7 +73,6 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     }
   }, [matchedBoard])
 
-  // Supabase 사용 시: API로 보드 조회 (has_password 포함). 404면 키워드로 생성 시도 후 리다이렉트
   useEffect(() => {
     if (!useSupabase) {
       setBoardLoading(false)
@@ -91,7 +83,6 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
       const res = await fetch(`/api/board/${encodeURIComponent(decodedKeyword)}`)
       if (cancelled) return
       if (res.status === 404) {
-        // 키워드로 새 방 생성 후 생성된 번호로 이동
         const createRes = await fetch('/api/board/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -154,7 +145,15 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     }
   }
 
-  // Supabase 미사용 시: 매칭된 목 보드가 있으면 PulseFeed, 없으면 키워드로 PulseFeed(빈 방)
+  // ——— 조건부 렌더링: 모든 훅 선언 이후에만 실행 ———
+  if (useSupabase && (authLoading || !authUser)) {
+    return (
+      <div className="min-h-screen bg-midnight-black text-white flex items-center justify-center">
+        <p className="text-gray-400">로그인 확인 중...</p>
+      </div>
+    )
+  }
+
   if (!useSupabase) {
     const boardId = matchedBoard?.id ?? decodedKeyword
     const numFromId = boardId.match(/^board-(\d+)$/i)?.[1]

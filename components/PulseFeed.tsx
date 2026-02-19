@@ -45,7 +45,12 @@ export interface Comment {
   createdAt: Date
 }
 
-export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userCharacter, userNickname, userId, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
+export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFromUrl, userCharacter: rawUserCharacter, userNickname: rawUserNickname, userId, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
+  /** 방/유저 정보가 아직 준비되지 않았을 때를 대비한 안전한 기본값 (클라이언트 에러 방지) */
+  const boardId = typeof rawBoardId === 'string' && rawBoardId.trim() !== '' ? rawBoardId.trim() : ''
+  const userNickname = rawUserNickname ?? '게스트'
+  const userCharacter = rawUserCharacter ?? 0
+
   const useSupabase = isSupabaseConfigured()
   /** Supabase 사용 시 반드시 UUID인 경우만 API 호출 (400 에러 방지) */
   const useSupabaseWithUuid = useSupabase && isValidUuid(boardId)
@@ -88,19 +93,25 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
     setHourglassesState(getHourglasses())
   }, [])
 
-  /** 방 입장 시 해당 방의 세션 닉네임 있으면 pre-fill, 모달은 항상 표시 */
+  /** 방 입장 시 해당 방의 세션 닉네임 있으면 pre-fill. boardId가 준비된 후에만 모달 표시 (에러 방지) */
   useEffect(() => {
     if (typeof window === 'undefined') return
+    if (!boardId) {
+      setEffectiveNickname(userNickname)
+      setShowNicknameModal(false)
+      return
+    }
     try {
       const key = `${ROOM_NICKNAME_KEY_PREFIX}${boardId}`
       const saved = (window.sessionStorage.getItem(key) ?? '').trim()
       setNicknameInput(saved)
-      setEffectiveNickname(saved)
+      setEffectiveNickname(saved || userNickname)
       setShowNicknameModal(true)
     } catch {
+      setEffectiveNickname(userNickname)
       setShowNicknameModal(true)
     }
-  }, [boardId])
+  }, [boardId, userNickname])
 
   useEffect(() => {
     if (!noCopyToast) return
@@ -151,7 +162,7 @@ export default function PulseFeed({ boardId, boardPublicId, roomIdFromUrl, userC
   const { messages, send, toggleHeart, sending } = useBoardChat(boardId, {
     userCharacter,
     userNickname: authorNickname,
-    enabled: useSupabaseWithUuid,
+    enabled: useSupabaseWithUuid && !!boardId,
     userId: userId ?? undefined,
   })
 
