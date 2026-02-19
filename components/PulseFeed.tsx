@@ -7,6 +7,7 @@ import { mockBoards, mockPosts, getTimeProgress, extendBoardLifespan, formatRema
 import type { Post, Board } from '@/lib/mockData'
 import { isSupabaseConfigured, isValidUuid } from '@/lib/supabase/client'
 import { useBoardChat } from '@/lib/supabase/useBoardChat'
+import { checkNicknameAvailability, getNicknamesInBoard } from '@/lib/supabase/messages'
 import { uploadChatImage } from '@/lib/supabase/storage'
 import { extendBoardExpiry, EXTEND_MS_PER_HOURGLASS } from '@/lib/supabase/boards'
 import { recordContribution, getTopContributors, subscribeToContributions, type TopContributor } from '@/lib/supabase/contributions'
@@ -90,6 +91,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [showNicknameModal, setShowNicknameModal] = useState(false)
   const [effectiveNickname, setEffectiveNickname] = useState('')
   const [nicknameInput, setNicknameInput] = useState('')
+  /** 닉네임 제출 시 중복 검사 로딩 */
+  const [nicknameSubmitLoading, setNicknameSubmitLoading] = useState(false)
+  /** 닉네임 제출 시 중복 경고 메시지 */
+  const [nicknameError, setNicknameError] = useState<string | null>(null)
+  /** 실시간 닉네임 사용 가능 여부: idle | checking | available | taken */
+  const [nicknameCheckStatus, setNicknameCheckStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+  /** 현재 방에서 활동 중인 닉네임 목록 (모달용) */
+  const [roomNicknames, setRoomNicknames] = useState<string[]>([])
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
   const [deleteConfirmMessageId, setDeleteConfirmMessageId] = useState<string | null>(null)
@@ -129,6 +138,38 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     setWritePreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [writeImageFile])
+
+  /** 닉네임 모달이 열릴 때 해당 방 참여자 명단 조회 및 에러/상태 초기화 */
+  useEffect(() => {
+    if (showNicknameModal && useSupabaseWithUuid && boardId) {
+      setNicknameError(null)
+      setNicknameCheckStatus('idle')
+      getNicknamesInBoard(boardId).then(setRoomNicknames)
+    } else if (!showNicknameModal) {
+      setRoomNicknames([])
+    }
+  }, [showNicknameModal, useSupabaseWithUuid, boardId])
+
+  /** 실시간 닉네임 사용 가능 여부 (디바운스) */
+  const nicknameCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const name = nicknameInput.trim()
+    if (!name || !useSupabaseWithUuid || !boardId || !showNicknameModal) {
+      setNicknameCheckStatus('idle')
+      return
+    }
+    if (nicknameCheckTimeoutRef.current) clearTimeout(nicknameCheckTimeoutRef.current)
+    nicknameCheckTimeoutRef.current = setTimeout(() => {
+      nicknameCheckTimeoutRef.current = null
+      setNicknameCheckStatus('checking')
+      checkNicknameAvailability(boardId, name, userId ?? null)
+        .then((r) => setNicknameCheckStatus(r.available ? 'available' : 'taken'))
+        .catch(() => setNicknameCheckStatus('idle'))
+    }, 450)
+    return () => {
+      if (nicknameCheckTimeoutRef.current) clearTimeout(nicknameCheckTimeoutRef.current)
+    }
+  }, [nicknameInput, useSupabaseWithUuid, boardId, showNicknameModal, userId])
 
   /** 방 입장 시 세션/워프존 저장 닉네임 있으면 pre-fill; 워프존으로 입장 시 모달 스킵 */
   useEffect(() => {
@@ -549,9 +590,22 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [])
 
-  const handleNicknameSubmit = useCallback(() => {
+  const handleNicknameSubmit = useCallback(async () => {
     const name = nicknameInput.trim()
     if (!name) return
+    setNicknameError(null)
+
+    if (useSupabaseWithUuid) {
+      setNicknameSubmitLoading(true)
+      const { available } = await checkNicknameAvailability(boardId, name, userId ?? null)
+      if (!available) {
+        setNicknameError('이미 이 방에서 사용 중인 닉네임입니다.')
+        setNicknameSubmitLoading(false)
+        return
+      }
+      setNicknameSubmitLoading(false)
+    }
+
     if (typeof window !== 'undefined') {
       try {
         window.sessionStorage.setItem(`${ROOM_NICKNAME_KEY_PREFIX}${boardId}`, name)
@@ -566,7 +620,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
     setEffectiveNickname(name)
     setShowNicknameModal(false)
-  }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt])
+  }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId])
 
   return (
     <div className="min-h-screen bg-midnight-black text-white safe-bottom pt-6">
@@ -594,32 +648,56 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               <h2 className="text-lg sm:text-xl font-bold text-center mb-1 text-white" style={{ textShadow: '0 0 12px rgba(255,255,255,0.15)' }}>
                 닉네임 설정
               </h2>
-              <p className="text-center text-gray-400 text-sm mb-4">
+              <p className="text-center text-gray-400 text-sm mb-2">
                 이 방에서 당신의 부캐(이름)를 정해주세요
               </p>
+              {useSupabaseWithUuid && roomNicknames.length > 0 && (
+                <p className="text-center text-gray-500 text-xs mb-3 truncate px-1" title={roomNicknames.join(', ')}>
+                  현재 활동 중인 부캐들: {roomNicknames.slice(0, 8).join(', ')}{roomNicknames.length > 8 ? '…' : ''}
+                </p>
+              )}
               <input
                 type="text"
                 value={nicknameInput}
-                onChange={(e) => setNicknameInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleNicknameSubmit()}
+                onChange={(e) => { setNicknameInput(e.target.value); setNicknameError(null) }}
+                onKeyDown={(e) => e.key === 'Enter' && !nicknameSubmitLoading && handleNicknameSubmit()}
                 placeholder="닉네임 입력"
                 maxLength={20}
-                className="w-full px-4 py-3 rounded-xl bg-black/60 border-2 border-[#FF6B00]/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base mb-4"
+                className="w-full px-4 py-3 rounded-xl bg-black/60 border-2 border-[#FF6B00]/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base mb-2"
                 style={{ boxShadow: '0 0 12px rgba(255,107,0,0.15)' }}
               />
+              {useSupabaseWithUuid && nicknameInput.trim() && (
+                <p className="text-xs mb-3 min-h-[1rem]">
+                  {nicknameCheckStatus === 'checking' && <span className="text-gray-500">확인 중...</span>}
+                  {nicknameCheckStatus === 'available' && <span className="text-emerald-400">사용 가능한 닉네임입니다</span>}
+                  {nicknameCheckStatus === 'taken' && <span className="text-amber-400">이미 사용 중입니다</span>}
+                </p>
+              )}
+              {nicknameError && (
+                <p className="text-sm text-red-400 mb-3" role="alert">
+                  {nicknameError}
+                </p>
+              )}
               <motion.button
                 type="button"
-                onClick={handleNicknameSubmit}
-                disabled={!nicknameInput.trim()}
+                onClick={() => handleNicknameSubmit()}
+                disabled={!nicknameInput.trim() || nicknameSubmitLoading}
                 className="w-full py-3.5 rounded-xl font-bold text-base text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
-                  background: nicknameInput.trim() ? '#FF6B00' : '#555',
-                  boxShadow: nicknameInput.trim() ? '0 0 14px rgba(255,107,0,0.4), 0 0 24px rgba(255,107,0,0.2)' : 'none',
+                  background: nicknameInput.trim() && !nicknameSubmitLoading ? '#FF6B00' : '#555',
+                  boxShadow: nicknameInput.trim() && !nicknameSubmitLoading ? '0 0 14px rgba(255,107,0,0.4), 0 0 24px rgba(255,107,0,0.2)' : 'none',
                 }}
-                whileHover={nicknameInput.trim() ? { scale: 1.02 } : {}}
-                whileTap={nicknameInput.trim() ? { scale: 0.98 } : {}}
+                whileHover={nicknameInput.trim() && !nicknameSubmitLoading ? { scale: 1.02 } : {}}
+                whileTap={nicknameInput.trim() && !nicknameSubmitLoading ? { scale: 0.98 } : {}}
               >
-                확인
+                {nicknameSubmitLoading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden />
+                    확인 중...
+                  </span>
+                ) : (
+                  '확인'
+                )}
               </motion.button>
             </motion.div>
           </motion.div>

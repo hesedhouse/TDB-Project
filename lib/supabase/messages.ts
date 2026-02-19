@@ -18,6 +18,64 @@ export async function fetchMessages(boardId: string): Promise<Message[]> {
   return (data as DbMessage[]).map(dbMessageToMessage)
 }
 
+/** 해당 방에서 닉네임 사용 여부 확인. 본인(userId 일치)이 이미 쓴 경우 통과. */
+export async function checkNicknameAvailability(
+  boardId: string,
+  nickname: string,
+  currentUserId: string | null | undefined
+): Promise<{ available: boolean; isOwn?: boolean }> {
+  const supabase = createClient()
+  if (!supabase) return { available: true }
+
+  const name = (nickname || '').trim()
+  if (!name) return { available: true }
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('user_id')
+    .eq('board_id', boardId)
+    .eq('author_nickname', name)
+    .limit(50)
+
+  if (error) {
+    console.error('checkNicknameAvailability error:', error)
+    return { available: true }
+  }
+  if (!data?.length) return { available: true }
+
+  const userIds = [...new Set(data.map((r: { user_id?: string | null }) => r.user_id ?? null))]
+  const onlyCurrentUser =
+    currentUserId != null &&
+    currentUserId !== '' &&
+    userIds.length === 1 &&
+    userIds[0] === currentUserId
+  if (onlyCurrentUser) return { available: true, isOwn: true }
+
+  return { available: false }
+}
+
+/** 해당 방에서 메시지를 남긴 적 있는 닉네임 목록 (중복 제거). */
+export async function getNicknamesInBoard(boardId: string): Promise<string[]> {
+  const supabase = createClient()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('author_nickname')
+    .eq('board_id', boardId)
+
+  if (error) {
+    console.error('getNicknamesInBoard error:', error)
+    return []
+  }
+  const names = new Set<string>()
+  for (const row of data ?? []) {
+    const n = (row as { author_nickname?: string }).author_nickname
+    if (typeof n === 'string' && n.trim()) names.add(n.trim())
+  }
+  return [...names].sort((a, b) => a.localeCompare(b))
+}
+
 export async function sendMessage(params: {
   boardId: string
   authorCharacter: number
