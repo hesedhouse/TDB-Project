@@ -109,7 +109,8 @@ async function updateHeartCount(
 export function subscribeMessages(
   boardId: string,
   onInsert: (message: Message) => void,
-  onUpdate: (id: string, heartCount: number) => void
+  onUpdate: (id: string, heartCount: number) => void,
+  onDelete?: (messageId: string) => void
 ): () => void {
   const supabase = createClient()
   if (!supabase) return () => {}
@@ -142,9 +143,56 @@ export function subscribeMessages(
         onUpdate(row.id, row.heart_count ?? 0)
       }
     )
-    .subscribe()
+  if (onDelete) {
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'messages',
+        filter: `board_id=eq.${boardId}`,
+      },
+      (payload) => {
+        const old = payload.old as { id?: string }
+        if (old?.id) onDelete(old.id)
+      }
+    )
+  }
+  channel.subscribe()
 
   return () => {
     supabase.removeChannel(channel)
   }
+}
+
+/** 메시지 삭제. 성공 시 true */
+export async function deleteMessage(messageId: string): Promise<boolean> {
+  const supabase = createClient()
+  if (!supabase) return false
+  const { error } = await supabase.from('messages').delete().eq('id', messageId)
+  if (error) {
+    console.error('deleteMessage error:', error)
+    return false
+  }
+  return true
+}
+
+/** 메시지 내용 수정. 성공 시 갱신된 메시지 반환 */
+export async function updateMessage(
+  messageId: string,
+  content: string
+): Promise<Message | null> {
+  const supabase = createClient()
+  if (!supabase) return null
+  const { data, error } = await supabase
+    .from('messages')
+    .update({ content: content.trim() })
+    .eq('id', messageId)
+    .select()
+    .single()
+  if (error) {
+    console.error('updateMessage error:', error)
+    return null
+  }
+  return dbMessageToMessage(data as DbMessage)
 }

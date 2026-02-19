@@ -86,6 +86,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [showNicknameModal, setShowNicknameModal] = useState(false)
   const [effectiveNickname, setEffectiveNickname] = useState('')
   const [nicknameInput, setNicknameInput] = useState('')
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingContent, setEditingContent] = useState('')
+  const [deleteConfirmMessageId, setDeleteConfirmMessageId] = useState<string | null>(null)
   const feedEndRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -175,7 +178,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   /** 글/댓글 작성자 이름: 모달 또는 localStorage 저장값 우선, 없으면 prop(게스트) */
   const authorNickname = (effectiveNickname || '').trim() || userNickname
 
-  const { messages, send, toggleHeart, sending } = useBoardChat(boardId, {
+  const { messages, send, toggleHeart, deleteMessage, updateMessage, sending } = useBoardChat(boardId, {
     userCharacter,
     userNickname: authorNickname,
     enabled: useSupabaseWithUuid && !!boardId,
@@ -608,6 +611,52 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             </motion.div>
           </motion.div>
         )}
+        {deleteConfirmMessageId && (
+          <motion.div
+            className="fixed inset-0 z-[95] flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ background: 'rgba(0,0,0,0.88)' }}
+            onClick={() => setDeleteConfirmMessageId(null)}
+          >
+            <motion.div
+              className="w-full max-w-sm rounded-2xl p-6"
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              style={{
+                background: '#0a0a0a',
+                border: '2px solid rgba(255,107,0,0.5)',
+                boxShadow: '0 0 24px rgba(255,107,0,0.2)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-center text-white font-medium mb-6">정말 삭제하시겠습니까?</p>
+              <div className="flex gap-3">
+                <motion.button
+                  type="button"
+                  onClick={() => setDeleteConfirmMessageId(null)}
+                  className="flex-1 py-2.5 rounded-xl border-2 border-gray-500 text-gray-300 hover:border-gray-400 transition-colors text-sm font-medium"
+                >
+                  취소
+                </motion.button>
+                <motion.button
+                  type="button"
+                  onClick={async () => {
+                    if (deleteConfirmMessageId) {
+                      await deleteMessage(deleteConfirmMessageId)
+                      setDeleteConfirmMessageId(null)
+                    }
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-neon-orange text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                >
+                  삭제
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
         {isExpired && (
           <motion.div
             className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 px-4"
@@ -853,10 +902,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   ? b.heartCount - a.heartCount
                   : a.createdAt.getTime() - b.createdAt.getTime()
               )
-              .map((msg) => (
+              .map((msg) => {
+                const isOwnMessage = userId != null && msg.userId != null && userId === msg.userId
+                return (
                 <motion.div
                   key={msg.id}
-                  className="post-card p-4 sm:p-5"
+                  className="post-card p-4 sm:p-5 relative"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25 }}
@@ -867,12 +918,64 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                       <div className="font-semibold text-white">{msg.authorNickname}</div>
                       <div className="text-xs text-gray-400">{formatTimeAgo(msg.createdAt)}</div>
                     </div>
+                    {isOwnMessage && (
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <motion.button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setEditingMessageId(msg.id); setEditingContent(msg.content ?? '') }}
+                          className="p-2 rounded-lg text-neon-orange hover:bg-neon-orange/10 transition-colors"
+                          title="수정"
+                        >
+                          <span className="text-sm">✏️</span>
+                        </motion.button>
+                        <motion.button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setDeleteConfirmMessageId(msg.id) }}
+                          className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="삭제"
+                        >
+                          <span className="text-sm">🗑️</span>
+                        </motion.button>
+                      </div>
+                    )}
                   </div>
-                  {(msg.content?.trim() ?? '') !== '' && (
+                  {editingMessageId === msg.id ? (
+                    <div className="mb-3">
+                      <textarea
+                        value={editingContent}
+                        onChange={(e) => setEditingContent(e.target.value)}
+                        className="w-full min-h-[80px] px-3 py-2 rounded-xl bg-black/40 border-2 border-neon-orange/40 focus:border-neon-orange focus:outline-none text-white text-sm"
+                        placeholder="내용"
+                        autoFocus
+                      />
+                      <div className="flex gap-2 mt-2">
+                        <motion.button
+                          type="button"
+                          onClick={() => setEditingMessageId(null)}
+                          className="px-3 py-1.5 rounded-lg text-sm text-gray-400 border border-gray-500 hover:border-gray-400"
+                        >
+                          취소
+                        </motion.button>
+                        <motion.button
+                          type="button"
+                          onClick={async () => {
+                            const trimmed = editingContent.trim()
+                            if (trimmed !== (msg.content ?? '').trim()) {
+                              await updateMessage(msg.id, trimmed)
+                            }
+                            setEditingMessageId(null)
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neon-orange text-white hover:opacity-90"
+                        >
+                          저장
+                        </motion.button>
+                      </div>
+                    </div>
+                  ) : (msg.content?.trim() ?? '') !== '' ? (
                     <div className="mb-3 text-white/95 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
                       {msg.content}
                     </div>
-                  )}
+                  ) : null}
                   {msg.imageUrl && (
                     <div className="mb-3 overflow-x-auto scrollbar-hide">
                       <div className="flex gap-3" style={{ width: 'max-content' }}>
@@ -980,7 +1083,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                     </div>
                   )}
                 </motion.div>
-              ))}
+              ); })}
             {messages.length === 0 && (
               <div className="text-center py-14 px-4">
                 <p className="text-white/90 text-base sm:text-lg font-medium mb-1">

@@ -26,6 +26,8 @@ export interface Message {
   imageUrl?: string | null
   images?: string[]
   links?: { url: string; type: string }[]
+  /** 작성자 Auth UID (본인 메시지 수정/삭제 판별용) */
+  userId?: string | null
 }
 
 export function dbMessageToMessage(row: DbMessage): Message {
@@ -40,5 +42,6 @@ export function dbMessageToMessage(row: DbMessage): Message {
     imageUrl: row.image_url ?? undefined,
     images: row.images ?? undefined,
     links: row.links ?? undefined,
+    userId: row.user_id ?? undefined,
   }
 }

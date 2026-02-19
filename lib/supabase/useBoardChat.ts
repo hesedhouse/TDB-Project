@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { fetchMessages, sendMessage, incrementHeart, decrementHeart, subscribeMessages } from './messages'
+import { fetchMessages, sendMessage, incrementHeart, decrementHeart, subscribeMessages, deleteMessage as deleteMessageApi, updateMessage as updateMessageApi } from './messages'
 import type { Message } from './types'
 
 /**
@@ -41,6 +41,9 @@ export function useBoardChat(
         setMessages((prev) =>
           prev.map((m) => (m.id === id ? { ...m, heartCount } : m))
         )
+      },
+      (deletedId) => {
+        setMessages((prev) => prev.filter((m) => m.id !== deletedId))
       }
     )
 
@@ -94,5 +97,25 @@ export function useBoardChat(
     []
   )
 
-  return { messages, send, toggleHeart, sending }
+  const deleteMessage = useCallback(async (messageId: string): Promise<boolean> => {
+    const ok = await deleteMessageApi(messageId)
+    if (ok) setMessages((prev) => prev.filter((m) => m.id !== messageId))
+    return ok
+  }, [])
+
+  const updateMessage = useCallback(
+    async (messageId: string, content: string): Promise<Message | null> => {
+      const updated = await updateMessageApi(messageId, content)
+      if (updated) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, content: updated.content } : m))
+        )
+        return updated
+      }
+      return null
+    },
+    []
+  )
+
+  return { messages, send, toggleHeart, deleteMessage, updateMessage, sending }
 }
