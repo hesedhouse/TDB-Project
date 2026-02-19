@@ -13,6 +13,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/supabase/auth'
 import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
 import { useTick } from '@/lib/TickContext'
+import { getActiveSessions, removeExpiredSessions, removeSessionByBoardId, type ActiveSession } from '@/lib/activeSessions'
+import { formatRemainingTimer } from '@/lib/mockData'
 import type { Board } from '@/lib/mockData'
 
 /** 남은 시간 라벨. 하이드레이션 방지: 마운트된 후에만 시간 표시(서버/클라이언트 동일 초기값) */
@@ -54,6 +56,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const [liveBoards] = useState<Board[]>(filterActiveBoards(mockBoards))
   const [warpingBoardId, setWarpingBoardId] = useState<string | null>(null)
   const [warpingKeyword, setWarpingKeyword] = useState<string | null>(null)
+  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([])
   const [hourglasses, setHourglasses] = useState(0)
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [roomPassword, setRoomPassword] = useState('')
@@ -61,6 +64,20 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
   useEffect(() => {
     setHourglasses(getHourglasses())
+  }, [])
+
+  useEffect(() => {
+    removeExpiredSessions()
+    setActiveSessions(getActiveSessions())
+  }, [])
+
+  /** 만료된 방 자동 제거: 1초마다 갱신 */
+  useEffect(() => {
+    const id = setInterval(() => {
+      removeExpiredSessions()
+      setActiveSessions(getActiveSessions())
+    }, 1000)
+    return () => clearInterval(id)
   }, [])
 
   // 초기 플로팅 태그: boards + trending_keywords 혼합 (Supabase 사용 시)
@@ -160,6 +177,22 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       setWarpingKeyword(null)
     }, 500)
   }
+
+  /** 워프존 세션 카드 클릭 → 해당 방으로 이동 (저장된 닉네임으로 바로 입장) */
+  const handleWarpToSession = useCallback((session: ActiveSession) => {
+    setWarpingKeyword(session.keyword)
+    setTimeout(() => {
+      router.push(`/board/${encodeURIComponent(session.keyword)}`)
+      setWarpingKeyword(null)
+    }, 400)
+  }, [router])
+
+  /** 워프존에서 방 제거 */
+  const handleRemoveSession = useCallback((e: React.MouseEvent, session: ActiveSession) => {
+    e.stopPropagation()
+    removeSessionByBoardId(session.boardId)
+    setActiveSessions((prev) => prev.filter((s) => s.boardId !== session.boardId))
+  }, [])
 
   /** 방 만들기/시작하기: 방 제목(keyword) + 비밀번호(선택)를 API로 전달 → boards에 저장 후 생성된 ID(public_id)로 즉시 이동 */
   const handleCreateOrEnterRoom = useCallback(async () => {
@@ -445,85 +478,61 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         </div>
       </section>
 
-      {/* Warp Zone */}
+      {/* Warp Zone: localStorage 활성 세션 (방 입장 이력 + 닉네임), X로 제거 */}
       <section className="mb-7">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
           <span className="text-neon-orange">⚡</span>
           Warp Zone
         </h2>
         <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide relative">
-          {userBoards.map((board) => {
-            const expiresAt = board.expiresAt instanceof Date ? board.expiresAt : new Date(board.expiresAt)
-            const isWarping = warpingBoardId === board.id
-            return (
-              <motion.div
-                key={board.id}
-                className="flex-shrink-0 glass-strong rounded-2xl p-4 w-[78vw] max-w-[22rem] sm:w-80 cursor-pointer relative border border-white/10 shadow-lg shadow-black/20"
-                onClick={() => handleWarp(board)}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                animate={isWarping ? {
-                  scale: [1, 1.2, 0],
-                  opacity: [1, 0.8, 0],
-                  rotate: [0, 180, 360],
-                } : {}}
-                transition={{ duration: 0.6, ease: 'easeOut' }}
-              >
-                {isWarping && (
-                  <>
-                    <motion.div
-                      className="absolute inset-0 flex items-center justify-center z-10"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: [0, 1, 0] }}
-                      transition={{ duration: 0.6 }}
-                    >
-                      <motion.div
-                        className="text-5xl text-neon-orange neon-glow"
-                        animate={{ 
-                          scale: [1, 1.5, 1],
-                          rotate: [0, 360]
-                        }}
-                        transition={{ duration: 0.6 }}
-                      >
-                        ⚡
-                      </motion.div>
-                    </motion.div>
-                    {/* Pixel Burst Effect */}
-                    {Array.from({ length: 8 }).map((_, i) => (
-                      <motion.div
-                        key={i}
-                        className="absolute w-2 h-2 bg-neon-orange"
-                        style={{
-                          left: '50%',
-                          top: '50%',
-                        }}
-                        initial={{ opacity: 1, scale: 0 }}
-                        animate={{
-                          opacity: [1, 0],
-                          scale: [0, 2],
-                          x: Math.cos((i * Math.PI * 2) / 8) * 50,
-                          y: Math.sin((i * Math.PI * 2) / 8) * 50,
-                        }}
-                        transition={{ duration: 0.6, ease: 'easeOut' }}
-                      />
-                    ))}
-                  </>
-                )}
-                <div className="flex items-center gap-3 mb-3">
-                  <DotCharacter characterId={0} size={32} />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate text-blue-400">{displayBoardName(board.name)}</div>
-                    <div className="text-xs">
-                      <BoardTimeLabel expiresAt={expiresAt} />
+          {activeSessions.length === 0 ? (
+            <p className="text-gray-500 text-sm py-4">방에 입장하면 여기에 표시됩니다.</p>
+          ) : (
+            activeSessions.map((session) => {
+              const isWarping = warpingKeyword === session.keyword
+              return (
+                <motion.div
+                  key={`${session.boardId}-${session.visitedAt}`}
+                  className="flex-shrink-0 glass-strong rounded-2xl p-4 w-[78vw] max-w-[22rem] sm:w-80 cursor-pointer relative border border-white/10 shadow-lg shadow-black/20"
+                  onClick={() => handleWarpToSession(session)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  animate={isWarping ? { opacity: [1, 0.7], scale: [1, 1.05] } : {}}
+                  transition={{ duration: 0.3 }}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemoveSession(e, session)}
+                    className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors z-10 text-sm"
+                    aria-label="워프존 목록에서 제거"
+                  >
+                    <span className="leading-none">×</span>
+                  </button>
+                  <div className="flex items-center gap-3 mb-1.5 pr-8">
+                    <DotCharacter characterId={0} size={28} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm truncate text-blue-400">
+                        {session.boardName.startsWith('#') ? session.boardName : `#${session.boardName}`}
+                      </div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">
+                        <span className="text-neon-orange/90">닉네임: {session.nickname}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="text-xs text-neon-orange">
-                  지금 입장하기
-                </div>
-              </motion.div>
-            )
-          })}
+                  {session.expiresAt != null && session.expiresAt > Date.now() ? (
+                    <div className="text-[11px] text-gray-500 mt-1">
+                      폭파까지 <span className="font-mono text-neon-orange/90 tabular-nums">{formatRemainingTimer(new Date(session.expiresAt)).label}</span>
+                    </div>
+                  ) : session.expiresAt != null ? null : (
+                    <div className="text-[11px] text-gray-500 mt-1">—</div>
+                  )}
+                  <div className="text-[11px] text-neon-orange mt-1">
+                    클릭 시 바로 입장
+                  </div>
+                </motion.div>
+              )
+            })
+          )}
         </div>
       </section>
 

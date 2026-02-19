@@ -7,6 +7,7 @@ import PulseFeed from '@/components/PulseFeed'
 import { mockBoards } from '@/lib/mockData'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/supabase/auth'
+import { removeSessionByKeyword } from '@/lib/activeSessions'
 
 const UNLOCK_STORAGE_PREFIX = 'tdb-unlocked-'
 
@@ -100,10 +101,12 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
         }
         const errBody = await createRes.json().catch(() => ({}))
         console.error('[board] 404 후 방 생성 실패:', createRes.status, errBody)
+        removeSessionByKeyword(decodedKeyword)
         setBoardLoading(false)
         return
       }
       if (!res.ok) {
+        removeSessionByKeyword(decodedKeyword)
         setBoardLoading(false)
         return
       }

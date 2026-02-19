@@ -12,6 +12,7 @@ import { extendBoardExpiry, EXTEND_MS_PER_HOURGLASS } from '@/lib/supabase/board
 import { recordContribution, getTopContributors, subscribeToContributions, type TopContributor } from '@/lib/supabase/contributions'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
 import { shareBoard } from '@/lib/shareBoard'
+import { addOrUpdateSession, findSession } from '@/lib/activeSessions'
 import type { Message } from '@/lib/supabase/types'
 
 interface PulseFeedProps {
@@ -99,7 +100,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     setNicknameModalMounted(true)
   }, [])
 
-  /** 방 입장 시 해당 방의 세션 닉네임 있으면 pre-fill. boardId 준비 후 + 마운트 후에만 모달 표시 */
+  /** 방 입장 시 세션/워프존 저장 닉네임 있으면 pre-fill; 워프존으로 입장 시 모달 스킵 */
   useEffect(() => {
     if (!nicknameModalMounted || typeof window === 'undefined') return
     if (!boardId) {
@@ -109,7 +110,16 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
     try {
       const key = `${ROOM_NICKNAME_KEY_PREFIX}${boardId}`
-      const saved = (window.sessionStorage.getItem(key) ?? '').trim()
+      let saved = (window.sessionStorage.getItem(key) ?? '').trim()
+      const fromWarp = findSession(boardId, roomIdFromUrl ?? undefined)
+      if (fromWarp?.nickname) {
+        saved = fromWarp.nickname
+        window.sessionStorage.setItem(key, saved)
+        setNicknameInput(saved)
+        setEffectiveNickname(saved)
+        setShowNicknameModal(false)
+        return
+      }
       setNicknameInput(saved)
       setEffectiveNickname(saved || userNickname)
       setShowNicknameModal(true)
@@ -117,7 +127,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setEffectiveNickname(userNickname)
       setShowNicknameModal(true)
     }
-  }, [nicknameModalMounted, boardId, userNickname])
+  }, [nicknameModalMounted, boardId, userNickname, roomIdFromUrl])
 
   useEffect(() => {
     if (!noCopyToast) return
@@ -530,10 +540,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       try {
         window.sessionStorage.setItem(`${ROOM_NICKNAME_KEY_PREFIX}${boardId}`, name)
       } catch {}
+      addOrUpdateSession({
+        boardId,
+        boardName: (initialBoardName ?? '').trim() || `#${boardId}`,
+        nickname: name,
+        keyword: (roomIdFromUrl ?? boardId).toString().trim(),
+        expiresAt: initialExpiresAt != null ? new Date(initialExpiresAt).getTime() : undefined,
+      })
     }
     setEffectiveNickname(name)
     setShowNicknameModal(false)
-  }, [nicknameInput, boardId])
+  }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt])
 
   return (
     <div className="min-h-screen bg-midnight-black text-white safe-bottom">
