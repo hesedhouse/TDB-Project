@@ -254,7 +254,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom">
       {/* Header: 좌측 TDB/떴다방, 우측 이메일·로그아웃·모래시계 */}
-      <header className="flex items-center justify-between mb-6 pt-12 safe-top">
+      <header className="flex items-center justify-between mb-4 pt-12 safe-top">
         <div className="flex items-center gap-3">
           <motion.div
             className="text-2xl sm:text-3xl font-bold pixel-art"
