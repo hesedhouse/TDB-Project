@@ -254,10 +254,10 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom">
       {/* Header: 좌측 TDB/떴다방, 우측 이메일·로그아웃·모래시계 */}
-      <header className="flex items-center justify-between mb-5 pt-8 safe-top">
-        <div className="flex items-center gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-2 mb-5 pt-4 sm:pt-8 safe-top">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
           <motion.div
-            className="text-2xl sm:text-3xl font-bold pixel-art"
+            className="text-xl sm:text-3xl font-bold pixel-art flex-shrink-0"
             style={{
               color: '#FF5F00',
               textShadow: '0 0 10px #FF5F00, 0 0 20px #FF5F00',
@@ -267,12 +267,12 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           >
             TDB
           </motion.div>
-          <span className="text-xs sm:text-sm text-gray-400">떴다방</span>
+          <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0">떴다방</span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0">
+        <div className="flex items-center justify-end gap-1.5 sm:gap-3 flex-shrink-0 min-w-0">
           {useSupabase && user?.email && (
             <>
-              <span className="text-gray-300 text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[160px]" title={user.email}>
+              <span className="hidden sm:inline text-gray-300 text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[160px]" title={user.email}>
                 {maskEmail(user.email)}
               </span>
               <motion.button

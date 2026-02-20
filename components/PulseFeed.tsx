@@ -814,24 +814,24 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       </AnimatePresence>
 
       {/* Top Bar with Progress */}
-      <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top pt-8">
-        <div className="px-3 py-3 sm:p-4">
-          <div className="flex items-center justify-between mb-2 gap-2">
-            <button
-              onClick={onBack}
-              className="text-gray-400 hover:text-white text-sm sm:text-base flex-shrink-0"
-            >
-              ← 뒤로
-            </button>
-            <div className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3 flex-wrap items-center">
-              <h1 className="text-base sm:text-xl font-bold truncate min-w-0 text-white">
+      <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top pt-4 sm:pt-8">
+        <div className="px-2 py-2 sm:px-4 sm:py-4">
+          <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-2">
+            {/* 왼쪽 그룹: 뒤로 + 방 제목 + No. 배지 */}
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
+              <button
+                onClick={onBack}
+                className="text-gray-400 hover:text-white text-xs sm:text-base flex-shrink-0"
+              >
+                ← 뒤로
+              </button>
+              <h1 className="text-sm sm:text-xl font-bold truncate min-w-0 text-white">
                 {headerTitle}
               </h1>
-              {/* 오렌지 No. room_no 배지: DB room_no 반영, 로딩 중엔 … 표시, 클릭 시 방 링크 복사 */}
               <button
                 type="button"
                 onClick={handleCopyRoomLink}
-                className="inline-flex items-center shrink-0 text-xs sm:text-sm font-bold select-none transition-all hover:brightness-110 rounded-md px-2 py-0.5 cursor-pointer border-0"
+                className="inline-flex items-center shrink-0 text-[10px] sm:text-sm font-bold select-none transition-all hover:brightness-110 rounded px-1.5 py-0.5 sm:px-2 sm:py-0.5 cursor-pointer border-0"
                 style={{
                   background: '#FF6B00',
                   color: '#fff',
@@ -841,49 +841,58 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 aria-label={roomNoReady ? `방 번호 No. ${roomNo} - 클릭 시 방 링크 복사` : '방 링크 복사'}
               >
                 {roomNoReady ? (
-                  <span className="tabular-nums">No. {roomNo}</span>
+                  <span className="tabular-nums whitespace-nowrap">No.{roomNo}</span>
                 ) : (
                   <motion.span
-                    className="tabular-nums opacity-80"
+                    className="tabular-nums opacity-80 whitespace-nowrap"
                     animate={{ opacity: [0.6, 1, 0.6] }}
                     transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
                   >
-                    No. …
+                    No.…
                   </motion.span>
                 )}
               </button>
             </div>
-            <motion.button
-              type="button"
-              onClick={handleShare}
-              className="flex-shrink-0 p-2 rounded-xl glass border border-neon-orange/30 text-neon-orange hover:bg-neon-orange/10 transition-colors"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              title="공유하기"
-              aria-label="공유하기"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-              </svg>
-            </motion.button>
-            <div className="text-sm text-amber-400 flex items-center gap-1.5 flex-shrink-0">
-              <span className="text-base leading-none flex-shrink-0" aria-hidden>⏳</span>
-              <span>보유 모래시계: {hourglasses}개</span>
+            {/* 오른쪽 그룹: 공유 + 모래시계 + 닉네임 */}
+            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+              <motion.button
+                type="button"
+                onClick={handleShare}
+                className="flex-shrink-0 p-1.5 sm:p-2 rounded-lg sm:rounded-xl glass border border-neon-orange/30 text-neon-orange hover:bg-neon-orange/10 transition-colors"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                title="공유하기"
+                aria-label="공유하기"
+              >
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                </svg>
+              </motion.button>
+              <div
+                className="flex items-center gap-0.5 sm:gap-1.5 text-amber-400 flex-shrink-0 min-w-0"
+                role="status"
+                aria-label={`보유 모래시계 ${hourglasses}개`}
+              >
+                <span className="text-sm sm:text-base leading-none flex-shrink-0" aria-hidden>⏳</span>
+                <span className="hidden sm:inline text-amber-400 text-sm">보유 모래시계: </span>
+                <span className="font-semibold tabular-nums text-white text-xs sm:text-sm">{hourglasses}</span>
+                <span className="hidden sm:inline text-amber-400 text-sm">개</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNicknameModal(true)}
+                className="flex-shrink-0 min-w-0 max-w-[72px] sm:max-w-[140px] flex items-center gap-0.5 sm:gap-1 text-xs sm:text-sm text-neon-orange hover:brightness-110 truncate"
+                title="닉네임 변경"
+                aria-label={`활동명: ${authorNickname}. 클릭하면 닉네임을 변경할 수 있습니다.`}
+              >
+                <span className="flex-shrink-0" aria-hidden>👤</span>
+                <span className="truncate">{authorNickname || '게스트'}</span>
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowNicknameModal(true)}
-              className="flex-shrink-0 min-w-0 max-w-[88px] sm:max-w-[140px] flex items-center gap-1 text-sm text-neon-orange hover:brightness-110 truncate"
-              title="닉네임 변경"
-              aria-label={`활동명: ${authorNickname}. 클릭하면 닉네임을 변경할 수 있습니다.`}
-            >
-              <span className="flex-shrink-0" aria-hidden>👤</span>
-              <span className="truncate">{authorNickname || '게스트'}</span>
-            </button>
           </div>
           
           {/* Progress Bar */}
