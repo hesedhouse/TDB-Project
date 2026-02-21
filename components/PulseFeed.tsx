@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import DotCharacter from './DotCharacter'
 import { mockBoards, mockPosts, extendBoardLifespan, formatRemainingTimer } from '@/lib/mockData'
@@ -11,6 +11,7 @@ import { checkNicknameAvailability, getNicknamesInBoard } from '@/lib/supabase/m
 import { uploadChatImage } from '@/lib/supabase/storage'
 import { extendBoardExpiry, EXTEND_MS_PER_HOURGLASS } from '@/lib/supabase/boards'
 import { recordContribution, getTopContributors, subscribeToContributions, type TopContributor } from '@/lib/supabase/contributions'
+import { subscribeBoardPresence, type PresenceUser } from '@/lib/supabase/presence'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
 import { shareBoard } from '@/lib/shareBoard'
 import { addOrUpdateSession, findSession } from '@/lib/activeSessions'
@@ -104,6 +105,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
   const [deleteConfirmMessageId, setDeleteConfirmMessageId] = useState<string | null>(null)
+  /** 실시간 접속자 (Supabase Presence). 닉네임 없으면 '익명의 대화가'로 표시 */
+  const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
+  const [showPresencePopover, setShowPresencePopover] = useState(false)
+  const presencePopoverRef = useRef<HTMLDivElement>(null)
   const feedEndRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const writeModalFileRef = useRef<HTMLInputElement>(null)
@@ -111,6 +116,26 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   useEffect(() => {
     setHourglassesState(getHourglasses())
   }, [])
+
+  /** Supabase Presence: 방 접속자 실시간 동기화 (DB 조회 없음) */
+  useEffect(() => {
+    if (!useSupabaseWithUuid || !boardId) return
+    const displayName = (effectiveNickname || '').trim() || userNickname
+    const unsub = subscribeBoardPresence(boardId, displayName, setOnlineUsers)
+    return unsub
+  }, [useSupabaseWithUuid, boardId, effectiveNickname, userNickname])
+
+  /** 접속자 팝오버: 외부 클릭 시 닫기 */
+  useEffect(() => {
+    if (!showPresencePopover) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (presencePopoverRef.current && !presencePopoverRef.current.contains(e.target as Node)) {
+        setShowPresencePopover(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showPresencePopover])
 
   /** 클라이언트 마운트 완료 후에만 닉네임 모달 로직 실행 (Vercel/SSR Hydration 방지) */
   useEffect(() => {
@@ -442,6 +467,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     })
     return unsubscribe
   }, [useSupabaseWithUuid, boardId])
+
+  /** 닉네임 → 왕관(1~3위) 매핑. 실시간 인원/채팅에서 닉네임 옆에 👑 표시용 */
+  const crownByDisplayName = useMemo(() => {
+    const map = new Map<string, { rank: 1 | 2 | 3; color: string }>()
+    const colors: Record<number, string> = { 1: '#FFD700', 2: '#C0C0C0', 3: '#CD7F32' }
+    for (const c of topContributors) {
+      const name = (c.user_display_name ?? '').trim()
+      if (name && c.rank >= 1 && c.rank <= 3) map.set(name, { rank: c.rank as 1 | 2 | 3, color: colors[c.rank] ?? '#FFD700' })
+    }
+    return map
+  }, [topContributors])
 
   // 하트를 받으면 게시판 수명 연장
   useEffect(() => {
@@ -885,6 +921,53 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
                 </svg>
               </motion.button>
+              {/* 실시간 접속자 (Presence): 클릭 시 닉네임 목록 팝오버 */}
+              <div className="relative flex-shrink-0" ref={presencePopoverRef}>
+                <motion.button
+                  type="button"
+                  onClick={() => setShowPresencePopover((v) => !v)}
+                  className="flex items-center gap-1 px-1.5 py-1 rounded-lg glass border border-neon-orange/30 text-neon-orange hover:bg-neon-orange/10 transition-colors min-w-0"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  title="접속 중인 사람"
+                  aria-label={`접속 중 ${onlineUsers.length}명. 클릭하면 목록을 볼 수 있습니다.`}
+                >
+                  <span className="text-sm sm:text-base leading-none" aria-hidden>👥</span>
+                  <span className="font-bold tabular-nums text-white text-xs sm:text-sm">{onlineUsers.length}</span>
+                </motion.button>
+                <AnimatePresence>
+                  {showPresencePopover && (
+                    <motion.div
+                      className="absolute right-0 top-full mt-1.5 z-50 min-w-[140px] max-w-[200px] py-2 px-2 rounded-xl border border-neon-orange/40 bg-black/95 shadow-xl"
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <p className="text-xs text-gray-400 px-2 pb-1.5 border-b border-white/10 mb-1.5">접속 중 ({onlineUsers.length}명)</p>
+                      <ul className="max-h-40 overflow-y-auto space-y-0.5">
+                        {onlineUsers.length === 0 ? (
+                          <li className="text-xs text-gray-500 px-2 py-1">아무도 없음</li>
+                        ) : (
+                          onlineUsers.map((u, i) => {
+                            const crown = crownByDisplayName.get((u.nickname ?? '').trim())
+                            return (
+                              <li key={`${u.nickname}-${i}`} className="text-xs text-white px-2 py-1 truncate flex items-center gap-1">
+                                <span className="truncate">{u.nickname}</span>
+                                {crown && (
+                                  <span style={{ color: crown.color }} className="flex-shrink-0" aria-label={`${crown.rank}위`} title={`기여도 ${crown.rank}위`}>
+                                    👑
+                                  </span>
+                                )}
+                              </li>
+                            )
+                          })
+                        )}
+                      </ul>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
               <div
                 className="flex items-center gap-1 text-amber-400 flex-shrink-0 min-w-0"
                 role="status"
@@ -1034,7 +1117,18 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   <div className="flex items-start gap-3">
                     <DotCharacter characterId={msg.authorCharacter} size={40} className="flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-white">{msg.authorNickname}</div>
+                      <div className="font-semibold text-white flex items-center gap-1">
+                        {msg.authorNickname}
+                        {crownByDisplayName.get((msg.authorNickname ?? '').trim()) && (
+                          <span
+                            style={{ color: crownByDisplayName.get((msg.authorNickname ?? '').trim())!.color }}
+                            className="flex-shrink-0"
+                            aria-label={`기여도 ${crownByDisplayName.get((msg.authorNickname ?? '').trim())!.rank}위`}
+                          >
+                            👑
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-gray-400">{formatTimeAgo(msg.createdAt)}</div>
                     </div>
                     {isOwnMessage && (
@@ -1145,7 +1239,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                         <div key={c.id} className="flex items-start gap-2">
                           <DotCharacter characterId={c.authorCharacter} size={24} className="flex-shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
-                            <span className="text-xs font-medium text-gray-300">{c.authorNickname}</span>
+                            <span className="text-xs font-medium text-gray-300 inline-flex items-center gap-1">
+                              {c.authorNickname}
+                              {crownByDisplayName.get((c.authorNickname ?? '').trim()) && (
+                                <span style={{ color: crownByDisplayName.get((c.authorNickname ?? '').trim())!.color }} className="flex-shrink-0">👑</span>
+                              )}
+                            </span>
                             <p className="text-sm text-white/90 break-words">{c.content}</p>
                             <span className="text-[10px] text-gray-500">{formatTimeAgo(c.createdAt)}</span>
                           </div>
@@ -1272,7 +1371,18 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               <div className="flex items-start gap-3">
                 <DotCharacter characterId={post.authorCharacter} size={40} className="flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-white">{post.authorNickname}</div>
+                  <div className="font-semibold text-white flex items-center gap-1">
+                    {post.authorNickname}
+                    {crownByDisplayName.get((post.authorNickname ?? '').trim()) && (
+                      <span
+                        style={{ color: crownByDisplayName.get((post.authorNickname ?? '').trim())!.color }}
+                        className="flex-shrink-0"
+                        aria-label={`기여도 ${crownByDisplayName.get((post.authorNickname ?? '').trim())!.rank}위`}
+                      >
+                        👑
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-gray-400">{formatTimeAgo(post.createdAt)}</div>
                 </div>
               </div>
@@ -1392,7 +1502,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                     <div key={c.id} className="flex items-start gap-2">
                       <DotCharacter characterId={c.authorCharacter} size={24} className="flex-shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0">
-                        <span className="text-xs font-medium text-gray-300">{c.authorNickname}</span>
+                        <span className="text-xs font-medium text-gray-300 inline-flex items-center gap-1">
+                          {c.authorNickname}
+                          {crownByDisplayName.get((c.authorNickname ?? '').trim()) && (
+                            <span style={{ color: crownByDisplayName.get((c.authorNickname ?? '').trim())!.color }} className="flex-shrink-0">👑</span>
+                          )}
+                        </span>
                         <p className="text-sm text-white/90 break-words">{c.content}</p>
                         <span className="text-[10px] text-gray-500">{formatTimeAgo(c.createdAt)}</span>
                       </div>
