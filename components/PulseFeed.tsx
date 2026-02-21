@@ -453,11 +453,15 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [extendingHourglass, useSupabaseWithUuid, boardId])
 
-  // 스레드처럼 새 메시지 시 부드럽게 맨 아래로 스크롤
+  // 메시지 리스트 자동 스크롤: 새 메시지 추가 시·처음 방 진입 시 맨 아래로 부드럽게 스크롤
   useEffect(() => {
-    if (!useSupabaseWithUuid || !listRef.current) return
-    feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [useSupabaseWithUuid, messages.length])
+    if (!useSupabaseWithUuid) return
+    const scrollToBottom = () => {
+      feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+    const t = setTimeout(scrollToBottom, 50)
+    return () => clearTimeout(t)
+  }, [useSupabaseWithUuid, messages.length, boardId])
 
   // 24시간 기준 진행률: T_rem / T_max * 100 (최대 100%). 1초마다 갱신.
   const T_MAX_MS = 24 * 60 * 60 * 1000
@@ -1213,7 +1217,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         <>
           <div
             ref={listRef}
-            className="px-3 py-4 sm:p-4 space-y-4 pb-32 sm:pb-28 overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-hide"
+            className="px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-32 sm:pb-28 overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-hide"
           >
             {[...messages]
               .sort((a, b) =>
@@ -1226,148 +1230,114 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 return (
                 <motion.div
                   key={msg.id}
-                  className="post-card p-4 sm:p-5 relative flex flex-col gap-y-3"
-                  initial={{ opacity: 0, y: 8 }}
+                  className="flex flex-col"
+                  initial={{ opacity: 0, y: 2 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25 }}
+                  transition={{ duration: 0.15 }}
                 >
-                  <div className="flex items-start gap-3">
-                    <DotCharacter characterId={msg.authorCharacter} size={40} className="flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-white flex items-center gap-1">
-                        {msg.authorNickname}
-                        {crownByDisplayName.get((msg.authorNickname ?? '').trim()) && (
-                          <span
-                            style={{ color: crownByDisplayName.get((msg.authorNickname ?? '').trim())!.color }}
-                            className="flex-shrink-0"
-                            aria-label={`기여도 ${crownByDisplayName.get((msg.authorNickname ?? '').trim())!.rank}위`}
-                          >
-                            👑
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-400">{formatTimeAgo(msg.createdAt)}</div>
-                    </div>
-                    {isOwnMessage && (
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <motion.button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setEditingMessageId(msg.id); setEditingContent(msg.content ?? '') }}
-                          className="p-2 rounded-lg text-neon-orange hover:bg-neon-orange/10 transition-colors"
-                          title="수정"
-                        >
-                          <span className="text-sm">✏️</span>
-                        </motion.button>
-                        <motion.button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setDeleteConfirmMessageId(msg.id) }}
-                          className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="삭제"
-                        >
-                          <span className="text-sm">🗑️</span>
-                        </motion.button>
-                      </div>
-                    )}
-                  </div>
-                  {editingMessageId === msg.id ? (
-                    <div>
-                      <textarea
-                        value={editingContent}
-                        onChange={(e) => setEditingContent(e.target.value)}
-                        className="w-full min-h-[80px] px-3 py-2 rounded-xl bg-black/40 border-2 border-neon-orange/40 focus:border-neon-orange focus:outline-none text-white text-sm"
-                        placeholder="내용"
-                        autoFocus
-                      />
-                      <div className="flex gap-2 mt-2">
-                        <motion.button
-                          type="button"
-                          onClick={() => setEditingMessageId(null)}
-                          className="px-3 py-1.5 rounded-lg text-sm text-gray-400 border border-gray-500 hover:border-gray-400"
-                        >
-                          취소
-                        </motion.button>
-                        <motion.button
-                          type="button"
-                          onClick={async () => {
-                            const trimmed = editingContent.trim()
-                            if (trimmed !== (msg.content ?? '').trim()) {
-                              await updateMessage(msg.id, trimmed)
-                            }
-                            setEditingMessageId(null)
-                          }}
-                          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neon-orange text-white hover:opacity-90"
-                        >
-                          저장
-                        </motion.button>
-                      </div>
-                    </div>
-                  ) : (msg.content?.trim() ?? '') !== '' ? (
-                    <div className="text-white/95 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
-                      {msg.content}
-                    </div>
-                  ) : null}
-                  {msg.imageUrl && (
-                    <div className="rounded-xl overflow-hidden border border-white/10 bg-black/20">
-                      <a
-                        href={msg.imageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block focus:outline-none focus:ring-2 focus:ring-neon-orange/50"
-                      >
-                        <img
-                          src={msg.imageUrl}
-                          alt=""
-                          className="max-h-[500px] w-full object-contain"
-                        />
-                      </a>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between pt-2 border-t border-white/10 flex-wrap gap-y-2">
-                    <motion.button
-                      type="button"
-                      onClick={() => handleMessageHeart(msg.id)}
-                      className={`flex items-center gap-2 ${heartedIds.has(msg.id) ? 'text-[#FF6B00]' : 'text-gray-500 hover:text-gray-400'}`}
-                      whileTap={{ scale: 0.9 }}
+                  <div className={`flex items-end gap-1 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+                  <DotCharacter characterId={msg.authorCharacter} size={24} className="flex-shrink-0" />
+                  <div className={`flex flex-col max-w-[85%] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
+                    {/* 말풍선 - 컴팩트 */}
+                    <div
+                      className={`inline-block rounded-2xl px-2.5 py-1 ${
+                        isOwnMessage
+                          ? 'bg-neon-orange/25 border border-neon-orange/40 text-white'
+                          : 'bg-white/10 border border-white/10 text-white/95'
+                      }`}
                     >
-                      <motion.span
-                        className={`text-xl ${heartedIds.has(msg.id) ? 'drop-shadow-[0_0_6px_rgba(255,107,0,0.6)]' : ''}`}
-                        animate={heartAnimations.has(msg.id) ? { scale: [1, 1.3, 1] } : {}}
-                        transition={{ duration: 0.3 }}
-                      >
-                        {heartedIds.has(msg.id) ? '❤️' : '🤍'}
-                      </motion.span>
-                      <span className="font-bold">{msg.heartCount}</span>
-                    </motion.button>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>클릭하여 하트 보내기</span>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id); return n }); }}
-                        className="flex items-center gap-1 text-gray-400 hover:text-neon-orange transition-colors"
-                      >
-                        <span>💬</span>
-                        <span>댓글 {(commentsByTargetId[msg.id]?.length ?? 0)}개</span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="text-[11px] font-semibold text-white/90 flex items-center gap-0.5">
+                          {msg.authorNickname}
+                          {crownByDisplayName.get((msg.authorNickname ?? '').trim()) && (
+                            <span
+                              style={{ color: crownByDisplayName.get((msg.authorNickname ?? '').trim())!.color }}
+                              className="flex-shrink-0"
+                              aria-label={`기여도 ${crownByDisplayName.get((msg.authorNickname ?? '').trim())!.rank}위`}
+                            >
+                              👑
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-[9px] text-gray-400">{formatTimeAgo(msg.createdAt)}</span>
+                      </div>
+                      {editingMessageId === msg.id ? (
+                        <div className="mt-1">
+                          <textarea
+                            value={editingContent}
+                            onChange={(e) => setEditingContent(e.target.value)}
+                            className="w-full min-h-[60px] px-2 py-1.5 rounded-xl bg-black/40 border border-neon-orange/40 focus:border-neon-orange focus:outline-none text-white text-sm"
+                            placeholder="내용"
+                            autoFocus
+                          />
+                          <div className="flex gap-1.5 mt-1.5">
+                            <motion.button type="button" onClick={() => setEditingMessageId(null)} className="px-2 py-1 rounded-lg text-xs text-gray-400 border border-gray-500 hover:border-gray-400">
+                              취소
+                            </motion.button>
+                            <motion.button
+                              type="button"
+                              onClick={async () => {
+                                const trimmed = editingContent.trim()
+                                if (trimmed !== (msg.content ?? '').trim()) await updateMessage(msg.id, trimmed)
+                                setEditingMessageId(null)
+                              }}
+                              className="px-2 py-1 rounded-lg text-xs font-medium bg-neon-orange text-white hover:opacity-90"
+                            >
+                              저장
+                            </motion.button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {(msg.content?.trim() ?? '') !== '' && (
+                            <p className="text-xs leading-tight whitespace-pre-wrap break-words mt-0.5">{msg.content}</p>
+                          )}
+                          {msg.imageUrl && (
+                            <a href={msg.imageUrl} target="_blank" rel="noopener noreferrer" className="block mt-0.5 rounded-lg overflow-hidden border border-white/10 focus:ring-2 focus:ring-neon-orange/50">
+                              <img src={msg.imageUrl} alt="" className="max-h-[200px] max-w-full object-contain" />
+                            </a>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {/* 액션: 수정/삭제(본인), 하트/댓글 */}
+                    <div className={`flex items-center gap-1 mt-0.5 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+                      {isOwnMessage && (
+                        <>
+                          <motion.button type="button" onClick={(e) => { e.stopPropagation(); setEditingMessageId(msg.id); setEditingContent(msg.content ?? '') }} className="p-1 rounded text-neon-orange hover:bg-neon-orange/10 text-xs" title="수정">✏️</motion.button>
+                          <motion.button type="button" onClick={(e) => { e.stopPropagation(); setDeleteConfirmMessageId(msg.id) }} className="p-1 rounded text-gray-400 hover:text-red-400 hover:bg-red-500/10 text-xs" title="삭제">🗑️</motion.button>
+                        </>
+                      )}
+                      <motion.button type="button" onClick={() => handleMessageHeart(msg.id)} className={`flex items-center gap-0.5 ${heartedIds.has(msg.id) ? 'text-neon-orange' : 'text-gray-500 hover:text-gray-400'}`} whileTap={{ scale: 0.9 }}>
+                        <motion.span className="text-sm" animate={heartAnimations.has(msg.id) ? { scale: [1, 1.2, 1] } : {}} transition={{ duration: 0.25 }}>
+                          {heartedIds.has(msg.id) ? '❤️' : '🤍'}
+                        </motion.span>
+                        <span className="text-xs font-bold">{msg.heartCount}</span>
+                      </motion.button>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id); return n }); }} className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-neon-orange">
+                        💬 {(commentsByTargetId[msg.id]?.length ?? 0)}
                       </button>
                     </div>
                   </div>
+                  </div>
                   {expandedComments.has(msg.id) && (
-                    <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                    <div className="w-full mt-1 ml-8 sm:ml-9 mr-0 space-y-1 py-1 border-t border-white/5">
                       {(commentsByTargetId[msg.id] ?? []).map((c) => (
-                        <div key={c.id} className="flex items-start gap-2">
-                          <DotCharacter characterId={c.authorCharacter} size={24} className="flex-shrink-0 mt-0.5" />
+                        <div key={c.id} className="flex items-start gap-1.5">
+                          <DotCharacter characterId={c.authorCharacter} size={20} className="flex-shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
-                            <span className="text-xs font-medium text-gray-300 inline-flex items-center gap-1">
+                            <span className="text-[10px] font-medium text-gray-400 inline-flex items-center gap-0.5">
                               {c.authorNickname}
                               {crownByDisplayName.get((c.authorNickname ?? '').trim()) && (
                                 <span style={{ color: crownByDisplayName.get((c.authorNickname ?? '').trim())!.color }} className="flex-shrink-0">👑</span>
                               )}
                             </span>
-                            <p className="text-sm text-white/90 break-words">{c.content}</p>
-                            <span className="text-[10px] text-gray-500">{formatTimeAgo(c.createdAt)}</span>
+                            <p className="text-xs text-white/90 break-words leading-tight">{c.content}</p>
+                            <span className="text-[9px] text-gray-500">{formatTimeAgo(c.createdAt)}</span>
                           </div>
                         </div>
                       ))}
-                      <div className="flex gap-2 pt-1">
+                      <div className="flex gap-1.5 pt-0.5">
                         <input
                           type="text"
                           value={commentInputByTarget[msg.id] ?? ''}
@@ -1377,38 +1347,24 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                               e.preventDefault()
                               const text = (commentInputByTarget[msg.id] ?? '').trim()
                               if (!text) return
-                              const newComment: Comment = {
-                                id: `c-${Date.now()}-${msg.id}`,
-                                postId: msg.id,
-                                authorNickname,
-                                authorCharacter: effectiveCharacter,
-                                content: text,
-                                createdAt: new Date(),
-                              }
+                              const newComment: Comment = { id: `c-${Date.now()}-${msg.id}`, postId: msg.id, authorNickname, authorCharacter: effectiveCharacter, content: text, createdAt: new Date() }
                               setCommentsByTargetId((prev) => ({ ...prev, [msg.id]: [...(prev[msg.id] ?? []), newComment] }))
                               setCommentInputByTarget((prev) => ({ ...prev, [msg.id]: '' }))
                             }
                           }}
-                          placeholder=""
-                          className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/30 border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm"
+                          placeholder="댓글 입력"
+                          className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-black/30 border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-xs"
                         />
                         <motion.button
                           type="button"
                           onClick={() => {
                             const text = (commentInputByTarget[msg.id] ?? '').trim()
                             if (!text) return
-                            const newComment: Comment = {
-                              id: `c-${Date.now()}-${msg.id}`,
-                              postId: msg.id,
-                              authorNickname,
-                              authorCharacter: effectiveCharacter,
-                              content: text,
-                              createdAt: new Date(),
-                            }
+                            const newComment: Comment = { id: `c-${Date.now()}-${msg.id}`, postId: msg.id, authorNickname, authorCharacter: effectiveCharacter, content: text, createdAt: new Date() }
                             setCommentsByTargetId((prev) => ({ ...prev, [msg.id]: [...(prev[msg.id] ?? []), newComment] }))
                             setCommentInputByTarget((prev) => ({ ...prev, [msg.id]: '' }))
                           }}
-                          className="px-3 py-2 rounded-lg bg-neon-orange/80 text-white text-sm font-medium"
+                          className="px-2 py-1.5 rounded-lg bg-neon-orange/80 text-white text-xs font-medium"
                         >
                           입력
                         </motion.button>

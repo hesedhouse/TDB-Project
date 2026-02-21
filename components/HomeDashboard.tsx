@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, memo, Fragment } from 'react'
+import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -834,17 +834,20 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         </div>
       </section>
 
-      {/* 방 만들기 모달: POPPIN 스타일, 제목 입력 → 취소/방 만들기 */}
+      {/* 방 만들기 모달: 화면 정중앙 고정 */}
       <AnimatePresence>
         {showCreateRoomModal && (
-          <Fragment key="create-room-modal">
-            <motion.div
+          <motion.div
+            key="create-room-modal"
+            className="fixed inset-0 z-[9999] flex items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div
               role="presentation"
-              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
               onClick={() => setShowCreateRoomModal(false)}
               aria-hidden
             />
@@ -852,15 +855,13 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
               role="dialog"
               aria-modal="true"
               aria-labelledby="create-room-modal-title"
-              className="fixed left-1/2 top-1/2 z-50 w-full max-w-[450px] -translate-x-1/2 -translate-y-1/2 px-5 sm:px-6"
-              initial={{ opacity: 0, y: 24, scale: 0.96 }}
+              className="relative bg-[#1a1a1a] w-[90%] max-w-[400px] rounded-3xl p-8 shadow-2xl"
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.98 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="rounded-2xl border-2 border-neon-orange/50 bg-midnight-black overflow-hidden shadow-[0_0_0_1px_rgba(255,107,0,0.15),0_8px_32px_rgba(0,0,0,0.5),0_24px_64px_rgba(0,0,0,0.4),0_0_48px_rgba(255,107,0,0.12)]">
-                <div className="p-6 sm:p-8">
                   <h2
                     id="create-room-modal-title"
                     className="text-xl sm:text-2xl font-black mb-1 tracking-tight"
@@ -957,10 +958,8 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                       방 만들기
                     </motion.button>
                   </div>
-                </div>
-              </div>
             </motion.div>
-          </Fragment>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
