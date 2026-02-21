@@ -118,7 +118,15 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     })
   }, [useSupabase])
 
-  /** 실시간 검색: debounce 300ms 후 searchBoards 호출 (ID + 제목 통합) */
+  /** is_active false인 방은 exploded_at이 24시간 이내일 때만 검색 결과에 노출 */
+  const isBoardVisibleInSearch = useCallback((row: BoardRow): boolean => {
+    if (row.is_active !== false) return true
+    if (!row.exploded_at) return false
+    const explodedMs = new Date(row.exploded_at).getTime()
+    return Date.now() - explodedMs < 24 * 60 * 60 * 1000
+  }, [])
+
+  /** 실시간 검색: debounce 300ms 후 searchBoards 호출 (ID + 제목 통합), 24시간 초과 폭파 방 제외 */
   useEffect(() => {
     if (!useSupabase) return
     const q = searchQuery.trim()
@@ -132,14 +140,15 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       setSearchLoading(true)
       setSearchFetched(false)
       searchBoards(q).then((boards) => {
-        setSearchResults(boards)
+        const filtered = boards.filter(isBoardVisibleInSearch)
+        setSearchResults(filtered)
         setSearchFetched(true)
         setSearchLoading(false)
-        setHighlightedIndex(boards.length > 0 ? 0 : -1)
+        setHighlightedIndex(filtered.length > 0 ? 0 : -1)
       })
     }, 300)
     return () => clearTimeout(t)
-  }, [searchQuery, useSupabase])
+  }, [searchQuery, useSupabase, isBoardVisibleInSearch])
 
   /** 검색 결과의 각 방 참여 인원수 병렬 조회 */
   useEffect(() => {
@@ -553,27 +562,30 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                                     onClick={() => handleSelectSearchResult(board)}
                                     className={`w-full text-left px-4 py-3 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/5 transition-colors ${
                                       isHighlighted ? 'bg-neon-orange/20 border-l-2 border-l-neon-orange' : 'hover:bg-white/10'
-                                    }`}
+                                    } ${isExploded ? 'opacity-90' : ''}`}
                                   >
                                     <span className="font-medium text-white truncate min-w-0 flex items-center gap-1.5 flex-wrap">
-                                      <span className="truncate">{titleRaw}</span>
+                                      <span className={isExploded ? 'text-gray-400' : ''}>{titleRaw}</span>
                                       {roomNo && (
                                         <span className="text-xs text-gray-500 font-normal flex-shrink-0">{roomNo}</span>
                                       )}
                                       {isExploded && (
-                                        <span
-                                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide flex-shrink-0"
-                                          style={{
-                                            background: 'linear-gradient(135deg, #FF6B00 0%, #E55300 100%)',
-                                            color: '#fff',
-                                            boxShadow: '0 0 8px rgba(255,107,0,0.5), 0 1px 2px rgba(0,0,0,0.2)',
-                                          }}
-                                        >
-                                          방금 폭파됨
-                                        </span>
+                                        <>
+                                          <span
+                                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide flex-shrink-0"
+                                            style={{
+                                              background: 'linear-gradient(135deg, #FF6B00 0%, #E55300 100%)',
+                                              color: '#fff',
+                                              boxShadow: '0 0 8px rgba(255,107,0,0.5), 0 1px 2px rgba(0,0,0,0.2)',
+                                            }}
+                                          >
+                                            방금 폭파됨
+                                          </span>
+                                          <span className="text-[10px] text-gray-500 font-medium flex-shrink-0">종료됨</span>
+                                        </>
                                       )}
                                     </span>
-                                    <span className="text-xs text-gray-400 flex items-center gap-2 flex-shrink-0">
+                                    <span className={`text-xs flex items-center gap-2 flex-shrink-0 ${isExploded ? 'text-gray-500' : 'text-gray-400'}`}>
                                       <span>👥 {count !== null ? count : '—'}명</span>
                                       <BoardTimeLabel expiresAt={expiresAt} />
                                     </span>
