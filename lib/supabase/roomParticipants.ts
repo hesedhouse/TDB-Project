@@ -91,13 +91,12 @@ export async function joinRoom(
   } else {
     const payload = {
       board_id: boardId,
+      user_id: null,
       user_display_name: name,
       is_active: true,
       updated_at: updatedAt,
     }
-    const { error } = await supabase.from('room_participants').upsert(payload, {
-      onConflict: 'board_id,user_display_name',
-    })
+    const { error } = await supabase.from('room_participants').insert(payload)
     if (error) {
       console.error('[room_participants] joinRoom error (insert 실패):', error.message, error.code, error.details)
       return false

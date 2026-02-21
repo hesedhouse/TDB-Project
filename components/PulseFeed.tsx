@@ -527,12 +527,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         } catch {}
       }
       const name = (displayName || '').trim() || '이름 없음'
-      await recordContribution(boardId, name, minutesPerHourglass)
+      await recordContribution(boardId, name, minutesPerHourglass, userId ?? undefined)
       getTopContributors(boardId).then(setTopContributors)
     } finally {
       setExtendingHourglass(false)
     }
-  }, [extendingHourglass, useSupabaseWithUuid, boardId])
+  }, [extendingHourglass, useSupabaseWithUuid, boardId, userId])
 
   // 메시지 리스트 자동 스크롤: 새 메시지 추가 시·처음 방 진입 시 맨 아래로 부드럽게 스크롤
   useEffect(() => {
