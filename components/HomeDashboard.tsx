@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef, memo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import DotCharacter from './DotCharacter'
@@ -439,14 +438,15 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
             className="inline-flex items-center p-1 -m-1 rounded-lg hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-neon-orange/50 focus:ring-offset-2 focus:ring-offset-midnight-black"
             aria-label="POPPIN 홈으로 이동"
           >
-            <Image
-              src="/logo.png"
-              alt="POPPIN"
-              width={120}
-              height={48}
-              className="h-10 sm:h-12 w-auto object-contain"
-              priority
-            />
+            <span
+              className="text-xl sm:text-3xl font-black tracking-tight"
+              style={{
+                color: '#FF5F00',
+                textShadow: '0 0 10px #FF5F00, 0 0 20px #FF5F00',
+              }}
+            >
+              POPPIN
+            </span>
           </Link>
         </div>
         <div className="flex items-center justify-end gap-1.5 sm:gap-3 flex-shrink-0 min-w-0">
