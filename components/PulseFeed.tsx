@@ -891,7 +891,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 aria-label={`보유 모래시계 ${hourglasses}개`}
               >
                 <span className="text-sm sm:text-base leading-none flex-shrink-0" aria-hidden>⏳</span>
-                <span className="font-semibold tabular-nums text-white text-xs sm:text-sm">{hourglasses}</span>
+                <span className="font-medium text-amber-400/90 text-xs sm:text-sm" aria-hidden>×</span>
+                <span className="font-bold tabular-nums text-white text-xs sm:text-sm">{hourglasses}</span>
               </div>
               <button
                 type="button"
