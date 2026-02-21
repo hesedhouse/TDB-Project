@@ -61,7 +61,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-midnight-black pt-14 md:pt-8 px-5 md:px-6 safe-top mx-auto max-w-7xl">
+    <main className="min-h-screen bg-midnight-black pt-2 safe-top">
       {currentView === 'home' && (
         <TickProvider>
           <HomeDashboard onEnterBoard={handleEnterBoard} />
