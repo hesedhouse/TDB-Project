@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { TickProvider } from '@/lib/TickContext'
 import HomeDashboard from '@/components/HomeDashboard'
 import EntryGate from '@/components/EntryGate'
@@ -12,18 +13,27 @@ import { isSupabaseConfigured } from '@/lib/supabase/client'
 export default function DashboardPage() {
   const router = useRouter()
   const { user, loading } = useAuth()
+  const { data: nextAuthSession, status: nextAuthStatus } = useSession()
   const useSupabase = isSupabaseConfigured()
   const [currentView, setCurrentView] = useState<'home' | 'entry' | 'feed'>('home')
   const [selectedBoard, setSelectedBoard] = useState<string | null>(null)
   const [userCharacter, setUserCharacter] = useState<number>(0)
   const [userNickname, setUserNickname] = useState<string>('')
 
+  const hasSession = !!user || nextAuthStatus === 'authenticated'
+  const effectiveUserId = user?.id ?? (nextAuthSession?.user as { id?: string } | undefined)?.id ?? undefined
+
   useEffect(() => {
-    if (!useSupabase || loading) return
-    if (!user) {
+    if (nextAuthStatus === 'loading' && loading) return
+    if (hasSession) return
+    if (!useSupabase && nextAuthStatus !== 'authenticated') {
+      router.replace('/login?returnUrl=/dashboard')
+      return
+    }
+    if (useSupabase && !loading && !user && nextAuthStatus !== 'authenticated') {
       router.replace('/login?returnUrl=/dashboard')
     }
-  }, [useSupabase, loading, user, router])
+  }, [useSupabase, loading, user, nextAuthStatus, hasSession, router])
 
   const handleEnterBoard = useCallback((boardId: string) => {
     if (!userNickname) {
@@ -51,10 +61,17 @@ export default function DashboardPage() {
     setSelectedBoard(null)
   }
 
-  if (useSupabase && (loading || !user)) {
+  if (!hasSession && (loading || nextAuthStatus === 'loading')) {
     return (
       <main className="min-h-screen bg-midnight-black flex items-center justify-center">
         <p className="text-gray-400">로그인 확인 중...</p>
+      </main>
+    )
+  }
+  if (!hasSession) {
+    return (
+      <main className="min-h-screen bg-midnight-black flex items-center justify-center">
+        <p className="text-gray-400">로그인이 필요합니다.</p>
       </main>
     )
   }
@@ -73,12 +90,12 @@ export default function DashboardPage() {
           onClose={() => setCurrentView('home')}
         />
       )}
-      {currentView === 'feed' && selectedBoard && user && (
+      {currentView === 'feed' && selectedBoard && hasSession && (
         <PulseFeed
           boardId={selectedBoard}
           userCharacter={userCharacter}
           userNickname={userNickname}
-          userId={user.id}
+          userId={effectiveUserId}
           onBack={handleBackToHome}
         />
       )}

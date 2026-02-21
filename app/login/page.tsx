@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { signIn, useSession } from 'next-auth/react'
 import { useAuth, exchangeHashForSession, type AuthProvider } from '@/lib/supabase/auth'
 
 const cardStyle = {
@@ -18,7 +19,8 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const returnUrl = searchParams.get('returnUrl') ?? DASHBOARD_PATH
-  const { user, loading, signIn, signInWithEmail } = useAuth()
+  const { user, loading, signIn: signInSupabase, signInWithEmail } = useAuth()
+  const { data: nextAuthSession, status: nextAuthStatus } = useSession()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -36,17 +38,26 @@ function LoginForm() {
     exchangeHashForSession().catch(() => setOauthProcessing(false))
   }, [])
 
-  // 세션 생기면 대시보드로 리다이렉트 (onAuthStateChange로 user 갱신됨)
+  // 세션 생기면 대시보드로 리다이렉트 (Supabase user 또는 NextAuth 세션)
   useEffect(() => {
+    if (nextAuthStatus === 'authenticated') {
+      const path = returnUrl.startsWith('/') ? returnUrl : DASHBOARD_PATH
+      router.replace(path)
+      return
+    }
     if (loading) return
     if (user) {
       const path = returnUrl.startsWith('/') ? returnUrl : DASHBOARD_PATH
       router.replace(path)
     }
-  }, [user, loading, returnUrl, router])
+  }, [user, loading, nextAuthStatus, nextAuthSession, returnUrl, router])
 
   const handleLogin = async (provider: AuthProvider) => {
-    await signIn(provider, DASHBOARD_PATH)
+    if (provider === 'naver') {
+      await signIn('naver', { callbackUrl: '/dashboard' })
+      return
+    }
+    await signInSupabase(provider, DASHBOARD_PATH)
   }
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -70,7 +81,9 @@ function LoginForm() {
 
   const showOAuthLoading = oauthProcessing || (typeof window !== 'undefined' && window.location.hash?.includes('access_token') && loading)
 
-  if (loading && !oauthProcessing) {
+  const hasSession = !!user || nextAuthStatus === 'authenticated'
+
+  if ((loading && nextAuthStatus !== 'authenticated') && !oauthProcessing) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center gap-4">
         <p className="text-gray-400">로그인 확인 중...</p>
@@ -78,7 +91,7 @@ function LoginForm() {
     )
   }
 
-  if (user) {
+  if (hasSession) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center gap-4">
         <p className="text-gray-400">이동 중...</p>
@@ -196,13 +209,18 @@ function LoginForm() {
 
           <motion.button
             type="button"
-            onClick={() => handleLogin('naver')}
+            onClick={signInWithNaver}
             className="w-full py-3.5 rounded-xl font-semibold text-base flex items-center justify-center gap-3 text-white"
             style={{ background: '#03C75A', boxShadow: '0 2px 12px rgba(3,199,90,0.35)' }}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
+            aria-label="네이버로 로그인"
           >
-            <span className="text-xl" aria-hidden>N</span>
+            <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center" aria-hidden>
+              <svg viewBox="0 0 24 24" className="w-full h-full" fill="currentColor">
+                <path d="M16.273 12.845 7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727v12.845z" />
+              </svg>
+            </span>
             네이버로 로그인
           </motion.button>
         </div>

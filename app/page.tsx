@@ -6,13 +6,17 @@ import { TickProvider } from '@/lib/TickContext'
 import HomeDashboard from '@/components/HomeDashboard'
 import EntryGate from '@/components/EntryGate'
 import PulseFeed from '@/components/PulseFeed'
+import { useSession } from 'next-auth/react'
 import { useAuth, exchangeHashForSession } from '@/lib/supabase/auth'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 
 export default function Home() {
   const router = useRouter()
   const { user, loading } = useAuth()
+  const { data: nextAuthSession, status: nextAuthStatus } = useSession()
   const useSupabase = isSupabaseConfigured()
+  const hasSession = !!user || nextAuthStatus === 'authenticated'
+  const effectiveUserId = user?.id ?? (nextAuthSession?.user as { id?: string } | undefined)?.id ?? undefined
   const [oauthProcessing, setOauthProcessing] = useState(false)
   const hashHandledRef = useRef(false)
 
@@ -37,15 +41,16 @@ export default function Home() {
   }, [router])
 
   useEffect(() => {
-    if (!useSupabase || loading || oauthProcessing) return
+    if (hasSession) return
+    if (nextAuthStatus === 'loading' || (useSupabase && loading) || oauthProcessing) return
     if (typeof window !== 'undefined') {
       const h = window.location.hash?.trim()
       if (h && (h.includes('access_token') || h.includes('refresh_token'))) return
     }
-    if (!user) {
+    if (!user && nextAuthStatus !== 'authenticated') {
       router.replace('/login?returnUrl=/')
     }
-  }, [useSupabase, loading, user, router, oauthProcessing])
+  }, [useSupabase, loading, user, nextAuthStatus, hasSession, router, oauthProcessing])
 
   const handleEnterBoard = useCallback((boardId: string) => {
     if (!userNickname) {
@@ -73,7 +78,7 @@ export default function Home() {
     setSelectedBoard(null)
   }
 
-  if (useSupabase && (loading || !user || oauthProcessing)) {
+  if (!hasSession && (loading || nextAuthStatus === 'loading' || oauthProcessing)) {
     return (
       <main className="min-h-screen bg-midnight-black flex items-center justify-center">
         <p className="text-gray-400">{oauthProcessing ? '로그인 처리 중...' : '로그인 확인 중...'}</p>
@@ -95,12 +100,12 @@ export default function Home() {
           onClose={() => setCurrentView('home')}
         />
       )}
-      {currentView === 'feed' && selectedBoard && user && (
+      {currentView === 'feed' && selectedBoard && hasSession && (
         <PulseFeed
           boardId={selectedBoard}
           userCharacter={userCharacter}
           userNickname={userNickname}
-          userId={user.id}
+          userId={effectiveUserId}
           onBack={handleBackToHome}
         />
       )}
