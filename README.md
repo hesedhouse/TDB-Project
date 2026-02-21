@@ -1,4 +1,4 @@
-# TDB (떴다방) - 7-Day Ephemeral Community Prototype
+# POPPIN - 7-Day Ephemeral Community Prototype
 
 7일 후 소멸하는 휘발성 커뮤니티 프로토타입입니다.
 
@@ -14,7 +14,7 @@
 ## 주요 기능
 
 ### 1. Home Dashboard
-- TDB 로고 및 하트 잔액 표시
+- POPPIN 로고 및 하트 잔액 표시
 - 트렌드 키워드 버블 애니메이션
 - Warp Zone: 참여 중인 방 (클릭으로 입장)
 - Live Boards: 활발한 게시판 리스트

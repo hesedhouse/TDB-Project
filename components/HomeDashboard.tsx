@@ -245,9 +245,13 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     }, 500)
   }
 
-  /** 검색 결과에서 방 선택 → 해당 방으로 입장 (닉네임 모달은 방 페이지에서 표시) */
+  /** 검색 결과에서 방 선택 → 폭파된 방이면 입장 막고 안내, 아니면 입장 */
   const handleSelectSearchResult = useCallback(
     (board: BoardRow) => {
+      if (board.is_active === false) {
+        if (typeof window !== 'undefined') window.alert('이미 종료된 팝핀입니다!')
+        return
+      }
       const path = board.public_id != null
         ? `/board/${board.public_id}`
         : `/board/${encodeURIComponent(board.keyword)}`
@@ -329,13 +333,17 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
         if (searchResults.length > 0) {
-          setHighlightedIndex((prev) => Math.min(prev + 1, searchResults.length - 1))
+          setHighlightedIndex((prev) => {
+            if (prev === -2) return -2
+            if (prev + 1 <= searchResults.length - 1) return prev + 1
+            return -2
+          })
         } else if (searchFetched) {
           setHighlightedIndex(-2)
         }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
-        if (highlightedIndex === -2) setHighlightedIndex(-1)
+        if (highlightedIndex === -2) setHighlightedIndex(searchResults.length > 0 ? searchResults.length - 1 : -1)
         else setHighlightedIndex((prev) => Math.max(-1, prev - 1))
       } else if (e.key === 'Enter') {
         e.preventDefault()
@@ -382,11 +390,11 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom pt-14 md:pt-6 px-6 max-w-7xl mx-auto">
-      {/* Header: 좌측 TDB/떴다방, 우측 이메일·로그아웃·모래시계 */}
+      {/* Header: 좌측 POPPIN 로고, 우측 이메일·로그아웃·모래시계 */}
       <header className="flex justify-between items-center flex-wrap gap-2 mb-6 pt-4 sm:pt-8 safe-top">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
           <motion.div
-            className="text-xl sm:text-3xl font-bold pixel-art flex-shrink-0"
+            className="text-xl sm:text-3xl font-black pixel-art flex-shrink-0 tracking-tight"
             style={{
               color: '#FF5F00',
               textShadow: '0 0 10px #FF5F00, 0 0 20px #FF5F00',
@@ -394,9 +402,9 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
             animate={{ opacity: [1, 0.8, 1] }}
             transition={{ duration: 2, repeat: Infinity }}
           >
-            TDB
+            POPPIN
           </motion.div>
-          <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0">떴다방</span>
+          <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0" aria-hidden>POPPIN</span>
         </div>
         <div className="flex items-center justify-end gap-1.5 sm:gap-3 flex-shrink-0 min-w-0">
           {useSupabase && user?.email && (
@@ -452,7 +460,13 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                 aria-label="방 제목 또는 방번호로 검색"
                 aria-expanded={!!(searchQuery.trim() && (searchLoading || searchFetched))}
                 aria-controls="search-results-dropdown"
-                aria-activedescendant={highlightedIndex >= 0 && highlightedIndex < searchResults.length ? `search-result-${highlightedIndex}` : undefined}
+                aria-activedescendant={
+                  highlightedIndex >= 0 && highlightedIndex < searchResults.length
+                    ? `search-result-${highlightedIndex}`
+                    : highlightedIndex === -2
+                      ? 'search-result-create'
+                      : undefined
+                }
                 autoComplete="off"
               />
               {/* 검색 결과 드롭다운: backdrop-blur + 오렌지 하이라이트 */}
@@ -472,55 +486,92 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                       <div className="px-4 py-6 text-center text-gray-400 text-sm">
                         검색 중...
                       </div>
-                    ) : searchResults.length === 0 ? (
-                      <div className="p-4">
-                        <p className="text-gray-400 text-sm mb-3">일치하는 방이 없습니다. 새로 만드시겠습니까?</p>
-                        <motion.button
-                          type="button"
-                          role="option"
-                          aria-selected={highlightedIndex === -2}
-                          onClick={handleCreateOrEnterRoom}
-                          className={`w-full py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
-                            highlightedIndex === -2
-                              ? 'bg-neon-orange/30 border-2 border-neon-orange text-white'
-                              : 'bg-white/5 border-2 border-transparent text-gray-300 hover:bg-white/10'
-                          }`}
-                        >
-                          방 만들기
-                        </motion.button>
-                      </div>
                     ) : (
-                      <ul className="py-1" role="listbox">
-                        {searchResults.map((board, i) => {
-                          const expiresAt = new Date(board.expires_at)
-                          const count = participantCounts[board.id] ?? null
-                          const titleRaw = (board.name ?? board.keyword ?? '').trim().replace(/^#\s*/, '') || '방'
-                          const roomNo = board.public_id != null ? `#${board.public_id}` : null
-                          const isHighlighted = highlightedIndex === i
-                          return (
-                            <li key={board.id} role="option" aria-selected={isHighlighted} id={`search-result-${i}`}>
-                              <motion.button
-                                type="button"
-                                onClick={() => handleSelectSearchResult(board)}
-                                className={`w-full text-left px-4 py-3 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/5 last:border-0 transition-colors ${
-                                  isHighlighted ? 'bg-neon-orange/20 border-l-2 border-l-neon-orange' : 'hover:bg-white/10'
-                                }`}
-                              >
-                                <span className="font-medium text-white truncate min-w-0 flex items-center gap-1.5">
-                                  <span className="truncate">{titleRaw}</span>
-                                  {roomNo && (
-                                    <span className="text-xs text-gray-500 font-normal flex-shrink-0">{roomNo}</span>
-                                  )}
-                                </span>
-                                <span className="text-xs text-gray-400 flex items-center gap-2 flex-shrink-0">
-                                  <span>👥 {count !== null ? count : '—'}명</span>
-                                  <BoardTimeLabel expiresAt={expiresAt} />
-                                </span>
-                              </motion.button>
-                            </li>
-                          )
-                        })}
-                      </ul>
+                      <>
+                        {searchResults.length === 0 ? (
+                          <div className="p-4">
+                            <p className="text-gray-400 text-sm mb-3">일치하는 방이 없습니다. 새로 만드시겠습니까?</p>
+                            <motion.button
+                              type="button"
+                              role="option"
+                              id="search-result-create"
+                              aria-selected={highlightedIndex === -2}
+                              onClick={handleCreateOrEnterRoom}
+                              className={`w-full py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
+                                highlightedIndex === -2
+                                  ? 'bg-neon-orange/30 border-2 border-neon-orange text-white'
+                                  : 'bg-white/5 border-2 border-transparent text-gray-300 hover:bg-white/10'
+                              }`}
+                            >
+                              방 만들기
+                            </motion.button>
+                          </div>
+                        ) : (
+                          <ul className="py-1" role="listbox">
+                            {searchResults.map((board, i) => {
+                              const expiresAt = new Date(board.expires_at)
+                              const count = participantCounts[board.id] ?? null
+                              const titleRaw = (board.name ?? board.keyword ?? '').trim().replace(/^#\s*/, '') || '방'
+                              const roomNo = board.public_id != null ? `#${board.public_id}` : null
+                              const isHighlighted = highlightedIndex === i
+                              const isExploded = board.is_active === false
+                              return (
+                                <li key={board.id} role="option" aria-selected={isHighlighted} id={`search-result-${i}`}>
+                                  <motion.button
+                                    type="button"
+                                    onClick={() => handleSelectSearchResult(board)}
+                                    className={`w-full text-left px-4 py-3 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/5 transition-colors ${
+                                      isHighlighted ? 'bg-neon-orange/20 border-l-2 border-l-neon-orange' : 'hover:bg-white/10'
+                                    }`}
+                                  >
+                                    <span className="font-medium text-white truncate min-w-0 flex items-center gap-1.5 flex-wrap">
+                                      <span className="truncate">{titleRaw}</span>
+                                      {roomNo && (
+                                        <span className="text-xs text-gray-500 font-normal flex-shrink-0">{roomNo}</span>
+                                      )}
+                                      {isExploded && (
+                                        <span
+                                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide flex-shrink-0"
+                                          style={{
+                                            background: 'linear-gradient(135deg, #FF6B00 0%, #E55300 100%)',
+                                            color: '#fff',
+                                            boxShadow: '0 0 8px rgba(255,107,0,0.5), 0 1px 2px rgba(0,0,0,0.2)',
+                                          }}
+                                        >
+                                          방금 폭파됨
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="text-xs text-gray-400 flex items-center gap-2 flex-shrink-0">
+                                      <span>👥 {count !== null ? count : '—'}명</span>
+                                      <BoardTimeLabel expiresAt={expiresAt} />
+                                    </span>
+                                  </motion.button>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        )}
+                        {searchFetched && searchResults.length > 0 && (
+                          <div className="border-t border-white/10 p-3 bg-black/40">
+                            <p className="text-gray-400 text-xs mb-2">원하는 방이 없나요? 새로 만들기</p>
+                            <motion.button
+                              type="button"
+                              role="option"
+                              id="search-result-create"
+                              aria-selected={highlightedIndex === -2}
+                              onClick={handleCreateOrEnterRoom}
+                              className={`w-full py-2.5 px-4 rounded-xl text-sm font-semibold transition-all ${
+                                highlightedIndex === -2
+                                  ? 'bg-neon-orange/40 border-2 border-neon-orange text-white shadow-[0_0_12px_rgba(255,107,0,0.35)]'
+                                  : 'bg-neon-orange/20 border-2 border-neon-orange/50 text-neon-orange hover:bg-neon-orange/30 hover:border-neon-orange'
+                              }`}
+                            >
+                              방 만들기
+                            </motion.button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </motion.div>
                 )}
@@ -645,7 +696,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                       transition: { duration: 0.18 },
                     }}
                   >
-                <span className="floating-tag-text text-xs sm:text-sm font-bold">
+                <span className="floating-tag-text text-xs sm:text-sm font-black">
                   #{word}
                 </span>
                 {/* 클릭 시 픽셀 파티클 효과 */}
@@ -684,7 +735,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
       {/* Warp Zone: localStorage 활성 세션 (방 입장 이력 + 닉네임), X로 제거 */}
       <section className="mb-7">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+        <h2 className="text-xl font-black mb-4 flex items-center gap-2">
           <span className="text-neon-orange">⚡</span>
           Warp Zone
         </h2>
@@ -740,7 +791,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
       {/* Live Boards */}
       <section>
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+        <h2 className="text-xl font-black mb-4 flex items-center gap-2">
           <span className="text-neon-orange animate-pulse">🔥</span>
           Live Boards
         </h2>

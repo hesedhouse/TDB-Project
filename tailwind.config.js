@@ -7,6 +7,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontWeight: {
+        brand: '900',
+      },
       colors: {
         'neon-orange': '#FF5F00',
         'midnight-black': '#000000',

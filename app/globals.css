@@ -103,7 +103,7 @@
     display: inline-block;
     color: #FF6B00 !important;
     opacity: 1 !important;
-    font-weight: 800;
+    font-weight: 900;
     text-align: center;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -117,6 +117,11 @@
     image-rendering: pixelated;
     image-rendering: -moz-crisp-edges;
     image-rendering: crisp-edges;
+  }
+
+  /* POPPIN 브랜드: 로고·주요 헤더용 최대 굵기 */
+  .font-brand {
+    font-weight: 900;
   }
   
   .scrollbar-hide {

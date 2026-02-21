@@ -13,6 +13,10 @@ export type BoardRow = {
   name: string | null
   expires_at: string
   created_at: string
+  /** true=활성 방, false=폭파(종료)된 방. 컬럼 없으면 undefined(활성으로 간주) */
+  is_active?: boolean
+  /** 폭파된 시각(ISO). null/없으면 미폭파 */
+  exploded_at?: string | null
 }
 
 /** BoardRow 별칭 (Board | null 리턴 타입용) */
@@ -25,6 +29,8 @@ type BoardRowSelected = {
   expires_at: string
   created_at: string
   public_id?: unknown
+  is_active?: unknown
+  exploded_at?: unknown
 }
 
 function normalizeBoardRow(row: BoardRowSelected): BoardRow {
@@ -37,6 +43,13 @@ function normalizeBoardRow(row: BoardRowSelected): BoardRow {
         : Number.isFinite(Number(rawPublic))
           ? Number(rawPublic)
           : null
+  const isActive = row.is_active === undefined ? true : Boolean(row.is_active)
+  const explodedAt =
+    row.exploded_at === undefined || row.exploded_at === null
+      ? undefined
+      : typeof row.exploded_at === 'string'
+        ? row.exploded_at
+        : undefined
   return {
     id: String(row.id),
     keyword: row.keyword,
@@ -44,6 +57,8 @@ function normalizeBoardRow(row: BoardRowSelected): BoardRow {
     expires_at: row.expires_at,
     created_at: row.created_at,
     ...(rawPublic !== undefined ? { public_id: publicIdNum } : {}),
+    ...(row.is_active !== undefined ? { is_active: isActive } : {}),
+    ...(row.exploded_at !== undefined ? { exploded_at: explodedAt ?? null } : {}),
   }
 }
 
@@ -164,11 +179,20 @@ export async function getBoardById(id: string): Promise<BoardRow | null> {
   return normalizeBoardRow(data)
 }
 
+const SEARCH_SELECT_COLS = 'id, keyword, name, expires_at, created_at, public_id, is_active, exploded_at' as const
+const SEARCH_SELECT_COLS_LEGACY = 'id, keyword, name, expires_at, created_at, public_id' as const
+
+/** 폭파된 지 24시간 이내면 검색 결과에 포함 */
+function isVisibleInSearch(row: BoardRow): boolean {
+  if (row.is_active !== false) return true
+  if (!row.exploded_at) return true
+  const explodedMs = new Date(row.exploded_at).getTime()
+  return Date.now() - explodedMs < 24 * 60 * 60 * 1000
+}
+
 /**
  * 통합 검색: 방 번호(public_id) 정확 일치 + 제목(name/keyword) ilike.
- * - 입력이 숫자만 있으면 public_id 정확 일치 조회.
- * - 동시에 name/keyword에 ilike 검색.
- * - 결과: ID 정확 일치 방을 최상단에 고정, 나머지는 최신순.
+ * - is_active true 전부 표시, false는 exploded_at 24시간 이내만 표시.
  */
 export async function searchBoards(query: string): Promise<BoardRow[]> {
   const q = query.trim()
@@ -176,53 +200,53 @@ export async function searchBoards(query: string): Promise<BoardRow[]> {
   const supabase = createClient()
   if (!supabase) return []
 
-  const selectCols = 'id, keyword, name, expires_at, created_at, public_id' as const
   const byId = new Map<string, BoardRowSelected>()
   const add = (row: BoardRowSelected) => byId.set(String(row.id), row)
 
-  let idMatch: BoardRowSelected | null = null
-  const isNumeric = /^\d+$/.test(q)
-  if (isNumeric) {
-    const num = Number(q)
-    const { data } = await supabase
-      .from('boards')
-      .select(selectCols)
-      .eq('public_id', num as never)
-      .maybeSingle()
-    if (data) {
-      idMatch = data as BoardRowSelected
-      add(idMatch)
+  const runQueries = async (cols: string) => {
+    byId.clear()
+    let idMatch: BoardRowSelected | null = null
+    const isNumeric = /^\d+$/.test(q)
+    if (isNumeric) {
+      const num = Number(q)
+      const { data, error: numErr } = await supabase.from('boards').select(cols).eq('public_id', num as never).maybeSingle()
+      if (numErr) return { idMatch: null as BoardRowSelected | null, columnError: numErr.code }
+      if (data) {
+        idMatch = data as BoardRowSelected
+        add(idMatch)
+      }
     }
+    const escapeLike = (s: string) => String(s).replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+    const pattern = `%${escapeLike(q)}%`
+    const { data: byName, error: nameErr } = await supabase.from('boards').select(cols).ilike('name', pattern).order('created_at', { ascending: false }).limit(20)
+    if (nameErr) return { idMatch: null as BoardRowSelected | null, columnError: nameErr.code }
+    ;(byName ?? []).forEach((r) => add(r as BoardRowSelected))
+    const { data: byKeyword, error: kwErr } = await supabase.from('boards').select(cols).ilike('keyword', pattern).order('created_at', { ascending: false }).limit(20)
+    if (kwErr) return { idMatch: null as BoardRowSelected | null, columnError: kwErr.code }
+    ;(byKeyword ?? []).forEach((r) => add(r as BoardRowSelected))
+    return { idMatch, columnError: null as string | null }
   }
 
-  const escapeLike = (s: string) => String(s).replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
-  const pattern = `%${escapeLike(q)}%`
-
-  const { data: byName } = await supabase
-    .from('boards')
-    .select(selectCols)
-    .ilike('name', pattern)
-    .order('created_at', { ascending: false })
-    .limit(15)
-  ;(byName ?? []).forEach((r) => add(r as BoardRowSelected))
-
-  const { data: byKeyword } = await supabase
-    .from('boards')
-    .select(selectCols)
-    .ilike('keyword', pattern)
-    .order('created_at', { ascending: false })
-    .limit(15)
-  ;(byKeyword ?? []).forEach((r) => add(r as BoardRowSelected))
+  let idMatch: BoardRowSelected | null = null
+  let useFilter = true
+  let run = await runQueries(SEARCH_SELECT_COLS)
+  if (run.columnError === '42703') {
+    run = await runQueries(SEARCH_SELECT_COLS_LEGACY)
+    useFilter = false
+  }
+  idMatch = run.idMatch
 
   const rest = [...byId.values()]
-    .filter((r) => !idMatch || String(r.id) !== String(idMatch.id))
+    .filter((r) => !idMatch || String(r.id) !== String(idMatch!.id))
     .sort(
       (a, b) =>
         new Date((b as { created_at: string }).created_at).getTime() -
         new Date((a as { created_at: string }).created_at).getTime()
     )
   const ordered = idMatch ? [idMatch, ...rest] : rest
-  return ordered.slice(0, 15).map(normalizeBoardRow)
+  const normalized = ordered.slice(0, 20).map(normalizeBoardRow)
+  const filtered = useFilter ? normalized.filter(isVisibleInSearch) : normalized
+  return filtered.slice(0, 15)
 }
 
 /**
@@ -294,4 +318,25 @@ export async function extendBoardExpiry(boardId: string): Promise<Date | null> {
   }
 
   return newExpiresAt
+}
+
+/**
+ * 방 폭파(종료) 처리: is_active = false, exploded_at = now().
+ * PulseFeed에서 만료 감지 시 한 번 호출.
+ */
+export async function markBoardExploded(boardId: string): Promise<boolean> {
+  if (!isValidUuid(boardId)) return false
+  const supabase = createClient()
+  if (!supabase) return false
+  const now = new Date().toISOString()
+  const { error } = await supabase
+    .from('boards')
+    .update({ is_active: false, exploded_at: now } as Record<string, unknown>)
+    .eq('id', boardId)
+  if (error) {
+    if (error.code === '42703') return false
+    console.error('markBoardExploded error:', error)
+    return false
+  }
+  return true
 }

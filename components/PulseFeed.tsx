@@ -11,7 +11,7 @@ import { isSupabaseConfigured, isValidUuid } from '@/lib/supabase/client'
 import { useBoardChat } from '@/lib/supabase/useBoardChat'
 import { checkNicknameAvailability, getNicknamesInBoard } from '@/lib/supabase/messages'
 import { uploadChatImage } from '@/lib/supabase/storage'
-import { extendBoardExpiry, EXTEND_MS_PER_HOURGLASS } from '@/lib/supabase/boards'
+import { extendBoardExpiry, EXTEND_MS_PER_HOURGLASS, markBoardExploded } from '@/lib/supabase/boards'
 import { recordContribution, getTopContributors, subscribeToContributions, type TopContributor } from '@/lib/supabase/contributions'
 import { subscribeBoardPresence, type PresenceUser } from '@/lib/supabase/presence'
 import { joinRoom, leaveRoom, getActiveParticipants, subscribeToRoomParticipants, type RoomParticipant } from '@/lib/supabase/roomParticipants'
@@ -507,14 +507,19 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return () => clearInterval(intervalId)
   }, [board, useSupabase, boardExpiresAtOverride, initialExpiresAt, initialCreatedAt])
 
-  // 만료 시 "폭파" 메시지 후 메인으로
+  // 만료 시 DB에 폭파 기록(is_active=false, exploded_at=now) 후 메인으로
+  const explodedMarkedRef = useRef(false)
   useEffect(() => {
     if (!isExpired) return
+    if (useSupabaseWithUuid && isValidUuid(boardId) && !explodedMarkedRef.current) {
+      explodedMarkedRef.current = true
+      markBoardExploded(boardId).catch(() => {})
+    }
     const t = setTimeout(() => {
       onBack()
     }, 2500)
     return () => clearTimeout(t)
-  }, [isExpired, onBack])
+  }, [isExpired, onBack, useSupabaseWithUuid, boardId])
 
   // 명예의 전당 TOP 3 조회 + Realtime 구독
   useEffect(() => {
@@ -664,7 +669,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     displayBoard.name != null && /^#?board-\d+$/i.test(displayBoard.name.trim())
       ? '새 방'
       : (displayBoard.name ?? '방')
-  const headerTitle = String(displayTitle).replace(/^#\s*/, '').trim() || '익명의 떴다방'
+  const headerTitle = String(displayTitle).replace(/^#\s*/, '').trim() || '익명의 POPPIN'
 
   /** 방 번호: DB room_no(→ boardPublicId) → URL 숫자(roomIdFromUrl) → board-N. 로딩 끝나면 No. {room_no} 표시 */
   const roomNo =
@@ -755,7 +760,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 boxShadow: '0 0 20px rgba(255,107,0,0.25), 0 0 40px rgba(255,107,0,0.12), inset 0 0 0 1px rgba(255,107,0,0.15)',
               }}
             >
-              <h2 className="text-lg sm:text-xl font-bold text-center mb-1 text-white" style={{ textShadow: '0 0 12px rgba(255,255,255,0.15)' }}>
+              <h2 className="text-lg sm:text-xl font-black text-center mb-1 text-white" style={{ textShadow: '0 0 12px rgba(255,255,255,0.15)' }}>
                 닉네임 설정
               </h2>
               <p className="text-center text-gray-400 text-sm mb-3">
@@ -901,7 +906,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             exit={{ opacity: 0 }}
           >
             <motion.p
-              className="text-xl sm:text-2xl font-bold text-red-500 text-center mb-2"
+              className="text-xl sm:text-2xl font-black text-red-500 text-center mb-2"
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               transition={{ type: 'spring', damping: 20 }}
@@ -970,7 +975,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               >
                 ← 뒤로
               </button>
-              <h1 className="text-sm sm:text-xl font-bold truncate min-w-0 text-white">
+              <h1 className="text-sm sm:text-xl font-black truncate min-w-0 text-white">
                 {headerTitle}
               </h1>
               <button
@@ -1722,7 +1727,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-white">글쓰기</h2>
+                <h2 className="text-lg font-black text-white">글쓰기</h2>
                 <button
                   type="button"
                   onClick={handleCloseWriteModal}

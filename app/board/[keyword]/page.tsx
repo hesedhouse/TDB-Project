@@ -218,7 +218,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
               exit={{ opacity: 0, y: -10, scale: 0.9 }}
               transition={{ duration: 0.25 }}
             >
-              새로운 떴다방이 생성되었습니다!
+              새로운 POPPIN이 생성되었습니다!
             </motion.div>
           )}
         </AnimatePresence>
@@ -235,7 +235,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
               animate={{ scale: 1 }}
               transition={{ type: 'spring', damping: 25 }}
             >
-              <p className="text-center text-neon-orange font-bold text-lg mb-4" style={{ textShadow: '0 0 12px rgba(255,107,0,0.6)' }}>
+              <p className="text-center text-neon-orange font-black text-lg mb-4" style={{ textShadow: '0 0 12px rgba(255,107,0,0.6)' }}>
                 비밀번호를 입력하세요
               </p>
               <input

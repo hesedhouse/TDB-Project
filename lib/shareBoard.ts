@@ -21,8 +21,8 @@ export async function shareBoard(
   boardName: string
 ): Promise<ShareResult> {
   const url = getBoardShareUrl(boardId)
-  const title = `TDB - ${boardName}`
-  const text = `떴다방 "${boardName}" 초대 링크예요.`
+  const title = `POPPIN - ${boardName}`
+  const text = `POPPIN "${boardName}" 초대 링크예요.`
 
   if (typeof navigator === 'undefined') {
     return 'unsupported'

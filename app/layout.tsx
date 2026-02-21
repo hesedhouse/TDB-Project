@@ -3,7 +3,7 @@ import './globals.css'
 import ErrorBoundary from '@/components/ErrorBoundary'
 
 export const metadata: Metadata = {
-  title: 'TDB - 떴다방',
+  title: 'POPPIN',
   description: '7일 후 소멸하는 휘발성 커뮤니티',
 }
 

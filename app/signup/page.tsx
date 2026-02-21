@@ -74,8 +74,8 @@ function SignupForm() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
       >
-        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1" style={{ textShadow: '0 0 20px rgba(255,107,0,0.3)' }}>
-          TDB 떴다방
+        <h1 className="text-2xl sm:text-3xl font-black text-white mb-1 tracking-tight" style={{ textShadow: '0 0 20px rgba(255,107,0,0.3)' }}>
+          POPPIN
         </h1>
         <p className="text-gray-400 text-sm mb-6">이메일로 간단 가입</p>
 
