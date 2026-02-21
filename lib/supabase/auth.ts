@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from './client'
 import type { User } from '@supabase/supabase-js'
 
-export type AuthProvider = 'kakao' | 'naver' | 'google'
+/** Supabase OAuth에서 지원하는 프로바이더만. 네이버는 NextAuth 전용. */
+export type AuthProvider = 'kakao' | 'google'
 
 /** URL 해시(#access_token=...&refresh_token=...) 파싱 후 세션 수립. OAuth 콜백 후 호출. */
 export async function exchangeHashForSession(): Promise<boolean> {
@@ -60,7 +61,7 @@ export function useAuth() {
     const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://poppinapps.vercel.app').trim().replace(/\/$/, '')
     const redirectTo = returnUrl ? `${baseUrl}${returnUrl.startsWith('/') ? returnUrl : `/${returnUrl}`}` : `${baseUrl}/`
     await supabase.auth.signInWithOAuth({
-      provider: provider as any,
+      provider,
       options: { redirectTo },
     })
   }, [])

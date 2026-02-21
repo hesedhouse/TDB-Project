@@ -53,10 +53,6 @@ function LoginForm() {
   }, [user, loading, nextAuthStatus, nextAuthSession, returnUrl, router])
 
   const handleLogin = async (provider: AuthProvider) => {
-    if (provider === 'naver') {
-      await signIn('naver', { callbackUrl: '/dashboard' })
-      return
-    }
     await signInSupabase(provider, DASHBOARD_PATH)
   }
 
@@ -209,7 +205,7 @@ function LoginForm() {
 
           <motion.button
             type="button"
-            onClick={signInWithNaver}
+            onClick={() => signIn('naver', { callbackUrl: '/dashboard' })}
             className="w-full py-3.5 rounded-xl font-semibold text-base flex items-center justify-center gap-3 text-white"
             style={{ background: '#03C75A', boxShadow: '0 2px 12px rgba(3,199,90,0.35)' }}
             whileHover={{ scale: 1.02 }}

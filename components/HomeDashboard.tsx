@@ -10,6 +10,7 @@ import { mockBoards, getTrendKeywords, filterActiveBoards, formatRemainingTimer 
 import { getHourglasses } from '@/lib/hourglass'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { createClient } from '@/lib/supabase/client'
+import { signOut as nextAuthSignOut, useSession } from 'next-auth/react'
 import { useAuth } from '@/lib/supabase/auth'
 import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
 import { searchBoards, type BoardRow } from '@/lib/supabase/boards'
@@ -46,8 +47,11 @@ function maskEmail(email: string): string {
 
 function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const router = useRouter()
-  const { user, signOut } = useAuth()
+  const { user, signOut: signOutSupabase } = useAuth()
+  const { data: nextAuthSession } = useSession()
   const useSupabase = isSupabaseConfigured()
+  const displayEmail = user?.email ?? nextAuthSession?.user?.email ?? null
+  const isNextAuthUser = !user && !!nextAuthSession?.user
   const [searchQuery, setSearchQuery] = useState('')
   const [floatingTags, setFloatingTags] = useState<FloatingTag[]>(() =>
     getTrendKeywords().map((word) => ({ word, source: 'board' as const }))
@@ -479,15 +483,16 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           </Link>
         </div>
         <div className="flex items-center justify-end gap-1.5 sm:gap-3 flex-shrink-0 min-w-0">
-          {useSupabase && user?.email && (
+          {displayEmail && (
             <>
-              <span className="hidden sm:inline text-gray-300 text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[160px]" title={user.email}>
-                {maskEmail(user.email)}
+              <span className="hidden sm:inline text-gray-300 text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[160px]" title={displayEmail}>
+                {maskEmail(displayEmail)}
               </span>
               <motion.button
                 type="button"
                 onClick={async () => {
-                  await signOut()
+                  if (isNextAuthUser) await nextAuthSignOut({ callbackUrl: '/login' })
+                  else await signOutSupabase()
                   router.replace('/login')
                 }}
                 className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-medium border-2 border-[#FF6B00] text-gray-200 bg-transparent hover:bg-[#FF6B00] hover:text-white transition-colors whitespace-nowrap"
