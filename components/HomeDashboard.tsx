@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/supabase/auth'
 import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
 import { searchBoards, type BoardRow } from '@/lib/supabase/boards'
-import { getActiveParticipants, subscribeToRoomParticipants } from '@/lib/supabase/roomParticipants'
+import { getActiveParticipants, getExistingParticipantForUser, subscribeToRoomParticipants } from '@/lib/supabase/roomParticipants'
 import { useTick } from '@/lib/TickContext'
 import { getActiveSessions, removeExpiredSessions, removeSessionByBoardId, type ActiveSession } from '@/lib/activeSessions'
 import type { Board } from '@/lib/mockData'
@@ -150,10 +150,16 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     return () => clearTimeout(t)
   }, [searchQuery, useSupabase, isBoardVisibleInSearch])
 
-  /** 검색 결과의 각 방 참여 인원수: 초기 조회 + room_participants Realtime 구독. 입장/퇴장 시 콜백으로 즉시 refetch */
+  /** 검색 결과의 각 방 참여 인원수: 즉시 0으로 표시 후 DB 조회 → room_participants Realtime 구독으로 실시간 갱신 */
   useEffect(() => {
     if (!useSupabase || searchResults.length === 0) return
     let cancelled = false
+    const boardIds = searchResults.map((b) => b.id)
+    setParticipantCounts((prev) => {
+      const next = { ...prev }
+      boardIds.forEach((id) => (next[id] = prev[id] ?? 0))
+      return next
+    })
     const updateCount = (boardId: string, count: number) => {
       if (cancelled) return
       if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -162,20 +168,16 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       setParticipantCounts((prev) => ({ ...prev, [boardId]: count }))
     }
     Promise.all(
-      searchResults.map((b) =>
-        getActiveParticipants(b.id).then((r) => (cancelled ? 0 : r.length))
-      )
+      boardIds.map((id) => getActiveParticipants(id).then((r) => (cancelled ? 0 : r.length)))
     ).then((counts) => {
       if (cancelled) return
       const next: Record<string, number> = {}
-      searchResults.forEach((b, i) => {
-        next[b.id] = counts[i] ?? 0
-      })
+      boardIds.forEach((id, i) => (next[id] = counts[i] ?? 0))
       setParticipantCounts((prev) => ({ ...prev, ...next }))
     })
-    const unsubs = searchResults.map((b) =>
-      subscribeToRoomParticipants(b.id, () => {
-        getActiveParticipants(b.id).then((r) => updateCount(b.id, r.length))
+    const unsubs = boardIds.map((boardId) =>
+      subscribeToRoomParticipants(boardId, () => {
+        getActiveParticipants(boardId).then((r) => updateCount(boardId, r.length))
       })
     )
     return () => {
@@ -274,7 +276,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     }, 500)
   }
 
-  /** 검색 결과에서 방 선택 → 폭파된 방이면 입장 막고 안내, 아니면 입장 */
+  /** 검색 결과에서 방 선택: 기존 참여자면 저장된 닉네임으로 즉시 입장, 신규면 닉네임 모달 후 입장 */
   const handleSelectSearchResult = useCallback(
     (board: BoardRow) => {
       if (board.is_active === false) {
@@ -288,9 +290,21 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       setSearchResults([])
       setSearchFetched(false)
       setHighlightedIndex(-1)
-      router.push(path)
+      const uid = user?.id ?? null
+      if (uid && useSupabase) {
+        getExistingParticipantForUser(board.id, uid).then((existing) => {
+          if (existing?.user_display_name && typeof window !== 'undefined') {
+            try {
+              window.sessionStorage.setItem(`tdb-room-nickname-${board.id}`, existing.user_display_name)
+            } catch {}
+          }
+          router.push(path)
+        })
+      } else {
+        router.push(path)
+      }
     },
-    [router]
+    [router, user?.id, useSupabase]
   )
 
   /** 방 만들기: 방 제목(keyword) + 비밀번호(선택)를 API로 전달 → boards에 저장 후 생성된 ID(public_id)로 즉시 이동. 모달에서 호출 시 제목·비밀번호를 인자로 넘김. */

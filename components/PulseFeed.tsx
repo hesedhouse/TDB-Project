@@ -14,7 +14,7 @@ import { uploadChatImage } from '@/lib/supabase/storage'
 import { extendBoardExpiry, EXTEND_MS_PER_HOURGLASS, markBoardExploded } from '@/lib/supabase/boards'
 import { recordContribution, getTopContributors, subscribeToContributions, type TopContributor } from '@/lib/supabase/contributions'
 import { subscribeBoardPresence, type PresenceUser } from '@/lib/supabase/presence'
-import { joinRoom, leaveRoom, getActiveParticipants, subscribeToRoomParticipants, type RoomParticipant } from '@/lib/supabase/roomParticipants'
+import { joinRoom, leaveRoom, getActiveParticipants, getExistingParticipantForUser, subscribeToRoomParticipants, type RoomParticipant } from '@/lib/supabase/roomParticipants'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
 import { shareBoard } from '@/lib/shareBoard'
 import { addOrUpdateSession, findSession } from '@/lib/activeSessions'
@@ -238,7 +238,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [nicknameInput, useSupabaseWithUuid, boardId, showNicknameModal, userId])
 
-  /** 방 입장 시 세션/워프존 저장 닉네임·캐릭터 있으면 pre-fill; 워프존으로 입장 시 모달 스킵 */
+  /** 방 입장 시: 1) DB에서 현재 유저(ID) 기존 참여 여부 확인 → 있으면 그 닉네임으로 즉시 입장 2) 없으면 session/워프존 저장값 사용 3) 없으면 "이 방에서 사용할 닉네임을 정해주세요!" 모달 필수 */
   useEffect(() => {
     if (!nicknameModalMounted || typeof window === 'undefined') return
     if (!boardId) {
@@ -246,31 +246,74 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setShowNicknameModal(false)
       return
     }
-    try {
-      const key = `${ROOM_NICKNAME_KEY_PREFIX}${boardId}`
-      const charKey = `${ROOM_CHARACTER_KEY_PREFIX}${boardId}`
-      let saved = (window.sessionStorage.getItem(key) ?? '').trim()
-      const savedChar = window.sessionStorage.getItem(charKey)
-      const charNum = savedChar !== null ? parseInt(savedChar, 10) : NaN
-      if (!Number.isNaN(charNum) && charNum >= 0 && charNum <= 9) setEffectiveCharacter(charNum)
-
-      const fromWarp = findSession(boardId, roomIdFromUrl ?? undefined)
-      if (fromWarp?.nickname) {
-        saved = fromWarp.nickname
-        window.sessionStorage.setItem(key, saved)
-        setNicknameInput(saved)
-        setEffectiveNickname(saved)
-        setShowNicknameModal(false)
-        return
-      }
+    let cancelled = false
+    const key = `${ROOM_NICKNAME_KEY_PREFIX}${boardId}`
+    const charKey = `${ROOM_CHARACTER_KEY_PREFIX}${boardId}`
+    const applySaved = (saved: string) => {
+      if (cancelled) return
       setNicknameInput(saved)
-      setEffectiveNickname(saved || userNickname)
-      setShowNicknameModal(true)
-    } catch {
-      setEffectiveNickname(userNickname)
-      setShowNicknameModal(true)
+      setEffectiveNickname(saved)
+      setShowNicknameModal(false)
     }
-  }, [nicknameModalMounted, boardId, userNickname, roomIdFromUrl])
+    if (userId && useSupabaseWithUuid) {
+      getExistingParticipantForUser(boardId, userId).then((existing) => {
+        if (cancelled) return
+        if (existing?.user_display_name) {
+          try {
+            window.sessionStorage.setItem(key, existing.user_display_name)
+          } catch {}
+          setNicknameInput(existing.user_display_name)
+          setEffectiveNickname(existing.user_display_name)
+          setShowNicknameModal(false)
+          const savedChar = window.sessionStorage.getItem(charKey)
+          const charNum = savedChar !== null ? parseInt(savedChar, 10) : NaN
+          if (!Number.isNaN(charNum) && charNum >= 0 && charNum <= 9) setEffectiveCharacter(charNum)
+          return
+        }
+        const fromWarp = findSession(boardId, roomIdFromUrl ?? undefined)
+        if (fromWarp?.nickname) {
+          window.sessionStorage.setItem(key, fromWarp.nickname)
+          applySaved(fromWarp.nickname)
+          return
+        }
+        const saved = (window.sessionStorage.getItem(key) ?? '').trim()
+        if (saved) {
+          setNicknameInput(saved)
+          setEffectiveNickname(saved)
+          setShowNicknameModal(false)
+        } else {
+          setNicknameInput('')
+          setEffectiveNickname('')
+          setShowNicknameModal(true)
+        }
+      })
+    } else {
+      try {
+        let saved = (window.sessionStorage.getItem(key) ?? '').trim()
+        const savedChar = window.sessionStorage.getItem(charKey)
+        const charNum = savedChar !== null ? parseInt(savedChar, 10) : NaN
+        if (!Number.isNaN(charNum) && charNum >= 0 && charNum <= 9) setEffectiveCharacter(charNum)
+        const fromWarp = findSession(boardId, roomIdFromUrl ?? undefined)
+        if (fromWarp?.nickname) {
+          saved = fromWarp.nickname
+          window.sessionStorage.setItem(key, saved)
+        }
+        if (saved) {
+          setNicknameInput(saved)
+          setEffectiveNickname(saved)
+          setShowNicknameModal(false)
+        } else {
+          setNicknameInput('')
+          setEffectiveNickname('')
+          setShowNicknameModal(true)
+        }
+      } catch {
+        setEffectiveNickname('')
+        setShowNicknameModal(true)
+      }
+    }
+    return () => { cancelled = true }
+  }, [nicknameModalMounted, boardId, userNickname, roomIdFromUrl, userId, useSupabaseWithUuid])
 
   /** 모달이 열릴 때: 저장된 아이콘 선택 반영, 닉네임 비어 있으면 랜덤으로 한 번 채움 */
   useEffect(() => {
@@ -332,14 +375,15 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   /** 글/댓글 작성자 이름: 모달 또는 localStorage 저장값 우선, 없으면 prop(게스트) */
   const authorNickname = (effectiveNickname || '').trim() || userNickname
 
-  /** 방 입장 시 room_participants에 참여 등록; 등록 후 참여자 리스트 즉시 refetch. 퇴장(언마운트) 또는 닉네임 변경 시 leaveRoom 호출 후 cleanup */
+  /** 방 입장: 닉네임 확정 후에만 room_participants 등록. 모달 열린 채 닉네임 없으면 join 하지 않음(URL 강제 진입 차단). 퇴장 시 leaveRoom */
   const prevJoinNameRef = useRef<string | null>(null)
   useEffect(() => {
     if (!useSupabaseWithUuid || !boardId) return
+    if (showNicknameModal && !(effectiveNickname || '').trim()) return
     const name = (authorNickname || '').trim() || userNickname || '게스트'
     if (!name) return
     let cancelled = false
-    joinRoom(boardId, name).then((ok) => {
+    joinRoom(boardId, name, userId ?? undefined).then((ok) => {
       if (cancelled || !ok) return
       prevJoinNameRef.current = name
       getActiveParticipants(boardId).then((list) => {
@@ -349,15 +393,16 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return () => {
       cancelled = true
       const leaveName = prevJoinNameRef.current
-      if (leaveName) leaveRoom(boardId, leaveName)
+      if (leaveName) leaveRoom(boardId, leaveName, userId ?? undefined)
       prevJoinNameRef.current = null
     }
-  }, [useSupabaseWithUuid, boardId, authorNickname, userNickname])
+  }, [useSupabaseWithUuid, boardId, authorNickname, userNickname, showNicknameModal, effectiveNickname, userId])
 
+  const nicknameConfirmed = !showNicknameModal || !!(effectiveNickname || '').trim()
   const { messages, send, toggleHeart, deleteMessage, updateMessage, sending } = useBoardChat(boardId, {
     userCharacter: effectiveCharacter,
     userNickname: authorNickname,
-    enabled: useSupabaseWithUuid && !!boardId,
+    enabled: useSupabaseWithUuid && !!boardId && nicknameConfirmed,
     userId: userId ?? undefined,
   })
 
@@ -446,13 +491,13 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const handleLeaveRoom = useCallback(async () => {
     if (!useSupabaseWithUuid || !boardId || leaving) return
     const name = (effectiveNickname || '').trim() || userNickname
-    if (!name) return
+    if (!name && !userId) return
     if (typeof window !== 'undefined' && !window.confirm('방을 나가시겠어요?')) return
     setLeaving(true)
-    const { ok } = await leaveRoom(boardId, name)
+    const { ok } = await leaveRoom(boardId, name || '', userId ?? undefined)
     setLeaving(false)
     if (ok) router.push('/')
-  }, [useSupabaseWithUuid, boardId, effectiveNickname, userNickname, leaving, router])
+  }, [useSupabaseWithUuid, boardId, effectiveNickname, userNickname, userId, leaving, router])
 
   const handleHourglassExtend = useCallback(async () => {
     if (extendingHourglass || !useSupabaseWithUuid || !isValidUuid(boardId)) return
@@ -823,7 +868,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               onClick={(e) => e.stopPropagation()}
             >
               <h2 id="nickname-modal-title" className="text-lg sm:text-xl font-black text-center mb-1 text-white" style={{ textShadow: '0 0 12px rgba(255,255,255,0.15)' }}>
-                닉네임 설정
+                이 방에서 사용할 닉네임을 정해주세요!
               </h2>
               <p className="text-center text-gray-400 text-sm mb-3">
                 이 방에서 당신의 부캐(이름)를 정해주세요
