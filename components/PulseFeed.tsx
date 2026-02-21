@@ -886,14 +886,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 </svg>
               </motion.button>
               <div
-                className="flex items-center gap-0.5 sm:gap-1.5 text-amber-400 flex-shrink-0 min-w-0"
+                className="flex items-center gap-1 text-amber-400 flex-shrink-0 min-w-0"
                 role="status"
                 aria-label={`보유 모래시계 ${hourglasses}개`}
               >
                 <span className="text-sm sm:text-base leading-none flex-shrink-0" aria-hidden>⏳</span>
-                <span className="hidden sm:inline text-amber-400 text-sm">보유 모래시계: </span>
                 <span className="font-semibold tabular-nums text-white text-xs sm:text-sm">{hourglasses}</span>
-                <span className="hidden sm:inline text-amber-400 text-sm">개</span>
               </div>
               <button
                 type="button"
