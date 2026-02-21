@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, memo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import DotCharacter from './DotCharacter'
@@ -430,21 +431,23 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom pt-14 md:pt-6 px-6 max-w-7xl mx-auto">
-      {/* Header: 좌측 POPPIN 로고, 우측 이메일·로그아웃·모래시계 */}
+      {/* Header: 좌측 로고(홈 링크), 우측 이메일·로그아웃·모래시계 */}
       <header className="flex justify-between items-center flex-wrap gap-2 mb-6 pt-4 sm:pt-8 safe-top">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
-          <motion.div
-            className="text-xl sm:text-3xl font-black pixel-art flex-shrink-0 tracking-tight"
-            style={{
-              color: '#FF5F00',
-              textShadow: '0 0 10px #FF5F00, 0 0 20px #FF5F00',
-            }}
-            animate={{ opacity: [1, 0.8, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
+        <div className="flex items-center min-w-0 flex-shrink-0">
+          <Link
+            href="/"
+            className="inline-flex items-center p-1 -m-1 rounded-lg hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-neon-orange/50 focus:ring-offset-2 focus:ring-offset-midnight-black"
+            aria-label="POPPIN 홈으로 이동"
           >
-            POPPIN
-          </motion.div>
-          <span className="text-xs sm:text-sm text-gray-400 flex-shrink-0" aria-hidden>POPPIN</span>
+            <Image
+              src="/logo.png"
+              alt="POPPIN"
+              width={120}
+              height={48}
+              className="h-10 sm:h-12 w-auto object-contain"
+              priority
+            />
+          </Link>
         </div>
         <div className="flex items-center justify-end gap-1.5 sm:gap-3 flex-shrink-0 min-w-0">
           {useSupabase && user?.email && (
