@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -12,6 +12,8 @@ import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/supabase/auth'
 import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
+import { searchBoards, type BoardRow } from '@/lib/supabase/boards'
+import { getActiveParticipants } from '@/lib/supabase/roomParticipants'
 import { useTick } from '@/lib/TickContext'
 import { getActiveSessions, removeExpiredSessions, removeSessionByBoardId, type ActiveSession } from '@/lib/activeSessions'
 import type { Board } from '@/lib/mockData'
@@ -60,6 +62,28 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [roomPassword, setRoomPassword] = useState('')
   const [showRoomPassword, setShowRoomPassword] = useState(false)
+  /** 실시간 검색 결과 (debounce 적용) */
+  const [searchResults, setSearchResults] = useState<BoardRow[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchFetched, setSearchFetched] = useState(false)
+  /** 검색 결과 드롭다운 포커스 인덱스 (키보드 방향키용) */
+  const [highlightedIndex, setHighlightedIndex] = useState(-1)
+  /** 방별 참여 인원수 (boardId -> count) */
+  const [participantCounts, setParticipantCounts] = useState<Record<string, number>>({})
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const searchDropdownRef = useRef<HTMLDivElement>(null)
+
+  /** 드롭다운 외부 클릭 시 하이라이트만 초기화 (입력값은 유지) */
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const el = searchDropdownRef.current ?? searchInputRef.current
+      if (el && !el.contains(e.target as Node) && !searchInputRef.current?.contains(e.target as Node)) {
+        setHighlightedIndex(-1)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   useEffect(() => {
     setHourglasses(getHourglasses())
@@ -86,6 +110,50 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       if (tags.length > 0) setFloatingTags(tags)
     })
   }, [useSupabase])
+
+  /** 실시간 검색: debounce 300ms 후 searchBoards 호출 (ID + 제목 통합) */
+  useEffect(() => {
+    if (!useSupabase) return
+    const q = searchQuery.trim()
+    if (!q) {
+      setSearchResults([])
+      setSearchFetched(false)
+      setHighlightedIndex(-1)
+      return
+    }
+    const t = setTimeout(() => {
+      setSearchLoading(true)
+      setSearchFetched(false)
+      searchBoards(q).then((boards) => {
+        setSearchResults(boards)
+        setSearchFetched(true)
+        setSearchLoading(false)
+        setHighlightedIndex(boards.length > 0 ? 0 : -1)
+      })
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchQuery, useSupabase])
+
+  /** 검색 결과의 각 방 참여 인원수 병렬 조회 */
+  useEffect(() => {
+    if (!useSupabase || searchResults.length === 0) return
+    let cancelled = false
+    Promise.all(
+      searchResults.map((b) =>
+        getActiveParticipants(b.id).then((r) => (cancelled ? 0 : r.length))
+      )
+    ).then((counts) => {
+      if (cancelled) return
+      const next: Record<string, number> = {}
+      searchResults.forEach((b, i) => {
+        next[b.id] = counts[i] ?? 0
+      })
+      setParticipantCounts((prev) => ({ ...prev, ...next }))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [useSupabase, searchResults])
 
   // Supabase Realtime: 새 방 생성 시 태그 하나를 새 키워드로 교체
   useEffect(() => {
@@ -176,6 +244,67 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       setWarpingKeyword(null)
     }, 500)
   }
+
+  /** 검색 결과에서 방 선택 → 해당 방으로 입장 (닉네임 모달은 방 페이지에서 표시) */
+  const handleSelectSearchResult = useCallback(
+    (board: BoardRow) => {
+      const path = board.public_id != null
+        ? `/board/${board.public_id}`
+        : `/board/${encodeURIComponent(board.keyword)}`
+      setSearchQuery('')
+      setSearchResults([])
+      setSearchFetched(false)
+      setHighlightedIndex(-1)
+      router.push(path)
+    },
+    [router]
+  )
+
+  /** 검색창 키보드: 방향키로 하이라이트, Enter로 선택 또는 방 만들기 */
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const showDropdown = searchQuery.trim() && (searchLoading || searchFetched)
+      if (!showDropdown) {
+        if (e.key === 'Enter') handleCreateOrEnterRoom()
+        return
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        if (searchResults.length > 0) {
+          setHighlightedIndex((prev) => Math.min(prev + 1, searchResults.length - 1))
+        } else if (searchFetched) {
+          setHighlightedIndex(-2)
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        if (highlightedIndex === -2) setHighlightedIndex(-1)
+        else setHighlightedIndex((prev) => Math.max(-1, prev - 1))
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
+          handleSelectSearchResult(searchResults[highlightedIndex])
+        } else if (highlightedIndex === -2 || (searchFetched && searchResults.length === 0)) {
+          handleCreateOrEnterRoom()
+        } else if (searchResults.length > 0 && highlightedIndex === 0) {
+          handleSelectSearchResult(searchResults[0])
+        } else {
+          handleCreateOrEnterRoom()
+        }
+      } else if (e.key === 'Escape') {
+        setHighlightedIndex(-1)
+        searchInputRef.current?.blur()
+      }
+    },
+    [
+      searchQuery,
+      searchLoading,
+      searchFetched,
+      searchResults,
+      highlightedIndex,
+      handleSelectSearchResult,
+      handleCreateOrEnterRoom,
+    ]
+  )
 
   /** 워프존 세션 카드 클릭 → 해당 방으로 이동 (저장된 닉네임으로 바로 입장) */
   const handleWarpToSession = useCallback((session: ActiveSession) => {
@@ -305,22 +434,98 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         </div>
       </header>
 
-      {/* Discovery Section - 방 제목·태그만 입력 (번호 자동 부여, 비밀번호 선택) */}
+      {/* Discovery Section - 실시간 방 검색 + 드롭다운 */}
       <section className="mb-7 relative overflow-visible">
         <div className="relative z-10 mb-5 flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              placeholder="방 제목을 입력하세요"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreateOrEnterRoom()
-              }}
-              disabled={creatingRoom}
-              className="flex-1 w-full px-5 py-3.5 sm:px-6 sm:py-4 rounded-2xl glass-strong border-2 border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm sm:text-base disabled:opacity-60"
-              aria-label="방 제목 입력"
-            />
+          <div className="flex flex-col sm:flex-row gap-3 relative">
+            <div className="flex-1 relative">
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="방 제목 또는 번호로 검색"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                onFocus={() => searchQuery.trim() && setHighlightedIndex(searchResults.length > 0 ? 0 : searchFetched ? -2 : -1)}
+                disabled={creatingRoom}
+                className="w-full px-5 py-3.5 sm:px-6 sm:py-4 rounded-2xl glass-strong border-2 border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-400 text-sm sm:text-base disabled:opacity-60"
+                aria-label="방 제목 또는 방번호로 검색"
+                aria-expanded={!!(searchQuery.trim() && (searchLoading || searchFetched))}
+                aria-controls="search-results-dropdown"
+                aria-activedescendant={highlightedIndex >= 0 && highlightedIndex < searchResults.length ? `search-result-${highlightedIndex}` : undefined}
+                autoComplete="off"
+              />
+              {/* 검색 결과 드롭다운: backdrop-blur + 오렌지 하이라이트 */}
+              <AnimatePresence>
+                {searchQuery.trim() && (searchLoading || searchFetched) && (
+                  <motion.div
+                    ref={searchDropdownRef}
+                    id="search-results-dropdown"
+                    role="listbox"
+                    className="absolute left-0 right-0 top-full mt-1.5 rounded-xl border border-neon-orange/40 bg-black/90 backdrop-blur-xl shadow-xl overflow-hidden z-50 max-h-[280px] overflow-y-auto"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    {searchLoading && searchResults.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-gray-400 text-sm">
+                        검색 중...
+                      </div>
+                    ) : searchResults.length === 0 ? (
+                      <div className="p-4">
+                        <p className="text-gray-400 text-sm mb-3">일치하는 방이 없습니다. 새로 만드시겠습니까?</p>
+                        <motion.button
+                          type="button"
+                          role="option"
+                          aria-selected={highlightedIndex === -2}
+                          onClick={handleCreateOrEnterRoom}
+                          className={`w-full py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
+                            highlightedIndex === -2
+                              ? 'bg-neon-orange/30 border-2 border-neon-orange text-white'
+                              : 'bg-white/5 border-2 border-transparent text-gray-300 hover:bg-white/10'
+                          }`}
+                        >
+                          방 만들기
+                        </motion.button>
+                      </div>
+                    ) : (
+                      <ul className="py-1" role="listbox">
+                        {searchResults.map((board, i) => {
+                          const expiresAt = new Date(board.expires_at)
+                          const count = participantCounts[board.id] ?? null
+                          const titleRaw = (board.name ?? board.keyword ?? '').trim().replace(/^#\s*/, '') || '방'
+                          const roomNo = board.public_id != null ? `#${board.public_id}` : null
+                          const isHighlighted = highlightedIndex === i
+                          return (
+                            <li key={board.id} role="option" aria-selected={isHighlighted} id={`search-result-${i}`}>
+                              <motion.button
+                                type="button"
+                                onClick={() => handleSelectSearchResult(board)}
+                                className={`w-full text-left px-4 py-3 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/5 last:border-0 transition-colors ${
+                                  isHighlighted ? 'bg-neon-orange/20 border-l-2 border-l-neon-orange' : 'hover:bg-white/10'
+                                }`}
+                              >
+                                <span className="font-medium text-white truncate min-w-0 flex items-center gap-1.5">
+                                  <span className="truncate">{titleRaw}</span>
+                                  {roomNo && (
+                                    <span className="text-xs text-gray-500 font-normal flex-shrink-0">{roomNo}</span>
+                                  )}
+                                </span>
+                                <span className="text-xs text-gray-400 flex items-center gap-2 flex-shrink-0">
+                                  <span>👥 {count !== null ? count : '—'}명</span>
+                                  <BoardTimeLabel expiresAt={expiresAt} />
+                                </span>
+                              </motion.button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             <motion.button
             type="button"
             onClick={handleCreateOrEnterRoom}

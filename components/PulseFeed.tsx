@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import { LogOut } from 'lucide-react'
 import DotCharacter from './DotCharacter'
 import { mockBoards, mockPosts, extendBoardLifespan, formatRemainingTimer } from '@/lib/mockData'
 import type { Post, Board } from '@/lib/mockData'
@@ -12,9 +14,11 @@ import { uploadChatImage } from '@/lib/supabase/storage'
 import { extendBoardExpiry, EXTEND_MS_PER_HOURGLASS } from '@/lib/supabase/boards'
 import { recordContribution, getTopContributors, subscribeToContributions, type TopContributor } from '@/lib/supabase/contributions'
 import { subscribeBoardPresence, type PresenceUser } from '@/lib/supabase/presence'
+import { joinRoom, leaveRoom, getActiveParticipants, subscribeToRoomParticipants, type RoomParticipant } from '@/lib/supabase/roomParticipants'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
 import { shareBoard } from '@/lib/shareBoard'
 import { addOrUpdateSession, findSession } from '@/lib/activeSessions'
+import { getRandomNickname } from '@/lib/randomNicknames'
 import type { Message } from '@/lib/supabase/types'
 
 interface PulseFeedProps {
@@ -49,6 +53,7 @@ export interface Comment {
 }
 
 export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFromUrl, userCharacter: rawUserCharacter, userNickname: rawUserNickname, userId, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
+  const router = useRouter()
   /** 방/유저 정보가 아직 준비되지 않았을 때를 대비한 안전한 기본값 (클라이언트 에러 방지) */
   const boardId = typeof rawBoardId === 'string' && rawBoardId.trim() !== '' ? rawBoardId.trim() : ''
   const userNickname = rawUserNickname ?? '게스트'
@@ -90,10 +95,15 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [writePreviewUrl, setWritePreviewUrl] = useState<string | null>(null)
   /** 방 입장 시 닉네임 설정 모달: 클라이언트 마운트 후에만 표시 (Hydration 방지) */
   const ROOM_NICKNAME_KEY_PREFIX = 'tdb-room-nickname-'
+  const ROOM_CHARACTER_KEY_PREFIX = 'tdb-room-character-'
   const [nicknameModalMounted, setNicknameModalMounted] = useState(false)
   const [showNicknameModal, setShowNicknameModal] = useState(false)
   const [effectiveNickname, setEffectiveNickname] = useState('')
   const [nicknameInput, setNicknameInput] = useState('')
+  /** 모달에서 선택 중인 아이콘(캐릭터) 인덱스 0~9. 제출 시 effectiveCharacter로 반영 */
+  const [selectedCharacterInModal, setSelectedCharacterInModal] = useState(0)
+  /** 방별로 저장한 캐릭터. 채팅/참여자 표시에 사용 */
+  const [effectiveCharacter, setEffectiveCharacter] = useState(userCharacter)
   /** 닉네임 제출 시 중복 검사 로딩 */
   const [nicknameSubmitLoading, setNicknameSubmitLoading] = useState(false)
   /** 닉네임 제출 시 중복 경고 메시지 */
@@ -107,8 +117,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [deleteConfirmMessageId, setDeleteConfirmMessageId] = useState<string | null>(null)
   /** 실시간 접속자 (Supabase Presence). 닉네임 없으면 '익명의 대화가'로 표시 */
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
+  /** DB 기준 참여자 (is_active = true). 리스트·인원수·왕관 필터에 사용 */
+  const [activeParticipants, setActiveParticipants] = useState<RoomParticipant[]>([])
   const [showPresencePopover, setShowPresencePopover] = useState(false)
   const presencePopoverRef = useRef<HTMLDivElement>(null)
+  const [leaving, setLeaving] = useState(false)
   const feedEndRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const writeModalFileRef = useRef<HTMLInputElement>(null)
@@ -124,6 +137,21 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     const unsub = subscribeBoardPresence(boardId, displayName, setOnlineUsers)
     return unsub
   }, [useSupabaseWithUuid, boardId, effectiveNickname, userNickname])
+
+  /** 참여자 리스트: DB room_participants (is_active = true) 조회 + Realtime 구독 */
+  useEffect(() => {
+    if (!useSupabaseWithUuid || !boardId) return
+    const refetch = () => getActiveParticipants(boardId).then(setActiveParticipants)
+    refetch()
+    const unsub = subscribeToRoomParticipants(boardId, refetch)
+    return unsub
+  }, [useSupabaseWithUuid, boardId])
+
+  /** 방 입장 시 room_participants에 참여 등록 (닉네임 확정 후) */
+  useEffect(() => {
+    if (!useSupabaseWithUuid || !boardId || !authorNickname) return
+    joinRoom(boardId, authorNickname)
+  }, [useSupabaseWithUuid, boardId, authorNickname])
 
   /** 접속자 팝오버: 외부 클릭 시 닫기 */
   useEffect(() => {
@@ -198,7 +226,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [nicknameInput, useSupabaseWithUuid, boardId, showNicknameModal, userId])
 
-  /** 방 입장 시 세션/워프존 저장 닉네임 있으면 pre-fill; 워프존으로 입장 시 모달 스킵 */
+  /** 방 입장 시 세션/워프존 저장 닉네임·캐릭터 있으면 pre-fill; 워프존으로 입장 시 모달 스킵 */
   useEffect(() => {
     if (!nicknameModalMounted || typeof window === 'undefined') return
     if (!boardId) {
@@ -208,7 +236,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
     try {
       const key = `${ROOM_NICKNAME_KEY_PREFIX}${boardId}`
+      const charKey = `${ROOM_CHARACTER_KEY_PREFIX}${boardId}`
       let saved = (window.sessionStorage.getItem(key) ?? '').trim()
+      const savedChar = window.sessionStorage.getItem(charKey)
+      const charNum = savedChar !== null ? parseInt(savedChar, 10) : NaN
+      if (!Number.isNaN(charNum) && charNum >= 0 && charNum <= 9) setEffectiveCharacter(charNum)
+
       const fromWarp = findSession(boardId, roomIdFromUrl ?? undefined)
       if (fromWarp?.nickname) {
         saved = fromWarp.nickname
@@ -226,6 +259,20 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setShowNicknameModal(true)
     }
   }, [nicknameModalMounted, boardId, userNickname, roomIdFromUrl])
+
+  /** 모달이 열릴 때: 저장된 아이콘 선택 반영, 닉네임 비어 있으면 랜덤으로 한 번 채움 */
+  useEffect(() => {
+    if (!showNicknameModal || !boardId) return
+    if (typeof window === 'undefined') return
+    const charKey = `${ROOM_CHARACTER_KEY_PREFIX}${boardId}`
+    const savedChar = window.sessionStorage.getItem(charKey)
+    const charNum = savedChar !== null ? parseInt(savedChar, 10) : NaN
+    setSelectedCharacterInModal(Number.isNaN(charNum) || charNum < 0 || charNum > 9 ? 0 : charNum)
+  }, [showNicknameModal, boardId])
+  useEffect(() => {
+    if (!showNicknameModal || nicknameInput.trim() !== '') return
+    setNicknameInput(getRandomNickname())
+  }, [showNicknameModal, nicknameInput])
 
   useEffect(() => {
     if (!noCopyToast) return
@@ -274,7 +321,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const authorNickname = (effectiveNickname || '').trim() || userNickname
 
   const { messages, send, toggleHeart, deleteMessage, updateMessage, sending } = useBoardChat(boardId, {
-    userCharacter,
+    userCharacter: effectiveCharacter,
     userNickname: authorNickname,
     enabled: useSupabaseWithUuid && !!boardId,
     userId: userId ?? undefined,
@@ -323,7 +370,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     const newPost: Post = {
       id: `post-${Date.now()}`,
       boardId,
-      authorCharacter: userCharacter,
+      authorCharacter: effectiveCharacter,
       authorNickname,
       content: text,
       images: writeImageFile ? [URL.createObjectURL(writeImageFile)] : undefined,
@@ -332,7 +379,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
     setPosts((prev) => [newPost, ...prev])
     handleCloseWriteModal()
-  }, [writeContent, writeImageFile, useSupabaseWithUuid, boardId, send, userCharacter, authorNickname, handleCloseWriteModal])
+  }, [writeContent, writeImageFile, useSupabaseWithUuid, boardId, send, effectiveCharacter, authorNickname, handleCloseWriteModal])
 
   const handleMessageHeart = useCallback(
     async (messageId: string) => {
@@ -361,6 +408,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     },
     [useSupabaseWithUuid, toggleHeart, heartedIds]
   )
+
+  const handleLeaveRoom = useCallback(async () => {
+    if (!useSupabaseWithUuid || !boardId || leaving) return
+    const name = (effectiveNickname || '').trim() || userNickname
+    if (!name) return
+    if (typeof window !== 'undefined' && !window.confirm('방을 나가시겠어요?')) return
+    setLeaving(true)
+    const { ok } = await leaveRoom(boardId, name)
+    setLeaving(false)
+    if (ok) router.push('/')
+  }, [useSupabaseWithUuid, boardId, effectiveNickname, userNickname, leaving, router])
 
   const handleHourglassExtend = useCallback(async () => {
     if (extendingHourglass || !useSupabaseWithUuid || !isValidUuid(boardId)) return
@@ -468,16 +526,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return unsubscribe
   }, [useSupabaseWithUuid, boardId])
 
-  /** 닉네임 → 왕관(1~3위) 매핑. 실시간 인원/채팅에서 닉네임 옆에 👑 표시용 */
+  /** 닉네임 → 왕관(1~3위) 매핑. 방에 남아있는 참여자(is_active) 중에서만 적용 */
   const crownByDisplayName = useMemo(() => {
+    const activeSet = new Set(activeParticipants.map((p) => (p.user_display_name ?? '').trim()).filter(Boolean))
     const map = new Map<string, { rank: 1 | 2 | 3; color: string }>()
     const colors: Record<number, string> = { 1: '#FFD700', 2: '#C0C0C0', 3: '#CD7F32' }
     for (const c of topContributors) {
       const name = (c.user_display_name ?? '').trim()
-      if (name && c.rank >= 1 && c.rank <= 3) map.set(name, { rank: c.rank as 1 | 2 | 3, color: colors[c.rank] ?? '#FFD700' })
+      if (name && activeSet.has(name) && c.rank >= 1 && c.rank <= 3) map.set(name, { rank: c.rank as 1 | 2 | 3, color: colors[c.rank] ?? '#FFD700' })
     }
     return map
-  }, [topContributors])
+  }, [topContributors, activeParticipants])
 
   // 하트를 받으면 게시판 수명 연장
   useEffect(() => {
@@ -658,6 +717,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     if (typeof window !== 'undefined') {
       try {
         window.sessionStorage.setItem(`${ROOM_NICKNAME_KEY_PREFIX}${boardId}`, name)
+        window.sessionStorage.setItem(`${ROOM_CHARACTER_KEY_PREFIX}${boardId}`, String(selectedCharacterInModal))
       } catch {}
       addOrUpdateSession({
         boardId,
@@ -667,9 +727,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         expiresAt: initialExpiresAt != null ? new Date(initialExpiresAt).getTime() : undefined,
       })
     }
+    setEffectiveCharacter(selectedCharacterInModal)
     setEffectiveNickname(name)
     setShowNicknameModal(false)
-  }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId])
+  }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId, selectedCharacterInModal])
 
   return (
     <div className="min-h-screen bg-midnight-black text-white safe-bottom pt-6">
@@ -697,24 +758,59 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               <h2 className="text-lg sm:text-xl font-bold text-center mb-1 text-white" style={{ textShadow: '0 0 12px rgba(255,255,255,0.15)' }}>
                 닉네임 설정
               </h2>
-              <p className="text-center text-gray-400 text-sm mb-2">
+              <p className="text-center text-gray-400 text-sm mb-3">
                 이 방에서 당신의 부캐(이름)를 정해주세요
               </p>
+              {/* 아이콘(캐릭터) 선택 그리드 — 10개, 선택 시 주황 테두리 */}
+              <p className="text-xs text-gray-500 mb-1.5">아이콘 선택</p>
+              <div className="grid grid-cols-5 gap-2 mb-4">
+                {Array.from({ length: 10 }, (_, i) => (
+                  <motion.button
+                    key={i}
+                    type="button"
+                    onClick={() => setSelectedCharacterInModal(i)}
+                    className={`rounded-xl p-2 flex items-center justify-center transition-colors ${
+                      selectedCharacterInModal === i
+                        ? 'border-2 border-[#FF6B00] bg-[#FF6B00]/15 ring-2 ring-[#FF6B00]/40'
+                        : 'border-2 border-transparent bg-black/40 hover:bg-white/5'
+                    }`}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.98 }}
+                    aria-pressed={selectedCharacterInModal === i}
+                    aria-label={`아이콘 ${i + 1} 선택`}
+                  >
+                    <DotCharacter characterId={i} size={36} className="flex-shrink-0" />
+                  </motion.button>
+                ))}
+              </div>
               {useSupabaseWithUuid && roomNicknames.length > 0 && (
-                <p className="text-center text-gray-500 text-xs mb-3 truncate px-1" title={roomNicknames.join(', ')}>
+                <p className="text-center text-gray-500 text-xs mb-2 truncate px-1" title={roomNicknames.join(', ')}>
                   현재 활동 중인 부캐들: {roomNicknames.slice(0, 8).join(', ')}{roomNicknames.length > 8 ? '…' : ''}
                 </p>
               )}
-              <input
-                type="text"
-                value={nicknameInput}
-                onChange={(e) => { setNicknameInput(e.target.value); setNicknameError(null) }}
-                onKeyDown={(e) => e.key === 'Enter' && !nicknameSubmitLoading && handleNicknameSubmit()}
-                placeholder="닉네임 입력"
-                maxLength={20}
-                className="w-full px-4 py-3 rounded-xl bg-black/60 border-2 border-[#FF6B00]/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base mb-2"
-                style={{ boxShadow: '0 0 12px rgba(255,107,0,0.15)' }}
-              />
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  value={nicknameInput}
+                  onChange={(e) => { setNicknameInput(e.target.value); setNicknameError(null) }}
+                  onKeyDown={(e) => e.key === 'Enter' && !nicknameSubmitLoading && handleNicknameSubmit()}
+                  placeholder="닉네임 입력"
+                  maxLength={20}
+                  className="flex-1 min-w-0 px-4 py-3 rounded-xl bg-black/60 border-2 border-[#FF6B00]/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base"
+                  style={{ boxShadow: '0 0 12px rgba(255,107,0,0.15)' }}
+                />
+                <motion.button
+                  type="button"
+                  onClick={() => { setNicknameInput(getRandomNickname()); setNicknameError(null) }}
+                  className="flex-shrink-0 p-3 rounded-xl border-2 border-[#FF6B00]/50 bg-black/60 text-[#FF6B00] hover:bg-[#FF6B00]/20 transition-colors"
+                  title="랜덤 닉네임"
+                  aria-label="랜덤 닉네임 뽑기"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <span className="text-xl leading-none" aria-hidden>🎲</span>
+                </motion.button>
+              </div>
               {useSupabaseWithUuid && nicknameInput.trim() && (
                 <p className="text-xs mb-3 min-h-[1rem]">
                   {nicknameCheckStatus === 'checking' && <span className="text-gray-500">확인 중...</span>}
@@ -745,7 +841,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                     확인 중...
                   </span>
                 ) : (
-                  '확인'
+                  '입장하기'
                 )}
               </motion.button>
             </motion.div>
@@ -902,7 +998,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 )}
               </button>
             </div>
-            {/* 오른쪽 그룹: 공유 + 모래시계 + 닉네임 */}
+            {/* 오른쪽 그룹: 공유 + 참여자 + 모래시계 + 닉네임 + 나가기 */}
             <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               <motion.button
                 type="button"
@@ -921,7 +1017,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
                 </svg>
               </motion.button>
-              {/* 실시간 접속자 (Presence): 클릭 시 닉네임 목록 팝오버 */}
+              {/* 참여자 리스트 (DB is_active=true) + Realtime */}
               <div className="relative flex-shrink-0" ref={presencePopoverRef}>
                 <motion.button
                   type="button"
@@ -929,11 +1025,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   className="flex items-center gap-1 px-1.5 py-1 rounded-lg glass border border-neon-orange/30 text-neon-orange hover:bg-neon-orange/10 transition-colors min-w-0"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  title="접속 중인 사람"
-                  aria-label={`접속 중 ${onlineUsers.length}명. 클릭하면 목록을 볼 수 있습니다.`}
+                  title="참여 중인 사람"
+                  aria-label={`참여 중 ${activeParticipants.length}명. 클릭하면 목록을 볼 수 있습니다.`}
                 >
                   <span className="text-sm sm:text-base leading-none" aria-hidden>👥</span>
-                  <span className="font-bold tabular-nums text-white text-xs sm:text-sm">{onlineUsers.length}</span>
+                  <span className="font-bold tabular-nums text-white text-xs sm:text-sm">{activeParticipants.length}</span>
                 </motion.button>
                 <AnimatePresence>
                   {showPresencePopover && (
@@ -944,16 +1040,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                       exit={{ opacity: 0, y: -4 }}
                       transition={{ duration: 0.15 }}
                     >
-                      <p className="text-xs text-gray-400 px-2 pb-1.5 border-b border-white/10 mb-1.5">접속 중 ({onlineUsers.length}명)</p>
+                      <p className="text-xs text-gray-400 px-2 pb-1.5 border-b border-white/10 mb-1.5">참여 중 ({activeParticipants.length}명)</p>
                       <ul className="max-h-40 overflow-y-auto space-y-0.5">
-                        {onlineUsers.length === 0 ? (
+                        {activeParticipants.length === 0 ? (
                           <li className="text-xs text-gray-500 px-2 py-1">아무도 없음</li>
                         ) : (
-                          onlineUsers.map((u, i) => {
-                            const crown = crownByDisplayName.get((u.nickname ?? '').trim())
+                          activeParticipants.map((p, i) => {
+                            const nickname = (p.user_display_name ?? '').trim()
+                            const crown = crownByDisplayName.get(nickname)
                             return (
-                              <li key={`${u.nickname}-${i}`} className="text-xs text-white px-2 py-1 truncate flex items-center gap-1">
-                                <span className="truncate">{u.nickname}</span>
+                              <li key={`${nickname}-${i}`} className="text-xs text-white px-2 py-1 truncate flex items-center gap-1">
+                                <span className="truncate">{nickname || '익명'}</span>
                                 {crown && (
                                   <span style={{ color: crown.color }} className="flex-shrink-0" aria-label={`${crown.rank}위`} title={`기여도 ${crown.rank}위`}>
                                     👑
@@ -987,6 +1084,21 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 <span className="flex-shrink-0" aria-hidden>👤</span>
                 <span className="truncate">{authorNickname || '게스트'}</span>
               </button>
+              {useSupabaseWithUuid && (
+                <motion.button
+                  type="button"
+                  onClick={handleLeaveRoom}
+                  disabled={leaving}
+                  className="flex items-center gap-1 px-1.5 py-1 sm:px-2 sm:py-1.5 rounded-lg border border-red-500/40 text-red-500 hover:bg-red-500/10 transition-colors flex-shrink-0 disabled:opacity-50"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  title="방 나가기"
+                  aria-label="방 나가기"
+                >
+                  <LogOut className="w-4 h-4 sm:w-4 sm:h-4 flex-shrink-0" aria-hidden />
+                  <span className="hidden sm:inline text-xs font-medium">나가기</span>
+                </motion.button>
+              )}
             </div>
           </div>
           
@@ -1264,7 +1376,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                                 id: `c-${Date.now()}-${msg.id}`,
                                 postId: msg.id,
                                 authorNickname,
-                                authorCharacter: userCharacter,
+                                authorCharacter: effectiveCharacter,
                                 content: text,
                                 createdAt: new Date(),
                               }
@@ -1284,7 +1396,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                               id: `c-${Date.now()}-${msg.id}`,
                               postId: msg.id,
                               authorNickname,
-                              authorCharacter: userCharacter,
+                              authorCharacter: effectiveCharacter,
                               content: text,
                               createdAt: new Date(),
                             }
@@ -1527,7 +1639,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                             id: `c-${Date.now()}-${post.id}`,
                             postId: post.id,
                             authorNickname,
-                            authorCharacter: userCharacter,
+                            authorCharacter: effectiveCharacter,
                             content: text,
                             createdAt: new Date(),
                           }
@@ -1547,7 +1659,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                           id: `c-${Date.now()}-${post.id}`,
                           postId: post.id,
                           authorNickname,
-                          authorCharacter: userCharacter,
+                          authorCharacter: effectiveCharacter,
                           content: text,
                           createdAt: new Date(),
                         }

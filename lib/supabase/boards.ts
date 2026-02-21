@@ -165,6 +165,67 @@ export async function getBoardById(id: string): Promise<BoardRow | null> {
 }
 
 /**
+ * 통합 검색: 방 번호(public_id) 정확 일치 + 제목(name/keyword) ilike.
+ * - 입력이 숫자만 있으면 public_id 정확 일치 조회.
+ * - 동시에 name/keyword에 ilike 검색.
+ * - 결과: ID 정확 일치 방을 최상단에 고정, 나머지는 최신순.
+ */
+export async function searchBoards(query: string): Promise<BoardRow[]> {
+  const q = query.trim()
+  if (!q) return []
+  const supabase = createClient()
+  if (!supabase) return []
+
+  const selectCols = 'id, keyword, name, expires_at, created_at, public_id' as const
+  const byId = new Map<string, BoardRowSelected>()
+  const add = (row: BoardRowSelected) => byId.set(String(row.id), row)
+
+  let idMatch: BoardRowSelected | null = null
+  const isNumeric = /^\d+$/.test(q)
+  if (isNumeric) {
+    const num = Number(q)
+    const { data } = await supabase
+      .from('boards')
+      .select(selectCols)
+      .eq('public_id', num as never)
+      .maybeSingle()
+    if (data) {
+      idMatch = data as BoardRowSelected
+      add(idMatch)
+    }
+  }
+
+  const escapeLike = (s: string) => String(s).replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+  const pattern = `%${escapeLike(q)}%`
+
+  const { data: byName } = await supabase
+    .from('boards')
+    .select(selectCols)
+    .ilike('name', pattern)
+    .order('created_at', { ascending: false })
+    .limit(15)
+  ;(byName ?? []).forEach((r) => add(r as BoardRowSelected))
+
+  const { data: byKeyword } = await supabase
+    .from('boards')
+    .select(selectCols)
+    .ilike('keyword', pattern)
+    .order('created_at', { ascending: false })
+    .limit(15)
+  ;(byKeyword ?? []).forEach((r) => add(r as BoardRowSelected))
+
+  const rest = [...byId.values()]
+    .filter((r) => !idMatch || String(r.id) !== String(idMatch.id))
+    .sort(
+      (a, b) =>
+        new Date((b as { created_at: string }).created_at).getTime() -
+        new Date((a as { created_at: string }).created_at).getTime()
+    )
+  const ordered = idMatch ? [idMatch, ...rest] : rest
+  return ordered.slice(0, 15).map(normalizeBoardRow)
+}
+
+/**
  * 숫자 방 번호(public_id)로 방을 조회합니다.
  * - DB의 boards.id(UUID)는 그대로 유지하면서, 사용자에게는 public_id로 직통 입장을 제공합니다.
  * - public_id 컬럼이 아직 없는 경우(null/에러)에는 null을 반환하여 상위 로직이 기존 플로우로 fallback 합니다.
