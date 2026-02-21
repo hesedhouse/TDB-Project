@@ -7,10 +7,12 @@ export type TopContributor = {
   total_minutes: number
 }
 
+const EMPTY_NAME_LABEL = '이름 없음'
+
 /**
  * 모래시계 연장 성공 시 기여도 1건 삽입.
  * @param boardId boards.id (UUID)
- * @param displayName 닉네임 또는 '익명의 수호자'
+ * @param displayName 닉네임 (비어있으면 EMPTY_NAME_LABEL로 저장)
  * @param minutes 기여 분 (예: 30)
  */
 export async function recordContribution(
@@ -21,7 +23,7 @@ export async function recordContribution(
   if (!isValidUuid(boardId) || minutes < 1) return
   const supabase = createClient()
   if (!supabase) return
-  const name = (displayName || '').trim() || '익명의 수호자'
+  const name = (displayName || '').trim() || EMPTY_NAME_LABEL
   await supabase.from('contributions').insert({
     board_id: boardId,
     user_display_name: name,
@@ -32,7 +34,7 @@ export async function recordContribution(
 /**
  * 해당 방의 기여도 TOP 3 (총 기여 분 기준).
  * 동일 user_display_name은 합산 후 순위.
- * user_display_name 컬럼이 없으면(42703) minutes만 합산해 '익명의 수호자'로 반환.
+ * user_display_name 컬럼이 없으면(42703) minutes만 합산해 EMPTY_NAME_LABEL로 반환.
  */
 export async function getTopContributors(boardId: string): Promise<TopContributor[]> {
   if (!isValidUuid(boardId)) return []
@@ -54,7 +56,7 @@ export async function getTopContributors(boardId: string): Promise<TopContributo
   if (!rows?.length) return []
   const byName = new Map<string, number>()
   for (const r of rows) {
-    const name = (r as { user_display_name?: string; minutes?: number }).user_display_name ?? '익명의 수호자'
+    const name = (r as { user_display_name?: string; minutes?: number }).user_display_name ?? EMPTY_NAME_LABEL
     const mins = (r as { minutes?: number }).minutes ?? 0
     byName.set(name, (byName.get(name) ?? 0) + mins)
   }
@@ -77,7 +79,7 @@ async function getTopContributorsFallback(
   if (error || !rows?.length) return []
   const total = rows.reduce((sum, r) => sum + (Number((r as { minutes?: number }).minutes) || 0), 0)
   if (total <= 0) return []
-  return [{ rank: 1, user_display_name: '익명의 수호자', total_minutes: total }]
+  return [{ rank: 1, user_display_name: EMPTY_NAME_LABEL, total_minutes: total }]
 }
 
 /**

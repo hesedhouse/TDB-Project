@@ -182,7 +182,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
           boardPublicId={boardPublicId}
           roomIdFromUrl={decodedKeyword}
           userCharacter={0}
-          userNickname="게스트"
+          userNickname=""
           onBack={() => router.push('/')}
           initialBoardName={matchedBoard ? undefined : initialName}
         />
@@ -274,7 +274,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
             boardPublicId={supabaseBoard.room_no ?? supabaseBoard.public_id ?? (/^\d+$/.test(decodedKeyword) ? Number(decodedKeyword) : null)}
             roomIdFromUrl={decodedKeyword}
             userCharacter={0}
-            userNickname="게스트"
+            userNickname=""
             userId={authUser?.id ?? null}
             onBack={() => router.push('/')}
             initialExpiresAt={new Date(supabaseBoard.expires_at)}

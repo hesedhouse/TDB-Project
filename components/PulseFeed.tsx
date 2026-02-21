@@ -56,7 +56,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const router = useRouter()
   /** 방/유저 정보가 아직 준비되지 않았을 때를 대비한 안전한 기본값 (클라이언트 에러 방지) */
   const boardId = typeof rawBoardId === 'string' && rawBoardId.trim() !== '' ? rawBoardId.trim() : ''
-  const userNickname = rawUserNickname ?? '게스트'
+  const userNickname = (rawUserNickname ?? '').trim()
   const userCharacter = rawUserCharacter ?? 0
 
   const useSupabase = isSupabaseConfigured()
@@ -115,7 +115,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
   const [deleteConfirmMessageId, setDeleteConfirmMessageId] = useState<string | null>(null)
-  /** 실시간 접속자 (Supabase Presence). 닉네임 없으면 '익명의 대화가'로 표시 */
+  /** 실시간 접속자 (Supabase Presence). DB 참여자와 병합해 참여자 목록 표시 */
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
   /** Presence 기준 실시간 접속자 수 (presenceState 키 개수). 0이면 DB 참여자 수 사용 */
   const [presenceCount, setPresenceCount] = useState(0)
@@ -135,7 +135,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   /** Supabase Presence: 방 접속자 실시간 동기화. track에 nickname·user_id 포함, sync에서 presenceState 키 개수 반영 */
   useEffect(() => {
     if (!useSupabaseWithUuid || !boardId) return
-    const displayName = (effectiveNickname || '').trim() || userNickname || '게스트'
+    const displayName = (effectiveNickname || '').trim() || userNickname
     const unsub = subscribeBoardPresence(boardId, displayName, (users, keyCount) => {
       setOnlineUsers(users)
       setPresenceCount(keyCount)
@@ -372,15 +372,15 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   /** 댓글 입력값 (targetId → text) */
   const [commentInputByTarget, setCommentInputByTarget] = useState<Record<string, string>>({})
 
-  /** 글/댓글 작성자 이름: 모달 또는 localStorage 저장값 우선, 없으면 prop(게스트) */
+  /** 글/댓글 작성자 이름: 모달/세션/DB에서 확정된 닉네임만 사용 (기본값 없음) */
   const authorNickname = (effectiveNickname || '').trim() || userNickname
 
-  /** 방 입장: 닉네임 확정 후에만 room_participants 등록. 모달 열린 채 닉네임 없으면 join 하지 않음(URL 강제 진입 차단). 퇴장 시 leaveRoom */
+  /** 방 입장: 닉네임 확정 후에만 room_participants 등록. 팝업에서 입력한 닉네임이 그대로 user_display_name으로 저장됨. */
   const prevJoinNameRef = useRef<string | null>(null)
   useEffect(() => {
     if (!useSupabaseWithUuid || !boardId) return
     if (showNicknameModal && !(effectiveNickname || '').trim()) return
-    const name = (authorNickname || '').trim() || userNickname || '게스트'
+    const name = (authorNickname || '').trim()
     if (!name) return
     let cancelled = false
     joinRoom(boardId, name, userId ?? undefined).then((ok) => {
@@ -522,9 +522,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       if (typeof window !== 'undefined') {
         try {
           displayName = window.localStorage.getItem('tdb-user-nickname') ?? ''
+          const roomNick = window.sessionStorage.getItem(`${ROOM_NICKNAME_KEY_PREFIX}${boardId}`) ?? ''
+          if (roomNick.trim()) displayName = roomNick.trim()
         } catch {}
       }
-      const name = (displayName || '').trim() || '익명의 수호자'
+      const name = (displayName || '').trim() || '이름 없음'
       await recordContribution(boardId, name, minutesPerHourglass)
       getTopContributors(boardId).then(setTopContributors)
     } finally {
@@ -617,7 +619,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   /** 표시용 참여자 수: room_participants 테이블의 is_active=true 행 개수가 실제 참여자 수. DB 조회 전에는 Presence 수로 대체 */
   const displayParticipantCount = activeParticipants.length > 0 ? activeParticipants.length : Math.max(presenceCount, 0)
 
-  /** 참여자 리스트 UI용: room_participants 행을 우선, 없을 때만 Presence. 닉네임 기준 중복 제거 */
+  /** 참여자 리스트 UI용: DB user_display_name 우선, 없을 때만 Presence. 빈 닉네임은 '이름 없음'으로 표시(디버깅용) */
   const displayParticipantList = useMemo(() => {
     const fromDb = activeParticipants
     const fromPresence = presenceCount > 0 ? onlineUsers : []
@@ -625,7 +627,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     const seen = new Set<string>()
     return raw.filter((p) => {
       const name = ('nickname' in p ? p.nickname : p.user_display_name) ?? ''
-      const key = (name || '익명의 팝핀').trim().toLowerCase()
+      const key = (name || '').trim().toLowerCase() || '__empty'
       if (seen.has(key)) return false
       seen.add(key)
       return true
@@ -770,7 +772,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     displayBoard.name != null && /^#?board-\d+$/i.test(displayBoard.name.trim())
       ? '새 방'
       : (displayBoard.name ?? '방')
-  const headerTitle = String(displayTitle).replace(/^#\s*/, '').trim() || '익명의 POPPIN'
+  const headerTitle = String(displayTitle).replace(/^#\s*/, '').trim() || '방'
 
   /** 방 번호: DB room_no(→ boardPublicId) → URL 숫자(roomIdFromUrl) → board-N. 로딩 끝나면 No. {room_no} 표시 */
   const roomNo =
@@ -1172,8 +1174,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                           <li className="text-xs text-gray-500 px-2 py-1">아무도 없음</li>
                         ) : (
                           displayParticipantList.map((p, i) => {
-                            const nickname = ('nickname' in p ? (p as PresenceUser).nickname : (p as RoomParticipant).user_display_name) ?? ''
-                            const displayName = (nickname || '').trim() || '익명의 팝핀'
+                            const raw = ('nickname' in p ? (p as PresenceUser).nickname : (p as RoomParticipant).user_display_name) ?? ''
+                            const displayName = (raw || '').trim() || '이름 없음'
                             const crown = crownByDisplayName.get(displayName)
                             return (
                               <li key={`${displayName}-${i}`} className="text-xs text-white px-2 py-1 truncate flex items-center gap-1">
@@ -1209,7 +1211,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 aria-label={`활동명: ${authorNickname}. 클릭하면 닉네임을 변경할 수 있습니다.`}
               >
                 <span className="flex-shrink-0" aria-hidden>👤</span>
-                <span className="truncate">{authorNickname || '게스트'}</span>
+                <span className="truncate">{authorNickname || '이름 없음'}</span>
               </button>
               {useSupabaseWithUuid && (
                 <motion.button

@@ -58,7 +58,13 @@ export async function joinRoom(
     }
     return false
   }
-  const name = (nickname || '').trim() || '익명의 수호자'
+  const name = (nickname || '').trim()
+  if (!name) {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      console.warn('[room_participants] joinRoom: nickname 비어있음, 등록하지 않음')
+    }
+    return false
+  }
   const supabase = createClient()
   if (!supabase) {
     if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
