@@ -17,13 +17,13 @@ import { isValidUuid } from './client'
 
 export type RoomParticipant = { user_display_name: string }
 
-/** 방 참여: (board_id, nickname)을 is_active = true 로 넣거나 갱신 */
-export async function joinRoom(boardId: string, nickname: string): Promise<void> {
-  if (!isValidUuid(boardId)) return
+/** 방 참여: (board_id, nickname)을 is_active = true 로 넣거나 갱신. 성공 여부 반환. */
+export async function joinRoom(boardId: string, nickname: string): Promise<boolean> {
+  if (!isValidUuid(boardId)) return false
   const name = (nickname || '').trim() || '익명의 수호자'
   const supabase = createClient()
-  if (!supabase) return
-  await supabase.from('room_participants').upsert(
+  if (!supabase) return false
+  const { error } = await supabase.from('room_participants').upsert(
     {
       board_id: boardId,
       user_display_name: name,
@@ -32,6 +32,11 @@ export async function joinRoom(boardId: string, nickname: string): Promise<void>
     },
     { onConflict: 'board_id,user_display_name' }
   )
+  if (error) {
+    console.error('joinRoom error:', error)
+    return false
+  }
+  return true
 }
 
 /** 방 나가기: 해당 유저를 is_active = false 로 업데이트 */

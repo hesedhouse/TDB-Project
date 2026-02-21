@@ -138,13 +138,13 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return unsub
   }, [useSupabaseWithUuid, boardId, effectiveNickname, userNickname])
 
-  /** 참여자 리스트: DB room_participants (is_active = true) 조회 + Realtime 구독 */
+  /** 참여자 리스트: DB room_participants (is_active = true) 조회 + Realtime 구독. join/leave 시 즉시 반영 */
   useEffect(() => {
     if (!useSupabaseWithUuid || !boardId) return
     const refetch = () => getActiveParticipants(boardId).then(setActiveParticipants)
     refetch()
-    const unsub = subscribeToRoomParticipants(boardId, refetch)
-    return unsub
+    const unsub = subscribeToRoomParticipants(boardId, () => refetch())
+    return () => unsub()
   }, [useSupabaseWithUuid, boardId])
 
   /** 접속자 팝오버: 외부 클릭 시 닫기 */
@@ -314,11 +314,27 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   /** 글/댓글 작성자 이름: 모달 또는 localStorage 저장값 우선, 없으면 prop(게스트) */
   const authorNickname = (effectiveNickname || '').trim() || userNickname
 
-  /** 방 입장 시 room_participants에 참여 등록 (닉네임 확정 후) */
+  /** 방 입장 시 room_participants에 참여 등록; 등록 후 참여자 리스트 즉시 refetch. 퇴장(언마운트) 또는 닉네임 변경 시 leaveRoom 호출 후 cleanup */
+  const prevJoinNameRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!useSupabaseWithUuid || !boardId || !authorNickname) return
-    joinRoom(boardId, authorNickname)
-  }, [useSupabaseWithUuid, boardId, authorNickname])
+    if (!useSupabaseWithUuid || !boardId) return
+    const name = (authorNickname || '').trim() || userNickname || '게스트'
+    if (!name) return
+    let cancelled = false
+    joinRoom(boardId, name).then((ok) => {
+      if (cancelled || !ok) return
+      prevJoinNameRef.current = name
+      getActiveParticipants(boardId).then((list) => {
+        if (!cancelled) setActiveParticipants(list)
+      })
+    })
+    return () => {
+      cancelled = true
+      const leaveName = prevJoinNameRef.current
+      if (leaveName) leaveRoom(boardId, leaveName)
+      prevJoinNameRef.current = null
+    }
+  }, [useSupabaseWithUuid, boardId, authorNickname, userNickname])
 
   const { messages, send, toggleHeart, deleteMessage, updateMessage, sending } = useBoardChat(boardId, {
     userCharacter: effectiveCharacter,

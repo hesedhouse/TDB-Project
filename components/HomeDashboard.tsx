@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/supabase/auth'
 import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
 import { searchBoards, type BoardRow } from '@/lib/supabase/boards'
-import { getActiveParticipants } from '@/lib/supabase/roomParticipants'
+import { getActiveParticipants, subscribeToRoomParticipants } from '@/lib/supabase/roomParticipants'
 import { useTick } from '@/lib/TickContext'
 import { getActiveSessions, removeExpiredSessions, removeSessionByBoardId, type ActiveSession } from '@/lib/activeSessions'
 import type { Board } from '@/lib/mockData'
@@ -150,10 +150,14 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     return () => clearTimeout(t)
   }, [searchQuery, useSupabase, isBoardVisibleInSearch])
 
-  /** 검색 결과의 각 방 참여 인원수 병렬 조회 */
+  /** 검색 결과의 각 방 참여 인원수: 초기 조회 + room_participants Realtime 구독으로 실시간 동기화 */
   useEffect(() => {
     if (!useSupabase || searchResults.length === 0) return
     let cancelled = false
+    const updateCount = (boardId: string, count: number) => {
+      if (cancelled) return
+      setParticipantCounts((prev) => ({ ...prev, [boardId]: count }))
+    }
     Promise.all(
       searchResults.map((b) =>
         getActiveParticipants(b.id).then((r) => (cancelled ? 0 : r.length))
@@ -166,8 +170,14 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       })
       setParticipantCounts((prev) => ({ ...prev, ...next }))
     })
+    const unsubs = searchResults.map((b) =>
+      subscribeToRoomParticipants(b.id, () => {
+        getActiveParticipants(b.id).then((r) => updateCount(b.id, r.length))
+      })
+    )
     return () => {
       cancelled = true
+      unsubs.forEach((unsub) => unsub())
     }
   }, [useSupabase, searchResults])
 
