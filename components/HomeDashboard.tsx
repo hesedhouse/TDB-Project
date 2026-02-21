@@ -60,8 +60,6 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([])
   const [hourglasses, setHourglasses] = useState(0)
   const [creatingRoom, setCreatingRoom] = useState(false)
-  const [roomPassword, setRoomPassword] = useState('')
-  const [showRoomPassword, setShowRoomPassword] = useState(false)
   /** 실시간 검색 결과 (debounce 적용) */
   const [searchResults, setSearchResults] = useState<BoardRow[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -75,6 +73,8 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   /** 방 만들기 모달: 열림 여부 + 모달 내 제목 입력값 + 25자 초과 시 셰이크 트리거 */
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false)
   const [createRoomTitle, setCreateRoomTitle] = useState('')
+  const [createRoomPassword, setCreateRoomPassword] = useState('')
+  const [showCreateRoomPassword, setShowCreateRoomPassword] = useState(false)
   const [inputShakeTrigger, setInputShakeTrigger] = useState(0)
   const createRoomInputRef = useRef<HTMLInputElement>(null)
 
@@ -280,8 +280,8 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     [router]
   )
 
-  /** 방 만들기/시작하기: 방 제목(keyword) + 비밀번호(선택)를 API로 전달 → boards에 저장 후 생성된 ID(public_id)로 즉시 이동. 모달에서 호출 시 제목을 인자로 넘김. */
-  const handleCreateOrEnterRoom = useCallback(async (titleOverride?: string) => {
+  /** 방 만들기: 방 제목(keyword) + 비밀번호(선택)를 API로 전달 → boards에 저장 후 생성된 ID(public_id)로 즉시 이동. 모달에서 호출 시 제목·비밀번호를 인자로 넘김. */
+  const handleCreateOrEnterRoom = useCallback(async (titleOverride?: string, passwordOverride?: string) => {
     const keyword = (titleOverride !== undefined ? String(titleOverride).trim() : searchQuery.trim())
     if (!keyword) return
     if (creatingRoom) return
@@ -310,12 +310,13 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         console.log('[HomeDashboard] Supabase URL 연결 여부:', urlSet ? '설정됨' : '미설정')
       }
 
+      const password = (passwordOverride !== undefined ? String(passwordOverride).trim() : '').trim() || undefined
       const res = await fetch('/api/board/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           keyword,
-          password: roomPassword.trim() || undefined,
+          password,
         }),
       })
       const data = await res.json().catch(() => ({} as Record<string, unknown>))
@@ -336,11 +337,12 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       setCreatingRoom(false)
       alert(`저장 실패: ${errMsg}`)
     }
-  }, [searchQuery, roomPassword, creatingRoom, useSupabase, router])
+  }, [searchQuery, creatingRoom, useSupabase, router])
 
-  /** 방 만들기 모달 열기: 현재 검색어를 기본 제목으로 설정(최대 25자) */
+  /** 방 만들기 모달 열기: 현재 검색어를 기본 제목으로 설정(최대 25자), 비밀번호는 비움 */
   const openCreateRoomModal = useCallback(() => {
     setCreateRoomTitle(searchQuery.slice(0, MAX_ROOM_TITLE_LENGTH))
+    setCreateRoomPassword('')
     setShowCreateRoomModal(true)
   }, [searchQuery])
 
@@ -352,13 +354,13 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     }
   }, [showCreateRoomModal])
 
-  /** 모달에서 방 만들기 실행: 제목 유효성 검사(공백/25자 초과) 후 handleCreateOrEnterRoom 호출 */
+  /** 모달에서 방 만들기 실행: 제목 유효성 검사(공백/25자 초과) 후 handleCreateOrEnterRoom에 제목·비밀번호 전달 */
   const submitCreateRoomModal = useCallback(() => {
     const title = createRoomTitle.trim()
     if (!title || title.length > MAX_ROOM_TITLE_LENGTH) return
     setShowCreateRoomModal(false)
-    handleCreateOrEnterRoom(title)
-  }, [createRoomTitle, handleCreateOrEnterRoom])
+    handleCreateOrEnterRoom(title, createRoomPassword.trim() || undefined)
+  }, [createRoomTitle, createRoomPassword, handleCreateOrEnterRoom])
 
   const isCreateRoomTitleValid = createRoomTitle.trim().length > 0 && createRoomTitle.length <= MAX_ROOM_TITLE_LENGTH
 
@@ -623,56 +625,6 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                 )}
               </AnimatePresence>
             </div>
-            <motion.button
-            type="button"
-            onClick={openCreateRoomModal}
-            disabled={creatingRoom}
-            className="flex items-center justify-center gap-2 px-5 py-3.5 sm:px-6 sm:py-4 rounded-2xl font-semibold text-sm sm:text-base bg-neon-orange text-white border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.4)] hover:shadow-[0_0_24px_rgba(255,95,0,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-shadow min-w-[7rem] sm:min-w-[8rem]"
-            whileHover={!creatingRoom ? { scale: 1.02 } : {}}
-            whileTap={!creatingRoom ? { scale: 0.98 } : {}}
-          >
-            {creatingRoom ? (
-              <>
-                <motion.span
-                  className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full"
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
-                />
-                <span>방 만드는 중...</span>
-              </>
-            ) : (
-              <>
-                <span>시작하기</span>
-                <ArrowRight className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} />
-              </>
-            )}
-          </motion.button>
-          </div>
-          {/* 비밀번호 (선택) - 어두운 배경 + 오렌지 네온 테두리 + 보기/숨기기 토글 */}
-          <div className="flex flex-col gap-1.5">
-            <div className="relative flex items-center">
-              <input
-                type={showRoomPassword ? 'text' : 'password'}
-                placeholder="비밀번호 (선택)"
-                value={roomPassword}
-                onChange={(e) => setRoomPassword(e.target.value)}
-                disabled={creatingRoom}
-                className="w-full pl-5 pr-12 py-3.5 rounded-2xl bg-black/60 border-2 border-[#FF6B00]/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base shadow-[0_0_12px_rgba(255,107,0,0.2)] focus:shadow-[0_0_16px_rgba(255,107,0,0.35)] transition-shadow disabled:opacity-60"
-                aria-label="방 비밀번호 (선택)"
-              />
-              <button
-                type="button"
-                onClick={() => setShowRoomPassword((v) => !v)}
-                className="absolute right-3 p-1.5 rounded-lg hover:bg-[#FF6B00]/10 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40"
-                style={{ color: '#FF6B00', textShadow: '0 0 8px rgba(255,107,0,0.6), 0 0 14px rgba(255,107,0,0.3)' }}
-                aria-label={showRoomPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
-              >
-                {showRoomPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 px-1">
-              비밀번호를 설정하면 아는 사람만 들어올 수 있습니다.
-            </p>
           </div>
         </div>
         
@@ -888,25 +840,26 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           <Fragment key="create-room-modal">
             <motion.div
               role="presentation"
-              className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={() => setShowCreateRoomModal(false)}
+              aria-hidden
             />
             <motion.div
               role="dialog"
               aria-modal="true"
               aria-labelledby="create-room-modal-title"
-              className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 px-4"
+              className="fixed left-1/2 top-1/2 z-50 w-full max-w-[450px] -translate-x-1/2 -translate-y-1/2 px-5 sm:px-6"
               initial={{ opacity: 0, y: 24, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.98 }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="rounded-3xl border-2 border-neon-orange/50 bg-midnight-black shadow-[0_0_40px_rgba(255,107,0,0.2),0_0_0_1px_rgba(255,107,0,0.1)] overflow-hidden">
+              <div className="rounded-2xl border-2 border-neon-orange/50 bg-midnight-black overflow-hidden shadow-[0_0_0_1px_rgba(255,107,0,0.15),0_8px_32px_rgba(0,0,0,0.5),0_24px_64px_rgba(0,0,0,0.4),0_0_48px_rgba(255,107,0,0.12)]">
                 <div className="p-6 sm:p-8">
                   <h2
                     id="create-room-modal-title"
@@ -958,13 +911,38 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                       {createRoomTitle.length}/{MAX_ROOM_TITLE_LENGTH}
                     </span>
                   </div>
-                  <div className="flex gap-3 mt-6">
+                  {/* 비밀번호 (선택) - POPPIN 스타일 */}
+                  <div className="mt-6 sm:mt-7 flex flex-col gap-1.5">
+                    <div className="relative flex items-center">
+                      <input
+                        type={showCreateRoomPassword ? 'text' : 'password'}
+                        placeholder="비밀번호 (선택)"
+                        value={createRoomPassword}
+                        onChange={(e) => setCreateRoomPassword(e.target.value)}
+                        disabled={creatingRoom}
+                        className="w-full pl-5 pr-12 py-3.5 rounded-2xl bg-black/60 border-2 border-neon-orange/50 text-white placeholder-gray-500 text-sm sm:text-base focus:border-neon-orange focus:outline-none focus:ring-2 focus:ring-neon-orange/40 focus:shadow-[0_0_16px_rgba(255,107,0,0.25)] transition-all disabled:opacity-60"
+                        aria-label="방 비밀번호 (선택)"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateRoomPassword((v) => !v)}
+                        className="absolute right-3 p-1.5 rounded-lg hover:bg-neon-orange/10 focus:outline-none focus:ring-2 focus:ring-neon-orange/40 text-neon-orange"
+                        aria-label={showCreateRoomPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
+                      >
+                        {showCreateRoomPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 px-1">
+                      비밀번호를 설정하면 아는 사람만 들어올 수 있습니다.
+                    </p>
+                  </div>
+                  <div className="mt-8 flex flex-col gap-3">
                     <motion.button
                       type="button"
                       onClick={() => setShowCreateRoomModal(false)}
-                      className="flex-1 py-3.5 px-4 rounded-2xl font-bold text-sm sm:text-base border-2 border-gray-500 text-gray-300 bg-white/5 hover:bg-white/10 hover:border-gray-400 transition-colors"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+                      className="w-full py-3 px-4 rounded-2xl font-semibold text-sm text-gray-400 bg-transparent hover:bg-white/5 hover:text-gray-300 transition-colors"
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
                     >
                       취소
                     </motion.button>
@@ -972,9 +950,9 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                       type="button"
                       onClick={submitCreateRoomModal}
                       disabled={!isCreateRoomTitleValid || creatingRoom}
-                      className="flex-1 py-3.5 px-4 rounded-2xl font-bold text-sm sm:text-base bg-neon-orange text-white border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.4)] hover:shadow-[0_0_24px_rgba(255,95,0,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none transition-all duration-200"
-                      whileHover={isCreateRoomTitleValid && !creatingRoom ? { scale: 1.02 } : {}}
-                      whileTap={isCreateRoomTitleValid && !creatingRoom ? { scale: 0.98 } : {}}
+                      className="w-full py-3.5 px-4 rounded-2xl font-bold text-sm sm:text-base bg-neon-orange text-white border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.4)] hover:shadow-[0_0_24px_rgba(255,95,0,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none transition-all duration-200"
+                      whileHover={isCreateRoomTitleValid && !creatingRoom ? { scale: 1.01 } : {}}
+                      whileTap={isCreateRoomTitleValid && !creatingRoom ? { scale: 0.99 } : {}}
                     >
                       방 만들기
                     </motion.button>
