@@ -153,4 +153,13 @@
       0 0 18px rgba(255, 107, 0, 0.6),
       0 0 36px rgba(255, 107, 0, 0.3);
   }
+
+  /* 긴급 타이머: 진행 바 1시간 미만 시 opacity 점멸 */
+  @keyframes emergency-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  .animate-emergency-blink {
+    animation: emergency-blink 0.8s ease-in-out infinite;
+  }
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import DotCharacter from './DotCharacter'
-import { mockBoards, mockPosts, getTimeProgress, extendBoardLifespan, formatRemainingTimer } from '@/lib/mockData'
+import { mockBoards, mockPosts, extendBoardLifespan, formatRemainingTimer } from '@/lib/mockData'
 import type { Post, Board } from '@/lib/mockData'
 import { isSupabaseConfigured, isValidUuid } from '@/lib/supabase/client'
 import { useBoardChat } from '@/lib/supabase/useBoardChat'
@@ -76,6 +76,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [timerLabel, setTimerLabel] = useState('0:00:00')
   const [timerMounted, setTimerMounted] = useState(false)
   const [isUnderOneMinute, setIsUnderOneMinute] = useState(false)
+  /** 남은 시간 1시간(3600초) 미만일 때 true → 진행 바 빨간색 + 점멸, 타이머 텍스트 강조 */
+  const [isEmergency, setIsEmergency] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
   const [topContributors, setTopContributors] = useState<TopContributor[]>([])
   const [showWriteModal, setShowWriteModal] = useState(false)
@@ -374,7 +376,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [useSupabaseWithUuid, messages.length])
 
-  // 초 단위 타이머 + 프로그레스 (1초마다 갱신, unmount 시 clearInterval)
+  // 24시간 기준 진행률: T_rem / T_max * 100 (최대 100%). 1초마다 갱신.
+  const T_MAX_MS = 24 * 60 * 60 * 1000
+
   useEffect(() => {
     const fallbackExpires = initialExpiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     const fallbackCreated = initialCreatedAt ?? new Date()
@@ -382,14 +386,19 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     const effectiveExpiresAt: Date | undefined = boardExpiresAtOverride ?? targetBoard?.expiresAt
     if (!targetBoard || !effectiveExpiresAt) return
 
-    const createdAt = targetBoard.createdAt instanceof Date ? targetBoard.createdAt : new Date(targetBoard.createdAt)
     const expiresAt = effectiveExpiresAt instanceof Date ? effectiveExpiresAt : new Date(effectiveExpiresAt)
 
+    const EMERGENCY_MS = 60 * 60 * 1000 // 1시간
+
     const tick = (): void => {
-      const { label, remainingMs, isUnderOneMinute: under } = formatRemainingTimer(expiresAt)
+      const now = Date.now()
+      const remainingMs = Math.max(0, expiresAt.getTime() - now)
+      const percentage = Math.min((remainingMs / T_MAX_MS) * 100, 100)
+      const { label, isUnderOneMinute: under } = formatRemainingTimer(expiresAt)
       setTimerLabel(label)
       setIsUnderOneMinute(under)
-      setProgress(getTimeProgress(createdAt, expiresAt))
+      setIsEmergency(remainingMs > 0 && remainingMs < EMERGENCY_MS)
+      setProgress(percentage)
       if (remainingMs <= 0) {
         setIsExpired(true)
       }
@@ -398,10 +407,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     tick()
     setTimerMounted(true)
     const intervalId = setInterval(() => {
-      const { remainingMs, ...rest } = formatRemainingTimer(expiresAt)
-      setTimerLabel(rest.label)
-      setIsUnderOneMinute(rest.isUnderOneMinute)
-      setProgress(getTimeProgress(createdAt, expiresAt))
+      const now = Date.now()
+      const remainingMs = Math.max(0, expiresAt.getTime() - now)
+      const percentage = Math.min((remainingMs / T_MAX_MS) * 100, 100)
+      const { label, isUnderOneMinute } = formatRemainingTimer(expiresAt)
+      setTimerLabel(label)
+      setIsUnderOneMinute(isUnderOneMinute)
+      setIsEmergency(remainingMs > 0 && remainingMs < EMERGENCY_MS)
+      setProgress(percentage)
       if (remainingMs <= 0) {
         setIsExpired(true)
         clearInterval(intervalId)
@@ -895,20 +908,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             </div>
           </div>
           
-          {/* Progress Bar */}
+          {/* Progress Bar (24h 기준, 1시간 미만 시 긴급: 빨간색 + 점멸) */}
           <div className="relative h-1 bg-gray-800 rounded-full overflow-hidden">
-            <motion.div
-              className="absolute top-0 left-0 h-full bg-neon-orange neon-glow"
+            <div
+              className={`absolute top-0 left-0 h-full transition-[width] duration-1000 ease-linear ${isEmergency ? 'bg-red-600 animate-emergency-blink' : 'bg-neon-orange neon-glow'}`}
               style={{ width: `${progress}%` }}
-              initial={{ width: '100%' }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 1 }}
             />
           </div>
           
           <div className="text-neon-orange mt-2 text-center relative flex flex-col sm:flex-row items-center justify-center gap-2 min-w-0 overflow-hidden">
             <motion.span
-              className={`inline-flex items-baseline gap-1 shrink min-w-0 whitespace-nowrap ${isUnderOneMinute ? 'text-red-500 font-bold' : ''}`}
+              className={`inline-flex items-baseline gap-1 shrink min-w-0 whitespace-nowrap ${isEmergency || isUnderOneMinute ? 'text-red-500 font-bold' : ''}`}
               style={{
                 fontSize:
                   timerLabel.length > 18

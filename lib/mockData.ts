@@ -194,7 +194,7 @@ export function getRemainingTime(expiresAt: Date): { days: number; hours: number
   return { days, hours, minutes, seconds }
 }
 
-/** 남은 시간을 총 시간(H:MM:SS) 형식으로 포맷. 시간은 3자리마다 쉼표(예: 10,000,000:59:59). 초장기(10,000,000시간 이상) 대응. 만료 시 { label: '0:00:00', remainingMs: 0, isUnderOneMinute: true } */
+/** 남은 시간 포맷. 24시간 이상이면 "D-N HH:MM:SS", 미만이면 "HH:MM:SS". 만료 시 '0:00:00', remainingMs: 0 */
 export function formatRemainingTimer(expiresAt: Date): {
   label: string
   remainingMs: number
@@ -207,8 +207,10 @@ export function formatRemainingTimer(expiresAt: Date): {
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
   const pad2 = (n: number): string => String(n).padStart(2, '0')
-  const hoursFormatted = totalHours.toLocaleString('en-US')
-  const label = `${hoursFormatted}:${pad2(minutes)}:${pad2(seconds)}`
+  const label =
+    totalHours >= 24
+      ? `D-${Math.floor(totalHours / 24)} ${pad2(totalHours % 24)}:${pad2(minutes)}:${pad2(seconds)}`
+      : `${totalHours}:${pad2(minutes)}:${pad2(seconds)}`
   return {
     label,
     remainingMs,
