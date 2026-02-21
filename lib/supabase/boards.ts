@@ -212,7 +212,7 @@ export async function searchBoards(query: string): Promise<BoardRow[]> {
       const { data, error: numErr } = await supabase.from('boards').select(cols).eq('public_id', num as never).maybeSingle()
       if (numErr) return { idMatch: null as BoardRowSelected | null, columnError: numErr.code }
       if (data) {
-        idMatch = data as BoardRowSelected
+        idMatch = data as unknown as BoardRowSelected
         add(idMatch)
       }
     }
@@ -220,10 +220,10 @@ export async function searchBoards(query: string): Promise<BoardRow[]> {
     const pattern = `%${escapeLike(q)}%`
     const { data: byName, error: nameErr } = await supabase.from('boards').select(cols).ilike('name', pattern).order('created_at', { ascending: false }).limit(20)
     if (nameErr) return { idMatch: null as BoardRowSelected | null, columnError: nameErr.code }
-    ;(byName ?? []).forEach((r) => add(r as BoardRowSelected))
+    ;(byName ?? []).forEach((r) => add(r as unknown as BoardRowSelected))
     const { data: byKeyword, error: kwErr } = await supabase.from('boards').select(cols).ilike('keyword', pattern).order('created_at', { ascending: false }).limit(20)
     if (kwErr) return { idMatch: null as BoardRowSelected | null, columnError: kwErr.code }
-    ;(byKeyword ?? []).forEach((r) => add(r as BoardRowSelected))
+    ;(byKeyword ?? []).forEach((r) => add(r as unknown as BoardRowSelected))
     return { idMatch, columnError: null as string | null }
   }
 
