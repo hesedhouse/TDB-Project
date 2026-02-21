@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, useRef, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { useAuth, type AuthProvider } from '@/lib/supabase/auth'
+import { useAuth, exchangeHashForSession, type AuthProvider } from '@/lib/supabase/auth'
 
 const cardStyle = {
   background: 'rgba(18,18,18,0.95)',
@@ -12,26 +12,41 @@ const cardStyle = {
   boxShadow: '0 0 28px rgba(255,107,0,0.18), 0 0 48px rgba(255,107,0,0.08), inset 0 0 0 1px rgba(255,107,0,0.1)',
 } as const
 
+const DASHBOARD_PATH = '/dashboard'
+
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const returnUrl = searchParams.get('returnUrl') ?? '/'
+  const returnUrl = searchParams.get('returnUrl') ?? DASHBOARD_PATH
   const { user, loading, signIn, signInWithEmail } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [emailSubmitting, setEmailSubmitting] = useState(false)
+  const [oauthProcessing, setOauthProcessing] = useState(false)
+  const hashHandledRef = useRef(false)
 
+  // OAuth 콜백: URL 해시에 토큰이 있으면 파싱 후 세션 수립
+  useEffect(() => {
+    if (hashHandledRef.current || typeof window === 'undefined') return
+    const hash = window.location.hash?.trim()
+    if (!hash || (!hash.includes('access_token') && !hash.includes('refresh_token'))) return
+    hashHandledRef.current = true
+    setOauthProcessing(true)
+    exchangeHashForSession().catch(() => setOauthProcessing(false))
+  }, [])
+
+  // 세션 생기면 대시보드로 리다이렉트 (onAuthStateChange로 user 갱신됨)
   useEffect(() => {
     if (loading) return
     if (user) {
-      const path = returnUrl.startsWith('/') ? returnUrl : '/'
+      const path = returnUrl.startsWith('/') ? returnUrl : DASHBOARD_PATH
       router.replace(path)
     }
   }, [user, loading, returnUrl, router])
 
   const handleLogin = async (provider: AuthProvider) => {
-    await signIn(provider, returnUrl)
+    await signIn(provider, DASHBOARD_PATH)
   }
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -49,13 +64,15 @@ function LoginForm() {
       setError(result.error)
       return
     }
-    const path = returnUrl.startsWith('/') ? returnUrl : '/'
+    const path = returnUrl.startsWith('/') ? returnUrl : DASHBOARD_PATH
     router.replace(path)
   }
 
-  if (loading) {
+  const showOAuthLoading = oauthProcessing || (typeof window !== 'undefined' && window.location.hash?.includes('access_token') && loading)
+
+  if (loading && !oauthProcessing) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center gap-4">
         <p className="text-gray-400">로그인 확인 중...</p>
       </div>
     )
@@ -63,8 +80,33 @@ function LoginForm() {
 
   if (user) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center gap-4">
         <p className="text-gray-400">이동 중...</p>
+      </div>
+    )
+  }
+
+  if (showOAuthLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center gap-6 p-6">
+        <div className="flex items-center gap-1" aria-hidden>
+          <motion.span
+            className="w-2 h-6 rounded-full bg-[#FF6B00]"
+            animate={{ scaleY: [1, 0.4, 1] }}
+            transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 0.1 }}
+          />
+          <motion.span
+            className="w-2 h-6 rounded-full bg-[#FF6B00]"
+            animate={{ scaleY: [0.4, 1, 0.4] }}
+            transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 0.1 }}
+          />
+          <motion.span
+            className="w-2 h-6 rounded-full bg-[#FF6B00]"
+            animate={{ scaleY: [1, 0.4, 1] }}
+            transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 0.1 }}
+          />
+        </div>
+        <p className="text-[#FF6B00]/90 font-medium">로그인 중입니다...</p>
       </div>
     )
   }

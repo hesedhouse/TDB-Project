@@ -6,7 +6,32 @@ import type { User } from '@supabase/supabase-js'
 
 export type AuthProvider = 'kakao' | 'naver' | 'google'
 
-/** 로그인 여부·유저·로그인/로그아웃 훅 (클라이언트 전용) */
+/** URL 해시(#access_token=...&refresh_token=...) 파싱 후 세션 수립. OAuth 콜백 후 호출. */
+export async function exchangeHashForSession(): Promise<boolean> {
+  if (typeof window === 'undefined') return false
+  const hash = window.location.hash?.trim()
+  if (!hash || (!hash.includes('access_token') && !hash.includes('refresh_token'))) return false
+  const supabase = createClient()
+  if (!supabase) return false
+  const params = new URLSearchParams(hash.replace(/^#/, ''))
+  const access_token = params.get('access_token')
+  const refresh_token = params.get('refresh_token')
+  if (!access_token) return false
+  const { error } = await supabase.auth.setSession({
+    access_token,
+    refresh_token: refresh_token ?? undefined,
+  })
+  if (error) {
+    if (process.env.NODE_ENV === 'development') console.warn('[auth] exchangeHashForSession:', error.message)
+    return false
+  }
+  try {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  } catch {}
+  return true
+}
+
+/** 로그인 여부·유저·로그인/로그아웃 훅 (클라이언트 전용). onAuthStateChange로 세션 감지. */
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -32,8 +57,8 @@ export function useAuth() {
   const signIn = useCallback(async (provider: AuthProvider, returnUrl?: string) => {
     const supabase = createClient()
     if (!supabase) return
-    const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const redirectTo = returnUrl ? `${origin}${returnUrl}` : `${origin}/`
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://poppinapps.vercel.app').trim().replace(/\/$/, '')
+    const redirectTo = returnUrl ? `${baseUrl}${returnUrl.startsWith('/') ? returnUrl : `/${returnUrl}`}` : `${baseUrl}/`
     await supabase.auth.signInWithOAuth({
       provider: provider as any,
       options: { redirectTo },

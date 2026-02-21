@@ -40,6 +40,7 @@ export function createClient(): SupabaseClient | null {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+        detectSessionInUrl: true,
       },
     })
     return supabaseInstance

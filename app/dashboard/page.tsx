@@ -1,51 +1,29 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { TickProvider } from '@/lib/TickContext'
 import HomeDashboard from '@/components/HomeDashboard'
 import EntryGate from '@/components/EntryGate'
 import PulseFeed from '@/components/PulseFeed'
-import { useAuth, exchangeHashForSession } from '@/lib/supabase/auth'
+import { useAuth } from '@/lib/supabase/auth'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 
-export default function Home() {
+export default function DashboardPage() {
   const router = useRouter()
   const { user, loading } = useAuth()
   const useSupabase = isSupabaseConfigured()
-  const [oauthProcessing, setOauthProcessing] = useState(false)
-  const hashHandledRef = useRef(false)
-
   const [currentView, setCurrentView] = useState<'home' | 'entry' | 'feed'>('home')
   const [selectedBoard, setSelectedBoard] = useState<string | null>(null)
   const [userCharacter, setUserCharacter] = useState<number>(0)
   const [userNickname, setUserNickname] = useState<string>('')
 
-  // OAuth 콜백: 루트(/)로 돌아왔을 때 주소창 해시(#access_token=...)를 읽어 세션 수립 후 /dashboard로 이동
   useEffect(() => {
-    if (hashHandledRef.current || typeof window === 'undefined') return
-    const hash = window.location.hash?.trim()
-    if (!hash || (!hash.includes('access_token') && !hash.includes('refresh_token'))) return
-    hashHandledRef.current = true
-    setOauthProcessing(true)
-    exchangeHashForSession()
-      .then((ok) => {
-        if (ok) router.replace('/dashboard')
-        else setOauthProcessing(false)
-      })
-      .catch(() => setOauthProcessing(false))
-  }, [router])
-
-  useEffect(() => {
-    if (!useSupabase || loading || oauthProcessing) return
-    if (typeof window !== 'undefined') {
-      const h = window.location.hash?.trim()
-      if (h && (h.includes('access_token') || h.includes('refresh_token'))) return
-    }
+    if (!useSupabase || loading) return
     if (!user) {
-      router.replace('/login?returnUrl=/')
+      router.replace('/login?returnUrl=/dashboard')
     }
-  }, [useSupabase, loading, user, router, oauthProcessing])
+  }, [useSupabase, loading, user, router])
 
   const handleEnterBoard = useCallback((boardId: string) => {
     if (!userNickname) {
@@ -73,10 +51,10 @@ export default function Home() {
     setSelectedBoard(null)
   }
 
-  if (useSupabase && (loading || !user || oauthProcessing)) {
+  if (useSupabase && (loading || !user)) {
     return (
       <main className="min-h-screen bg-midnight-black flex items-center justify-center">
-        <p className="text-gray-400">{oauthProcessing ? '로그인 처리 중...' : '로그인 확인 중...'}</p>
+        <p className="text-gray-400">로그인 확인 중...</p>
       </main>
     )
   }
