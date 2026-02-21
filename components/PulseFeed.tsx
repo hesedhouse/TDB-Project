@@ -814,9 +814,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       </AnimatePresence>
 
       {/* Top Bar with Progress */}
-      <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top pt-4 sm:pt-8 pb-3 md:pb-2">
-        <div className="px-2 py-2 sm:px-4 sm:py-4">
-          <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-2">
+      <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top pt-4 sm:pt-5 pb-3 md:pb-2">
+        <div className="px-2 py-2 sm:px-4 sm:py-3">
+          <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-2 mb-4">
             {/* 왼쪽 그룹: 뒤로 + 방 제목 + No. 배지 */}
             <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
               <button
