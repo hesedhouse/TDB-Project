@@ -156,6 +156,9 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     let cancelled = false
     const updateCount = (boardId: string, count: number) => {
       if (cancelled) return
+      if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+        console.log('[Home] 방 참여자 수 갱신:', { boardId: boardId.slice(0, 8) + '…', count })
+      }
       setParticipantCounts((prev) => ({ ...prev, [boardId]: count }))
     }
     Promise.all(

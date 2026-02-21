@@ -117,6 +117,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [deleteConfirmMessageId, setDeleteConfirmMessageId] = useState<string | null>(null)
   /** 실시간 접속자 (Supabase Presence). 닉네임 없으면 '익명의 대화가'로 표시 */
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
+  /** Presence 기준 실시간 접속자 수 (presenceState 키 개수). 0이면 DB 참여자 수 사용 */
+  const [presenceCount, setPresenceCount] = useState(0)
   /** DB 기준 참여자 (is_active = true). 리스트·인원수·왕관 필터에 사용 */
   const [activeParticipants, setActiveParticipants] = useState<RoomParticipant[]>([])
   const [showPresencePopover, setShowPresencePopover] = useState(false)
@@ -130,11 +132,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     setHourglassesState(getHourglasses())
   }, [])
 
-  /** Supabase Presence: 방 접속자 실시간 동기화. track에 nickname·user_id 포함, sync에서 nickname 추출 */
+  /** Supabase Presence: 방 접속자 실시간 동기화. track에 nickname·user_id 포함, sync에서 presenceState 키 개수 반영 */
   useEffect(() => {
     if (!useSupabaseWithUuid || !boardId) return
     const displayName = (effectiveNickname || '').trim() || userNickname || '게스트'
-    const unsub = subscribeBoardPresence(boardId, displayName, setOnlineUsers, userId ?? null)
+    const unsub = subscribeBoardPresence(boardId, displayName, (users, keyCount) => {
+      setOnlineUsers(users)
+      setPresenceCount(keyCount)
+    }, userId ?? null)
     return unsub
   }, [useSupabaseWithUuid, boardId, effectiveNickname, userNickname, userId])
 
@@ -146,6 +151,19 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     const unsub = subscribeToRoomParticipants(boardId, () => refetch())
     return () => unsub()
   }, [useSupabaseWithUuid, boardId])
+
+  /** 닉네임 모달: ESC 키로 닫기 */
+  useEffect(() => {
+    if (!showNicknameModal) return
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setShowNicknameModal(false)
+      }
+    }
+    document.addEventListener('keydown', handleEsc)
+    return () => document.removeEventListener('keydown', handleEsc)
+  }, [showNicknameModal])
 
   /** 접속자 팝오버: 외부 클릭 시 닫기 */
   useEffect(() => {
@@ -551,6 +569,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return unsubscribe
   }, [useSupabaseWithUuid, boardId])
 
+  /** 표시용 참여자 수: Presence 키 개수와 DB 참여자 수 중 큰 값 (0 고정 방지) */
+  const displayParticipantCount = Math.max(presenceCount, activeParticipants.length)
+
   /** 닉네임 → 왕관(1~3위) 매핑. 방에 남아있는 참여자(is_active) 중에서만 적용 */
   const crownByDisplayName = useMemo(() => {
     const activeSet = new Set(activeParticipants.map((p) => (p.user_display_name ?? '').trim()).filter(Boolean))
@@ -762,13 +783,18 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       <AnimatePresence>
         {nicknameModalMounted && showNicknameModal && (
           <motion.div
+            role="presentation"
             className="fixed inset-0 z-[90] flex items-center justify-center p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             style={{ background: 'rgba(0,0,0,0.92)' }}
+            onClick={() => setShowNicknameModal(false)}
           >
             <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="nickname-modal-title"
               className="w-full max-w-sm rounded-2xl p-6"
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -779,8 +805,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 border: '2px solid rgba(255,107,0,0.6)',
                 boxShadow: '0 0 20px rgba(255,107,0,0.25), 0 0 40px rgba(255,107,0,0.12), inset 0 0 0 1px rgba(255,107,0,0.15)',
               }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <h2 className="text-lg sm:text-xl font-black text-center mb-1 text-white" style={{ textShadow: '0 0 12px rgba(255,255,255,0.15)' }}>
+              <h2 id="nickname-modal-title" className="text-lg sm:text-xl font-black text-center mb-1 text-white" style={{ textShadow: '0 0 12px rgba(255,255,255,0.15)' }}>
                 닉네임 설정
               </h2>
               <p className="text-center text-gray-400 text-sm mb-3">
@@ -818,7 +845,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   type="text"
                   value={nicknameInput}
                   onChange={(e) => { setNicknameInput(e.target.value); setNicknameError(null) }}
-                  onKeyDown={(e) => e.key === 'Enter' && !nicknameSubmitLoading && handleNicknameSubmit()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setShowNicknameModal(false)
+                    else if (e.key === 'Enter' && !nicknameSubmitLoading && nicknameInput.trim()) handleNicknameSubmit()
+                  }}
                   placeholder="닉네임 입력"
                   maxLength={20}
                   className="flex-1 min-w-0 px-4 py-3 rounded-xl bg-black/60 border-2 border-[#FF6B00]/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base"
@@ -848,27 +878,38 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   {nicknameError}
                 </p>
               )}
-              <motion.button
-                type="button"
-                onClick={() => handleNicknameSubmit()}
-                disabled={!nicknameInput.trim() || nicknameSubmitLoading}
-                className="w-full py-3.5 rounded-xl font-bold text-base text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  background: nicknameInput.trim() && !nicknameSubmitLoading ? '#FF6B00' : '#555',
-                  boxShadow: nicknameInput.trim() && !nicknameSubmitLoading ? '0 0 14px rgba(255,107,0,0.4), 0 0 24px rgba(255,107,0,0.2)' : 'none',
-                }}
-                whileHover={nicknameInput.trim() && !nicknameSubmitLoading ? { scale: 1.02 } : {}}
-                whileTap={nicknameInput.trim() && !nicknameSubmitLoading ? { scale: 0.98 } : {}}
-              >
-                {nicknameSubmitLoading ? (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden />
-                    확인 중...
-                  </span>
-                ) : (
-                  '입장하기'
-                )}
-              </motion.button>
+              <div className="flex gap-3 mt-1">
+                <motion.button
+                  type="button"
+                  onClick={() => setShowNicknameModal(false)}
+                  className="flex-1 py-3 rounded-xl font-semibold text-sm sm:text-base text-gray-400 border-2 border-gray-500 bg-transparent hover:bg-white/5 hover:border-gray-400 hover:text-gray-300 transition-colors"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  취소
+                </motion.button>
+                <motion.button
+                  type="button"
+                  onClick={() => handleNicknameSubmit()}
+                  disabled={!nicknameInput.trim() || nicknameSubmitLoading}
+                  className="flex-1 py-3 rounded-xl font-bold text-sm sm:text-base text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    background: nicknameInput.trim() && !nicknameSubmitLoading ? '#FF6B00' : '#555',
+                    boxShadow: nicknameInput.trim() && !nicknameSubmitLoading ? '0 0 14px rgba(255,107,0,0.4), 0 0 24px rgba(255,107,0,0.2)' : 'none',
+                  }}
+                  whileHover={nicknameInput.trim() && !nicknameSubmitLoading ? { scale: 1.02 } : {}}
+                  whileTap={nicknameInput.trim() && !nicknameSubmitLoading ? { scale: 0.98 } : {}}
+                >
+                  {nicknameSubmitLoading ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden />
+                      확인 중...
+                    </span>
+                  ) : (
+                    '입장하기'
+                  )}
+                </motion.button>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -1051,10 +1092,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   title="참여 중인 사람"
-                  aria-label={`참여 중 ${activeParticipants.length}명. 클릭하면 목록을 볼 수 있습니다.`}
+                  aria-label={`참여 중 ${displayParticipantCount}명. 클릭하면 목록을 볼 수 있습니다.`}
                 >
                   <span className="text-sm sm:text-base leading-none" aria-hidden>👥</span>
-                  <span className="font-bold tabular-nums text-white text-xs sm:text-sm">{activeParticipants.length}</span>
+                  <span className="font-bold tabular-nums text-white text-xs sm:text-sm">{displayParticipantCount}</span>
                 </motion.button>
                 <AnimatePresence>
                   {showPresencePopover && (
@@ -1065,13 +1106,13 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                       exit={{ opacity: 0, y: -4 }}
                       transition={{ duration: 0.15 }}
                     >
-                      <p className="text-xs text-gray-400 px-2 pb-1.5 border-b border-white/10 mb-1.5">참여 중 ({activeParticipants.length}명)</p>
+                      <p className="text-xs text-gray-400 px-2 pb-1.5 border-b border-white/10 mb-1.5">참여 중 ({displayParticipantCount}명)</p>
                       <ul className="max-h-40 overflow-y-auto space-y-0.5">
-                        {activeParticipants.length === 0 ? (
+                        {displayParticipantCount === 0 ? (
                           <li className="text-xs text-gray-500 px-2 py-1">아무도 없음</li>
                         ) : (
-                          activeParticipants.map((p, i) => {
-                            const nickname = (p.user_display_name ?? '').trim() || '익명의 팝핀'
+                          (presenceCount > 0 ? onlineUsers : activeParticipants).map((p, i) => {
+                            const nickname = 'nickname' in p ? (p.nickname ?? '').trim() || '익명의 팝핀' : (p.user_display_name ?? '').trim() || '익명의 팝핀'
                             const crown = crownByDisplayName.get(nickname)
                             return (
                               <li key={`${nickname}-${i}`} className="text-xs text-white px-2 py-1 truncate flex items-center gap-1">
