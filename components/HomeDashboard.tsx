@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { useState, useEffect, useCallback, useRef, memo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -72,6 +72,13 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const [participantCounts, setParticipantCounts] = useState<Record<string, number>>({})
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchDropdownRef = useRef<HTMLDivElement>(null)
+  /** 방 만들기 모달: 열림 여부 + 모달 내 제목 입력값 + 25자 초과 시 셰이크 트리거 */
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false)
+  const [createRoomTitle, setCreateRoomTitle] = useState('')
+  const [inputShakeTrigger, setInputShakeTrigger] = useState(0)
+  const createRoomInputRef = useRef<HTMLInputElement>(null)
+
+  const MAX_ROOM_TITLE_LENGTH = 25
 
   /** 드롭다운 외부 클릭 시 하이라이트만 초기화 (입력값은 유지) */
   useEffect(() => {
@@ -264,9 +271,9 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     [router]
   )
 
-  /** 방 만들기/시작하기: 방 제목(keyword) + 비밀번호(선택)를 API로 전달 → boards에 저장 후 생성된 ID(public_id)로 즉시 이동 */
-  const handleCreateOrEnterRoom = useCallback(async () => {
-    const keyword = searchQuery.trim()
+  /** 방 만들기/시작하기: 방 제목(keyword) + 비밀번호(선택)를 API로 전달 → boards에 저장 후 생성된 ID(public_id)로 즉시 이동. 모달에서 호출 시 제목을 인자로 넘김. */
+  const handleCreateOrEnterRoom = useCallback(async (titleOverride?: string) => {
+    const keyword = (titleOverride !== undefined ? String(titleOverride).trim() : searchQuery.trim())
     if (!keyword) return
     if (creatingRoom) return
     const isNumericOnly = /^[0-9]+$/.test(keyword)
@@ -322,12 +329,36 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     }
   }, [searchQuery, roomPassword, creatingRoom, useSupabase, router])
 
+  /** 방 만들기 모달 열기: 현재 검색어를 기본 제목으로 설정(최대 25자) */
+  const openCreateRoomModal = useCallback(() => {
+    setCreateRoomTitle(searchQuery.slice(0, MAX_ROOM_TITLE_LENGTH))
+    setShowCreateRoomModal(true)
+  }, [searchQuery])
+
+  /** 모달이 열릴 때 입력창 포커스 */
+  useEffect(() => {
+    if (showCreateRoomModal) {
+      const t = setTimeout(() => createRoomInputRef.current?.focus(), 80)
+      return () => clearTimeout(t)
+    }
+  }, [showCreateRoomModal])
+
+  /** 모달에서 방 만들기 실행: 제목 유효성 검사(공백/25자 초과) 후 handleCreateOrEnterRoom 호출 */
+  const submitCreateRoomModal = useCallback(() => {
+    const title = createRoomTitle.trim()
+    if (!title || title.length > MAX_ROOM_TITLE_LENGTH) return
+    setShowCreateRoomModal(false)
+    handleCreateOrEnterRoom(title)
+  }, [createRoomTitle, handleCreateOrEnterRoom])
+
+  const isCreateRoomTitleValid = createRoomTitle.trim().length > 0 && createRoomTitle.length <= MAX_ROOM_TITLE_LENGTH
+
   /** 검색창 키보드: 방향키로 하이라이트, Enter로 선택 또는 방 만들기 */
   const handleSearchKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const showDropdown = searchQuery.trim() && (searchLoading || searchFetched)
       if (!showDropdown) {
-        if (e.key === 'Enter') handleCreateOrEnterRoom()
+        if (e.key === 'Enter') openCreateRoomModal()
         return
       }
       if (e.key === 'ArrowDown') {
@@ -350,11 +381,11 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
           handleSelectSearchResult(searchResults[highlightedIndex])
         } else if (highlightedIndex === -2 || (searchFetched && searchResults.length === 0)) {
-          handleCreateOrEnterRoom()
+          openCreateRoomModal()
         } else if (searchResults.length > 0 && highlightedIndex === 0) {
           handleSelectSearchResult(searchResults[0])
         } else {
-          handleCreateOrEnterRoom()
+          openCreateRoomModal()
         }
       } else if (e.key === 'Escape') {
         setHighlightedIndex(-1)
@@ -368,7 +399,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       searchResults,
       highlightedIndex,
       handleSelectSearchResult,
-      handleCreateOrEnterRoom,
+      openCreateRoomModal,
     ]
   )
 
@@ -496,7 +527,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                               role="option"
                               id="search-result-create"
                               aria-selected={highlightedIndex === -2}
-                              onClick={handleCreateOrEnterRoom}
+                              onClick={openCreateRoomModal}
                               className={`w-full py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
                                 highlightedIndex === -2
                                   ? 'bg-neon-orange/30 border-2 border-neon-orange text-white'
@@ -560,7 +591,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                               role="option"
                               id="search-result-create"
                               aria-selected={highlightedIndex === -2}
-                              onClick={handleCreateOrEnterRoom}
+                              onClick={openCreateRoomModal}
                               className={`w-full py-2.5 px-4 rounded-xl text-sm font-semibold transition-all ${
                                 highlightedIndex === -2
                                   ? 'bg-neon-orange/40 border-2 border-neon-orange text-white shadow-[0_0_12px_rgba(255,107,0,0.35)]'
@@ -579,11 +610,11 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
             </div>
             <motion.button
             type="button"
-            onClick={handleCreateOrEnterRoom}
-            disabled={creatingRoom || !searchQuery.trim()}
+            onClick={openCreateRoomModal}
+            disabled={creatingRoom}
             className="flex items-center justify-center gap-2 px-5 py-3.5 sm:px-6 sm:py-4 rounded-2xl font-semibold text-sm sm:text-base bg-neon-orange text-white border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.4)] hover:shadow-[0_0_24px_rgba(255,95,0,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-shadow min-w-[7rem] sm:min-w-[8rem]"
-            whileHover={!creatingRoom && searchQuery.trim() ? { scale: 1.02 } : {}}
-            whileTap={!creatingRoom && searchQuery.trim() ? { scale: 0.98 } : {}}
+            whileHover={!creatingRoom ? { scale: 1.02 } : {}}
+            whileTap={!creatingRoom ? { scale: 0.98 } : {}}
           >
             {creatingRoom ? (
               <>
@@ -835,6 +866,110 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           })}
         </div>
       </section>
+
+      {/* 방 만들기 모달: POPPIN 스타일, 제목 입력 → 취소/방 만들기 */}
+      <AnimatePresence>
+        {showCreateRoomModal && (
+          <Fragment key="create-room-modal">
+            <motion.div
+              role="presentation"
+              className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setShowCreateRoomModal(false)}
+            />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="create-room-modal-title"
+              className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 px-4"
+              initial={{ opacity: 0, y: 24, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.98 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="rounded-3xl border-2 border-neon-orange/50 bg-midnight-black shadow-[0_0_40px_rgba(255,107,0,0.2),0_0_0_1px_rgba(255,107,0,0.1)] overflow-hidden">
+                <div className="p-6 sm:p-8">
+                  <h2
+                    id="create-room-modal-title"
+                    className="text-xl sm:text-2xl font-black mb-1 tracking-tight"
+                    style={{ color: '#FF5F00', textShadow: '0 0 12px rgba(255,95,0,0.5)' }}
+                  >
+                    방 만들기
+                  </h2>
+                  <p className="text-gray-400 text-sm mb-5">방 제목을 입력해 주세요.</p>
+                  <div className="relative">
+                    <motion.div
+                      className="relative"
+                      animate={inputShakeTrigger > 0 ? { x: [0, -8, 8, -6, 6, -2, 2, 0] } : { x: 0 }}
+                      transition={{ duration: 0.4, ease: 'easeOut' }}
+                      onAnimationComplete={() => setInputShakeTrigger(0)}
+                    >
+                      <input
+                        ref={createRoomInputRef}
+                        type="text"
+                        value={createRoomTitle}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          const clamped = raw.slice(0, MAX_ROOM_TITLE_LENGTH)
+                          setCreateRoomTitle(clamped)
+                          if (raw.length > MAX_ROOM_TITLE_LENGTH) setInputShakeTrigger((t) => t + 1)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') submitCreateRoomModal()
+                          if (e.key === 'Escape') setShowCreateRoomModal(false)
+                        }}
+                        placeholder="예: 오늘 저녁 뭐 먹지?"
+                        maxLength={MAX_ROOM_TITLE_LENGTH}
+                        className="w-full px-5 py-3.5 pr-14 rounded-2xl bg-black/60 border-2 border-neon-orange/50 text-white placeholder-gray-500 text-base focus:border-neon-orange focus:outline-none focus:ring-2 focus:ring-neon-orange/40 focus:shadow-[0_0_16px_rgba(255,107,0,0.25)] transition-all"
+                        aria-label="방 제목"
+                        aria-describedby="create-room-char-count"
+                      />
+                    </motion.div>
+                    <span
+                      id="create-room-char-count"
+                      className={`absolute right-3 bottom-3 text-xs tabular-nums transition-colors duration-200 ${
+                        createRoomTitle.length >= MAX_ROOM_TITLE_LENGTH
+                          ? 'text-red-400'
+                          : createRoomTitle.length >= 20
+                            ? 'text-amber-400'
+                            : 'text-gray-500'
+                      }`}
+                      aria-live="polite"
+                    >
+                      {createRoomTitle.length}/{MAX_ROOM_TITLE_LENGTH}
+                    </span>
+                  </div>
+                  <div className="flex gap-3 mt-6">
+                    <motion.button
+                      type="button"
+                      onClick={() => setShowCreateRoomModal(false)}
+                      className="flex-1 py-3.5 px-4 rounded-2xl font-bold text-sm sm:text-base border-2 border-gray-500 text-gray-300 bg-white/5 hover:bg-white/10 hover:border-gray-400 transition-colors"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      취소
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      onClick={submitCreateRoomModal}
+                      disabled={!isCreateRoomTitleValid || creatingRoom}
+                      className="flex-1 py-3.5 px-4 rounded-2xl font-bold text-sm sm:text-base bg-neon-orange text-white border-2 border-neon-orange shadow-[0_0_20px_rgba(255,95,0,0.4)] hover:shadow-[0_0_24px_rgba(255,95,0,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none transition-all duration-200"
+                      whileHover={isCreateRoomTitleValid && !creatingRoom ? { scale: 1.02 } : {}}
+                      whileTap={isCreateRoomTitleValid && !creatingRoom ? { scale: 0.98 } : {}}
+                    >
+                      방 만들기
+                    </motion.button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </Fragment>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
