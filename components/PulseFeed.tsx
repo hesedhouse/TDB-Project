@@ -147,12 +147,6 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return unsub
   }, [useSupabaseWithUuid, boardId])
 
-  /** 방 입장 시 room_participants에 참여 등록 (닉네임 확정 후) */
-  useEffect(() => {
-    if (!useSupabaseWithUuid || !boardId || !authorNickname) return
-    joinRoom(boardId, authorNickname)
-  }, [useSupabaseWithUuid, boardId, authorNickname])
-
   /** 접속자 팝오버: 외부 클릭 시 닫기 */
   useEffect(() => {
     if (!showPresencePopover) return
@@ -319,6 +313,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
 
   /** 글/댓글 작성자 이름: 모달 또는 localStorage 저장값 우선, 없으면 prop(게스트) */
   const authorNickname = (effectiveNickname || '').trim() || userNickname
+
+  /** 방 입장 시 room_participants에 참여 등록 (닉네임 확정 후) */
+  useEffect(() => {
+    if (!useSupabaseWithUuid || !boardId || !authorNickname) return
+    joinRoom(boardId, authorNickname)
+  }, [useSupabaseWithUuid, boardId, authorNickname])
 
   const { messages, send, toggleHeart, deleteMessage, updateMessage, sending } = useBoardChat(boardId, {
     userCharacter: effectiveCharacter,
