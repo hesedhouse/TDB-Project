@@ -150,7 +150,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     return () => clearTimeout(t)
   }, [searchQuery, useSupabase, isBoardVisibleInSearch])
 
-  /** 검색 결과의 각 방 참여 인원수: 초기 조회 + room_participants Realtime 구독으로 실시간 동기화 */
+  /** 검색 결과의 각 방 참여 인원수: 초기 조회 + room_participants Realtime 구독. 입장/퇴장 시 콜백으로 즉시 refetch */
   useEffect(() => {
     if (!useSupabase || searchResults.length === 0) return
     let cancelled = false

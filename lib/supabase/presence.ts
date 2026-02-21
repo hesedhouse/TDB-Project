@@ -46,20 +46,25 @@ export function subscribeBoardPresence(
       const state = channel.presenceState()
       const keyCount = Object.keys(state).length
       const users: PresenceUser[] = []
+      const seenNicknames = new Set<string>()
       Object.values(state).forEach((presences) => {
         if (!Array.isArray(presences)) return
         presences.forEach((p) => {
           const nickname = getNicknameFromPayload(p)
+          const dedupeKey = nickname.trim().toLowerCase() || DEFAULT_NICKNAME
+          if (seenNicknames.has(dedupeKey)) return
+          seenNicknames.add(dedupeKey)
           const o = (p as Record<string, unknown>) || {}
           users.push({
-            nickname,
+            nickname: nickname.trim() || DEFAULT_NICKNAME,
             user_id: typeof o.user_id === 'string' ? o.user_id : undefined,
             avatar_url: typeof o.avatar_url === 'string' ? o.avatar_url : undefined,
           })
         })
       })
       if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-        console.log('[Presence] 현재 참여자:', users, 'presenceState 키 개수:', keyCount)
+        console.log('현재 참여자 실시간 데이터:', state)
+        console.log('[Presence] 참여자 수(Object.keys):', keyCount, '중복 제거 후 목록:', users)
       }
       onPresence(users, keyCount)
     })
@@ -68,11 +73,11 @@ export function subscribeBoardPresence(
         const nickname = toDisplayNickname(myNickname)
         const payload: Record<string, unknown> = {
           nickname,
-          ...(userId ? { user_id: userId } : {}),
+          user_id: userId ?? undefined,
         }
         await channel.track(payload)
         if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-          console.log('[Presence] track 호출됨:', { boardId: boardId.slice(0, 8) + '…', nickname, hasUserId: !!userId })
+          console.log('[Presence] track 호출됨 (닉네임·ID 전송):', { boardId: boardId.slice(0, 8) + '…', nickname, user_id: userId ?? null })
         }
       }
     })

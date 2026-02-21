@@ -569,8 +569,23 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return unsubscribe
   }, [useSupabaseWithUuid, boardId])
 
-  /** 표시용 참여자 수: Presence 키 개수와 DB 참여자 수 중 큰 값 (0 고정 방지) */
+  /** 표시용 참여자 수: presenceState는 객체이므로 Object.keys 개수 사용. 0 고정 방지로 DB 수와 max */
   const displayParticipantCount = Math.max(presenceCount, activeParticipants.length)
+
+  /** 참여자 리스트 UI용: 닉네임 기준 중복 제거, 이름 누락 시 기본값 */
+  const displayParticipantList = useMemo(() => {
+    const fromPresence = presenceCount > 0 ? onlineUsers : []
+    const fromDb = activeParticipants
+    const raw = fromPresence.length > 0 ? fromPresence : fromDb
+    const seen = new Set<string>()
+    return raw.filter((p) => {
+      const name = ('nickname' in p ? p.nickname : p.user_display_name) ?? ''
+      const key = (name || '익명의 팝핀').trim().toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [presenceCount, onlineUsers, activeParticipants])
 
   /** 닉네임 → 왕관(1~3위) 매핑. 방에 남아있는 참여자(is_active) 중에서만 적용 */
   const crownByDisplayName = useMemo(() => {
@@ -1111,12 +1126,13 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                         {displayParticipantCount === 0 ? (
                           <li className="text-xs text-gray-500 px-2 py-1">아무도 없음</li>
                         ) : (
-                          (presenceCount > 0 ? onlineUsers : activeParticipants).map((p, i) => {
-                            const nickname = 'nickname' in p ? (p.nickname ?? '').trim() || '익명의 팝핀' : (p.user_display_name ?? '').trim() || '익명의 팝핀'
-                            const crown = crownByDisplayName.get(nickname)
+                          displayParticipantList.map((p, i) => {
+                            const nickname = ('nickname' in p ? (p as PresenceUser).nickname : (p as RoomParticipant).user_display_name) ?? ''
+                            const displayName = (nickname || '').trim() || '익명의 팝핀'
+                            const crown = crownByDisplayName.get(displayName)
                             return (
-                              <li key={`${nickname}-${i}`} className="text-xs text-white px-2 py-1 truncate flex items-center gap-1">
-                                <span className="truncate">{nickname}</span>
+                              <li key={`${displayName}-${i}`} className="text-xs text-white px-2 py-1 truncate flex items-center gap-1">
+                                <span className="truncate">{displayName}</span>
                                 {crown && (
                                   <span style={{ color: crown.color }} className="flex-shrink-0" aria-label={`${crown.rank}위`} title={`기여도 ${crown.rank}위`}>
                                     👑
