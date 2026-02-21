@@ -260,6 +260,64 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     [router]
   )
 
+  /** 방 만들기/시작하기: 방 제목(keyword) + 비밀번호(선택)를 API로 전달 → boards에 저장 후 생성된 ID(public_id)로 즉시 이동 */
+  const handleCreateOrEnterRoom = useCallback(async () => {
+    const keyword = searchQuery.trim()
+    if (!keyword) return
+    if (creatingRoom) return
+    const isNumericOnly = /^[0-9]+$/.test(keyword)
+    if (!useSupabase) {
+      router.push(`/board/${encodeURIComponent(keyword)}`)
+      return
+    }
+    setCreatingRoom(true)
+    try {
+      if (isNumericOnly) {
+        const res = await fetch(`/api/board/${encodeURIComponent(keyword)}`)
+        if (res.ok) {
+          router.push(`/board/${keyword}`)
+          return
+        }
+        setCreatingRoom(false)
+        return
+      }
+      // Supabase 연결 여부(클라이언트): 키 값 노출 없이 로그
+      if (typeof window !== 'undefined') {
+        const urlSet = Boolean(
+          process.env.NEXT_PUBLIC_SUPABASE_URL &&
+            String(process.env.NEXT_PUBLIC_SUPABASE_URL).trim().length > 0
+        )
+        console.log('[HomeDashboard] Supabase URL 연결 여부:', urlSet ? '설정됨' : '미설정')
+      }
+
+      const res = await fetch('/api/board/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyword,
+          password: roomPassword.trim() || undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({} as Record<string, unknown>))
+      if (!res.ok) {
+        const errMsg = typeof data?.error === 'string' ? data.error : res.statusText || '알 수 없음'
+        console.error('[HomeDashboard] 방 생성 실패:', res.status, data)
+        setCreatingRoom(false)
+        alert(`저장 실패: ${errMsg}`)
+        return
+      }
+      const board = data as { room_no?: number; public_id?: number; id: string }
+      const numId = board.room_no ?? board.public_id
+      const path = numId != null ? `/board/${numId}` : `/board/${board.id}`
+      router.push(path)
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e)
+      console.error('[HomeDashboard] 방 생성 예외:', e)
+      setCreatingRoom(false)
+      alert(`저장 실패: ${errMsg}`)
+    }
+  }, [searchQuery, roomPassword, creatingRoom, useSupabase, router])
+
   /** 검색창 키보드: 방향키로 하이라이트, Enter로 선택 또는 방 만들기 */
   const handleSearchKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -321,64 +379,6 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     removeSessionByBoardId(session.boardId)
     setActiveSessions((prev) => prev.filter((s) => s.boardId !== session.boardId))
   }, [])
-
-  /** 방 만들기/시작하기: 방 제목(keyword) + 비밀번호(선택)를 API로 전달 → boards에 저장 후 생성된 ID(public_id)로 즉시 이동 */
-  const handleCreateOrEnterRoom = useCallback(async () => {
-    const keyword = searchQuery.trim()
-    if (!keyword) return
-    if (creatingRoom) return
-    const isNumericOnly = /^[0-9]+$/.test(keyword)
-    if (!useSupabase) {
-      router.push(`/board/${encodeURIComponent(keyword)}`)
-      return
-    }
-    setCreatingRoom(true)
-    try {
-      if (isNumericOnly) {
-        const res = await fetch(`/api/board/${encodeURIComponent(keyword)}`)
-        if (res.ok) {
-          router.push(`/board/${keyword}`)
-          return
-        }
-        setCreatingRoom(false)
-        return
-      }
-      // Supabase 연결 여부(클라이언트): 키 값 노출 없이 로그
-      if (typeof window !== 'undefined') {
-        const urlSet = Boolean(
-          process.env.NEXT_PUBLIC_SUPABASE_URL &&
-            String(process.env.NEXT_PUBLIC_SUPABASE_URL).trim().length > 0
-        )
-        console.log('[HomeDashboard] Supabase URL 연결 여부:', urlSet ? '설정됨' : '미설정')
-      }
-
-      const res = await fetch('/api/board/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          keyword,
-          password: roomPassword.trim() || undefined,
-        }),
-      })
-      const data = await res.json().catch(() => ({} as Record<string, unknown>))
-      if (!res.ok) {
-        const errMsg = typeof data?.error === 'string' ? data.error : res.statusText || '알 수 없음'
-        console.error('[HomeDashboard] 방 생성 실패:', res.status, data)
-        setCreatingRoom(false)
-        alert(`저장 실패: ${errMsg}`)
-        return
-      }
-      const board = data as { room_no?: number; public_id?: number; id: string }
-      const numId = board.room_no ?? board.public_id
-      const path = numId != null ? `/board/${numId}` : `/board/${board.id}`
-      router.push(path)
-    } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e)
-      console.error('[HomeDashboard] 방 생성 예외:', e)
-      setCreatingRoom(false)
-      alert(`저장 실패: ${errMsg}`)
-    }
-  }, [searchQuery, roomPassword, creatingRoom, useSupabase, router])
 
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom pt-14 md:pt-6 px-6 max-w-7xl mx-auto">
