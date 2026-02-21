@@ -569,14 +569,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return unsubscribe
   }, [useSupabaseWithUuid, boardId])
 
-  /** 표시용 참여자 수: presenceState는 객체이므로 Object.keys 개수 사용. 0 고정 방지로 DB 수와 max */
-  const displayParticipantCount = Math.max(presenceCount, activeParticipants.length)
+  /** 표시용 참여자 수: room_participants 테이블의 is_active=true 행 개수가 실제 참여자 수. DB 조회 전에는 Presence 수로 대체 */
+  const displayParticipantCount = activeParticipants.length > 0 ? activeParticipants.length : Math.max(presenceCount, 0)
 
-  /** 참여자 리스트 UI용: 닉네임 기준 중복 제거, 이름 누락 시 기본값 */
+  /** 참여자 리스트 UI용: room_participants 행을 우선, 없을 때만 Presence. 닉네임 기준 중복 제거 */
   const displayParticipantList = useMemo(() => {
-    const fromPresence = presenceCount > 0 ? onlineUsers : []
     const fromDb = activeParticipants
-    const raw = fromPresence.length > 0 ? fromPresence : fromDb
+    const fromPresence = presenceCount > 0 ? onlineUsers : []
+    const raw = fromDb.length > 0 ? fromDb : fromPresence
     const seen = new Set<string>()
     return raw.filter((p) => {
       const name = ('nickname' in p ? p.nickname : p.user_display_name) ?? ''

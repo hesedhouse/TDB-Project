@@ -17,24 +17,37 @@ import { isValidUuid } from './client'
 
 export type RoomParticipant = { user_display_name: string }
 
-/** 방 참여: (board_id, nickname)을 is_active = true 로 넣거나 갱신. 성공 여부 반환. */
+/** 방 참여: room_participants에 board_id, user_display_name(닉네임) 저장. is_active = true 로 upsert. 성공 여부 반환. */
 export async function joinRoom(boardId: string, nickname: string): Promise<boolean> {
-  if (!isValidUuid(boardId)) return false
+  if (!isValidUuid(boardId)) {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      console.warn('[room_participants] joinRoom: invalid boardId', boardId)
+    }
+    return false
+  }
   const name = (nickname || '').trim() || '익명의 수호자'
   const supabase = createClient()
-  if (!supabase) return false
-  const { error } = await supabase.from('room_participants').upsert(
-    {
-      board_id: boardId,
-      user_display_name: name,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'board_id,user_display_name' }
-  )
-  if (error) {
-    console.error('joinRoom error:', error)
+  if (!supabase) {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      console.warn('[room_participants] joinRoom: Supabase client unavailable')
+    }
     return false
+  }
+  const payload = {
+    board_id: boardId,
+    user_display_name: name,
+    is_active: true,
+    updated_at: new Date().toISOString(),
+  }
+  const { error } = await supabase.from('room_participants').upsert(payload, {
+    onConflict: 'board_id,user_display_name',
+  })
+  if (error) {
+    console.error('[room_participants] joinRoom error (insert 실패):', error.message, error.code, error.details)
+    return false
+  }
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('[room_participants] 참여자 추가 성공:', { board_id: boardId.slice(0, 8) + '…', user_display_name: name })
   }
   return true
 }
@@ -58,7 +71,7 @@ export async function leaveRoom(boardId: string, nickname: string): Promise<{ ok
   return { ok: true }
 }
 
-/** 해당 방에서 is_active = true 인 참여자 목록 (닉네임만) */
+/** 해당 방에서 is_active = true 인 참여자 목록. 행 개수 = 실제 참여자 수. */
 export async function getActiveParticipants(boardId: string): Promise<RoomParticipant[]> {
   if (!isValidUuid(boardId)) return []
   const supabase = createClient()
@@ -69,10 +82,14 @@ export async function getActiveParticipants(boardId: string): Promise<RoomPartic
     .eq('board_id', boardId)
     .eq('is_active', true)
   if (error) {
-    console.error('getActiveParticipants error:', error)
+    console.error('[room_participants] getActiveParticipants error:', error.message, error.code)
     return []
   }
-  return (data ?? []).map((r) => ({ user_display_name: (r as { user_display_name: string }).user_display_name }))
+  const rows = data ?? []
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development' && rows.length > 0) {
+    console.log('[room_participants] 참여자 수(행 개수):', rows.length, 'board_id:', boardId.slice(0, 8) + '…')
+  }
+  return rows.map((r) => ({ user_display_name: (r as { user_display_name: string }).user_display_name }))
 }
 
 /** room_participants 변경 시 콜백 (Realtime). 나가기/들어오기 시 리스트 갱신용 */
