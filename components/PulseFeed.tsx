@@ -130,13 +130,13 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     setHourglassesState(getHourglasses())
   }, [])
 
-  /** Supabase Presence: 방 접속자 실시간 동기화 (DB 조회 없음) */
+  /** Supabase Presence: 방 접속자 실시간 동기화. track에 nickname·user_id 포함, sync에서 nickname 추출 */
   useEffect(() => {
     if (!useSupabaseWithUuid || !boardId) return
-    const displayName = (effectiveNickname || '').trim() || userNickname
-    const unsub = subscribeBoardPresence(boardId, displayName, setOnlineUsers)
+    const displayName = (effectiveNickname || '').trim() || userNickname || '게스트'
+    const unsub = subscribeBoardPresence(boardId, displayName, setOnlineUsers, userId ?? null)
     return unsub
-  }, [useSupabaseWithUuid, boardId, effectiveNickname, userNickname])
+  }, [useSupabaseWithUuid, boardId, effectiveNickname, userNickname, userId])
 
   /** 참여자 리스트: DB room_participants (is_active = true) 조회 + Realtime 구독. join/leave 시 즉시 반영 */
   useEffect(() => {
@@ -1071,11 +1071,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                           <li className="text-xs text-gray-500 px-2 py-1">아무도 없음</li>
                         ) : (
                           activeParticipants.map((p, i) => {
-                            const nickname = (p.user_display_name ?? '').trim()
+                            const nickname = (p.user_display_name ?? '').trim() || '익명의 팝핀'
                             const crown = crownByDisplayName.get(nickname)
                             return (
                               <li key={`${nickname}-${i}`} className="text-xs text-white px-2 py-1 truncate flex items-center gap-1">
-                                <span className="truncate">{nickname || '익명'}</span>
+                                <span className="truncate">{nickname}</span>
                                 {crown && (
                                   <span style={{ color: crown.color }} className="flex-shrink-0" aria-label={`${crown.rank}위`} title={`기여도 ${crown.rank}위`}>
                                     👑
