@@ -42,3 +42,53 @@ export async function toggleUserBan(userId: string): Promise<{ ok: boolean; erro
   revalidatePath(`/admin/users/${id}`)
   return { ok: true }
 }
+
+export async function addBannedWord(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.email || session.user.email !== ADMIN_EMAIL) {
+    redirect('/')
+  }
+  const word = (formData.get('word') as string)?.trim()
+  if (!word) return { ok: false, error: '단어를 입력해 주세요.' }
+
+  const supabase = createServerClient()
+  if (!supabase) return { ok: false, error: 'database unavailable' }
+
+  const { error } = await supabase.from('banned_words').insert({ word })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admin/settings')
+  return { ok: true }
+}
+
+export async function deleteBannedWord(id: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.email || session.user.email !== ADMIN_EMAIL) {
+    redirect('/')
+  }
+  const rowId = id?.trim()
+  if (!rowId) return { ok: false, error: 'invalid id' }
+
+  const supabase = createServerClient()
+  if (!supabase) return { ok: false, error: 'database unavailable' }
+
+  const { error } = await supabase.from('banned_words').delete().eq('id', rowId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admin/settings')
+  return { ok: true }
+}
+
+export async function deleteAdminMessage(messageId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.email || session.user.email !== ADMIN_EMAIL) {
+    redirect('/')
+  }
+  const id = messageId?.trim()
+  if (!id) return { ok: false, error: 'invalid message id' }
+
+  const supabase = createServerClient()
+  if (!supabase) return { ok: false, error: 'database unavailable' }
+
+  const { error } = await supabase.from('messages').delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}

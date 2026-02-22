@@ -72,12 +72,20 @@ export default async function AdminPage({
               {currentFilter !== 'all' && ` (${currentFilter === 'banned' ? '차단' : '활동 중'})`}
             </p>
           </div>
-          <Link
-            href="/"
-            className="px-4 py-2 rounded-xl text-sm font-medium border-2 border-[#FF6B00]/50 text-gray-200 hover:bg-[#FF6B00]/10 hover:border-[#FF6B00] transition-colors"
-          >
-            메인으로
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin/settings"
+              className="px-4 py-2 rounded-xl text-sm font-medium border border-white/20 text-gray-300 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              금지어 설정
+            </Link>
+            <Link
+              href="/"
+              className="px-4 py-2 rounded-xl text-sm font-medium border-2 border-[#FF6B00]/50 text-gray-200 hover:bg-[#FF6B00]/10 hover:border-[#FF6B00] transition-colors"
+            >
+              메인으로
+            </Link>
+          </div>
         </div>
 
         <AdminUserFilterTabs currentFilter={currentFilter} />

@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { deleteAdminMessage } from '../../actions'
 
 function formatDate(value: string | null | undefined): string {
   if (value == null) return '—'
@@ -53,7 +55,24 @@ export default function AdminUserDetailTabs({
   participants: ParticipantItem[]
   contributionSummary: ContributionSummary
 }) {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<TabId>('messages')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!confirm('정말 이 메시지를 삭제하시겠습니까?')) return
+    setDeletingId(messageId)
+    try {
+      const result = await deleteAdminMessage(messageId)
+      if (result.ok) {
+        router.refresh()
+      } else {
+        alert(result.error ?? '삭제에 실패했습니다.')
+      }
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-white/10 bg-black/40 overflow-hidden" style={{ boxShadow: '0 0 28px rgba(255,107,0,0.06)' }}>
@@ -87,17 +106,29 @@ export default function AdminUserDetailTabs({
                     key={m.id}
                     className="py-3 px-4 rounded-xl bg-white/5 border border-white/5 text-sm"
                   >
-                    <div className="flex items-center justify-between text-gray-400 text-xs mb-1">
-                      <span>{m.authorNickname}</span>
-                      <span>{formatDate(m.createdAt)}</span>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between text-gray-400 text-xs mb-1">
+                          <span>{m.authorNickname}</span>
+                          <span>{formatDate(m.createdAt)}</span>
+                        </div>
+                        <p className="text-white break-words">{m.content || '—'}</p>
+                        <Link
+                          href={`/board/${encodeURIComponent(m.boardKeyword)}`}
+                          className="text-[#FF6B00] hover:underline text-xs mt-1 inline-block"
+                        >
+                          방으로 이동 →
+                        </Link>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMessage(m.id)}
+                        disabled={deletingId === m.id}
+                        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 disabled:opacity-50 transition-colors"
+                      >
+                        {deletingId === m.id ? '삭제 중...' : '삭제'}
+                      </button>
                     </div>
-                    <p className="text-white break-words">{m.content || '—'}</p>
-                    <Link
-                      href={`/board/${encodeURIComponent(m.boardKeyword)}`}
-                      className="text-[#FF6B00] hover:underline text-xs mt-1 inline-block"
-                    >
-                      방으로 이동 →
-                    </Link>
                   </li>
                 ))}
               </ul>
