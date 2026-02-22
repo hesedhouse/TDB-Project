@@ -4,8 +4,13 @@
  * 컬럼명은 NextAuth 스키마와 동일하게 userId, sessionToken, providerAccountId, emailVerified 등 camelCase를 사용한다고 가정합니다.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { Adapter, AdapterUser, AdapterSession, AdapterAccount } from 'next-auth/adapters'
-import type { VerificationToken } from 'next-auth/adapters'
+import type {
+  Adapter,
+  AdapterUser,
+  AdapterAccount,
+  AdapterSession,
+  VerificationToken,
+} from 'next-auth/adapters'
 
 function isDate(value: unknown): value is Date {
   return value instanceof Date
@@ -35,7 +40,7 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
   })
 
   return {
-    async createUser(user) {
+    async createUser(user: Omit<AdapterUser, 'id'>) {
       const insert: Record<string, unknown> = {
         ...user,
         emailVerified: user.emailVerified?.toISOString?.() ?? null,
@@ -45,21 +50,22 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
       return format<AdapterUser>(data as Record<string, unknown>)
     },
 
-    async getUser(id) {
+    async getUser(id: string) {
       const { data, error } = await supabase.from('users').select().eq('id', id).maybeSingle()
       if (error) throw error
       if (!data) return null
       return format<AdapterUser>(data as Record<string, unknown>)
     },
 
-    async getUserByEmail(email) {
+    async getUserByEmail(email: string) {
       const { data, error } = await supabase.from('users').select().eq('email', email).maybeSingle()
       if (error) throw error
       if (!data) return null
       return format<AdapterUser>(data as Record<string, unknown>)
     },
 
-    async getUserByAccount({ providerAccountId, provider }) {
+    async getUserByAccount(providerAndAccountId: Pick<AdapterAccount, 'provider' | 'providerAccountId'>) {
+      const { providerAccountId, provider } = providerAndAccountId
       const { data, error } = await supabase
         .from('accounts')
         .select('users(*)')
@@ -71,7 +77,7 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
       return format<AdapterUser>(user)
     },
 
-    async updateUser(user) {
+    async updateUser(user: Partial<AdapterUser> & Pick<AdapterUser, 'id'>) {
       const update: Record<string, unknown> = {
         ...user,
         emailVerified: user.emailVerified?.toISOString?.() ?? null,
@@ -86,7 +92,7 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
       return format<AdapterUser>(data as Record<string, unknown>)
     },
 
-    async deleteUser(userId) {
+    async deleteUser(userId: string) {
       const { error } = await supabase.from('users').delete().eq('id', userId)
       if (error) throw error
     },
@@ -96,12 +102,14 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
       if (error) throw error
     },
 
-    async unlinkAccount({ providerAccountId, provider }) {
+    async unlinkAccount(providerAndAccountId: Pick<AdapterAccount, 'provider' | 'providerAccountId'>) {
+      const { providerAccountId, provider } = providerAndAccountId
       const { error } = await supabase.from('accounts').delete().match({ provider, providerAccountId })
       if (error) throw error
     },
 
-    async createSession({ sessionToken, userId, expires }) {
+    async createSession(session: { sessionToken: string; userId: string; expires: Date }) {
+      const { sessionToken, userId, expires } = session
       const insert = { sessionToken, userId, expires: expires.toISOString() }
       const { data, error } = await supabase.from('sessions').insert(insert).select().single()
       if (error) throw error
@@ -124,7 +132,7 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
       }
     },
 
-    async updateSession(session) {
+    async updateSession(session: Partial<AdapterSession> & Pick<AdapterSession, 'sessionToken'>) {
       const update = {
         ...session,
         expires: session.expires?.toISOString?.() ?? undefined,
@@ -153,7 +161,8 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
       return format<VerificationToken>(rest)
     },
 
-    async useVerificationToken({ identifier, token }) {
+    async useVerificationToken(params: { identifier: string; token: string }) {
+      const { identifier, token } = params
       const { data, error } = await supabase
         .from('verification_tokens')
         .delete()
@@ -166,5 +175,5 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
       const { id: _id, ...rest } = row
       return format<VerificationToken>(rest)
     },
-  }
+  } as Adapter
 }
