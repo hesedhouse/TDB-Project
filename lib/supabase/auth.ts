@@ -20,7 +20,7 @@ export async function exchangeHashForSession(): Promise<boolean> {
   if (!access_token) return false
   const { error } = await supabase.auth.setSession({
     access_token,
-    refresh_token: refresh_token ?? undefined,
+    refresh_token: refresh_token ?? '',
   })
   if (error) {
     if (process.env.NODE_ENV === 'development') console.warn('[auth] exchangeHashForSession:', error.message)
