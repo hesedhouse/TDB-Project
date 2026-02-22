@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { authOptions } from '@/lib/auth'
 import { createServerClient } from '@/lib/supabase/server'
 import AdminUserDetailTabs from './AdminUserDetailTabs'
+import AdminUserBanControl from './AdminUserBanControl'
 
 const ADMIN_EMAIL = 'hesedhouse2@gmail.com'
 
@@ -12,6 +13,7 @@ type UserRow = {
   name: string | null
   email: string | null
   image: string | null
+  is_banned?: boolean
 }
 
 type MessageRow = {
@@ -57,7 +59,7 @@ export default async function AdminUserDetailPage({
 
   const { data: userRow } = await supabase
     .from('users')
-    .select('id, name, email, image')
+    .select('id, name, email, image, is_banned')
     .eq('id', userId)
     .maybeSingle()
 
@@ -120,22 +122,27 @@ export default async function AdminUserDetailPage({
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-black/40 p-6 mb-8" style={{ boxShadow: '0 0 28px rgba(255,107,0,0.06)' }}>
-          <div className="flex items-center gap-4">
-            {user.image ? (
-              <img
-                src={user.image}
-                alt=""
-                className="w-16 h-16 rounded-full object-cover border-2 border-[#FF6B00]/40"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-full bg-[#FF6B00]/20 border-2 border-[#FF6B00]/40 flex items-center justify-center text-[#FF6B00] font-bold text-xl">
-                {(user.name ?? user.email ?? '?').slice(0, 1).toUpperCase()}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              {user.image ? (
+                <img
+                  src={user.image}
+                  alt=""
+                  className="w-16 h-16 rounded-full object-cover border-2 border-[#FF6B00]/40"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-[#FF6B00]/20 border-2 border-[#FF6B00]/40 flex items-center justify-center text-[#FF6B00] font-bold text-xl">
+                  {(user.name ?? user.email ?? '?').slice(0, 1).toUpperCase()}
+                </div>
+              )}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div>
+                  <h1 className="text-xl font-bold text-white">{user.name ?? '—'}</h1>
+                  <p className="text-gray-400 text-sm">{user.email ?? '—'}</p>
+                  <p className="text-gray-500 text-xs mt-1">ID: {user.id}</p>
+                </div>
+                <AdminUserBanControl userId={user.id} isBanned={!!user.is_banned} />
               </div>
-            )}
-            <div>
-              <h1 className="text-xl font-bold text-white">{user.name ?? '—'}</h1>
-              <p className="text-gray-400 text-sm">{user.email ?? '—'}</p>
-              <p className="text-gray-500 text-xs mt-1">ID: {user.id}</p>
             </div>
           </div>
         </div>

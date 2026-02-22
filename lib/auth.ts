@@ -51,6 +51,20 @@ export const authOptions = {
       return session
     },
     async signIn({ user, account }: { user: AdapterUser; account: { provider?: string } | null }) {
+      const email = user?.email?.trim()
+      if (email) {
+        const supabase = createServerClient()
+        if (supabase) {
+          const { data: existing } = await supabase
+            .from('users')
+            .select('is_banned')
+            .eq('email', email)
+            .maybeSingle()
+          if ((existing as { is_banned?: boolean } | null)?.is_banned === true) {
+            return false
+          }
+        }
+      }
       if (account?.provider === 'naver' && user?.id) {
         const supabase = createServerClient()
         if (supabase) {
