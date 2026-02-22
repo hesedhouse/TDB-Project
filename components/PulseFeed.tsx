@@ -1307,7 +1307,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
           {useSupabaseWithUuid && topContributors.length > 0 && (
             <div className="mt-4 pt-4 border-t border-white/10">
               <p className="text-center text-sm font-semibold text-white/90 mb-3 tracking-wide">
-                이 방을 지키는 분들
+                명예의 전당
               </p>
               <ul className="space-y-3">
                 {topContributors.map((c) => {
