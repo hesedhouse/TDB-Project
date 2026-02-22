@@ -13,25 +13,26 @@ import { isSupabaseConfigured } from '@/lib/supabase/client'
 export default function DashboardPage() {
   const router = useRouter()
   const { user, loading } = useAuth()
-  const { data: nextAuthSession, status: nextAuthStatus } = useSession()
+  const { data: nextSession, status } = useSession()
   const useSupabase = isSupabaseConfigured()
   const [currentView, setCurrentView] = useState<'home' | 'entry' | 'feed'>('home')
   const [selectedBoard, setSelectedBoard] = useState<string | null>(null)
   const [userCharacter, setUserCharacter] = useState<number>(0)
   const [userNickname, setUserNickname] = useState<string>('')
 
-  const isNextAuthLoading = nextAuthStatus === 'loading'
-  const isNextAuthAuthenticated = nextAuthStatus === 'authenticated'
+  const isNextAuthLoading = status === 'loading'
+  const isNextAuthAuthenticated = status === 'authenticated'
   const hasSession = !!user || isNextAuthAuthenticated
-  const effectiveUserId = user?.id ?? (nextAuthSession?.user as { id?: string } | undefined)?.id ?? undefined
+  const effectiveUserId = user?.id ?? (nextSession?.user as { id?: string } | undefined)?.id ?? undefined
 
   useEffect(() => {
     if (loading || isNextAuthLoading) return
-    if (!hasSession && !isNextAuthAuthenticated) {
+    if (user) return
+    if (status === 'authenticated') return
+    if (status === 'unauthenticated') {
       router.replace('/login?returnUrl=/dashboard')
-      return
     }
-  }, [loading, isNextAuthLoading, hasSession, isNextAuthAuthenticated, router])
+  }, [loading, isNextAuthLoading, user, status, router])
 
   const handleEnterBoard = useCallback((boardId: string) => {
     if (!userNickname) {
@@ -66,7 +67,7 @@ export default function DashboardPage() {
       </main>
     )
   }
-  if (!hasSession && !isNextAuthAuthenticated) {
+  if (!user && status !== 'authenticated') {
     return (
       <main className="min-h-screen bg-midnight-black flex items-center justify-center">
         <p className="text-gray-400">로그인이 필요합니다.</p>

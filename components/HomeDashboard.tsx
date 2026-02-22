@@ -48,10 +48,11 @@ function maskEmail(email: string): string {
 function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const router = useRouter()
   const { user, signOut: signOutSupabase } = useAuth()
-  const { data: nextAuthSession } = useSession()
+  const { data: nextSession } = useSession()
   const useSupabase = isSupabaseConfigured()
-  const displayEmail = user?.email ?? nextAuthSession?.user?.email ?? null
-  const isNextAuthUser = !user && !!nextAuthSession?.user
+  const displayEmail = user?.email ?? nextSession?.user?.email ?? null
+  const displayName = (user?.user_metadata as { full_name?: string } | undefined)?.full_name ?? nextSession?.user?.name ?? null
+  const isNextAuthUser = !user && !!nextSession?.user
   const [searchQuery, setSearchQuery] = useState('')
   const [floatingTags, setFloatingTags] = useState<FloatingTag[]>(() =>
     getTrendKeywords().map((word) => ({ word, source: 'board' as const }))
@@ -483,10 +484,10 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           </Link>
         </div>
         <div className="flex items-center justify-end gap-1.5 sm:gap-3 flex-shrink-0 min-w-0">
-          {displayEmail && (
+          {(displayEmail || displayName) && (
             <>
-              <span className="hidden sm:inline text-gray-300 text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[160px]" title={displayEmail}>
-                {maskEmail(displayEmail)}
+              <span className="hidden sm:inline text-gray-300 text-xs sm:text-sm truncate max-w-[120px] sm:max-w-[160px]" title={displayName ?? displayEmail ?? undefined}>
+                {displayName ?? (displayEmail ? maskEmail(displayEmail) : '')}
               </span>
               <motion.button
                 type="button"

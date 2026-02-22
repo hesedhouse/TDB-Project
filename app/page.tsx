@@ -13,12 +13,12 @@ import { isSupabaseConfigured } from '@/lib/supabase/client'
 export default function Home() {
   const router = useRouter()
   const { user, loading } = useAuth()
-  const { data: nextAuthSession, status: nextAuthStatus } = useSession()
+  const { data: nextSession, status } = useSession()
   const useSupabase = isSupabaseConfigured()
-  const isNextAuthLoading = nextAuthStatus === 'loading'
-  const isNextAuthAuthenticated = nextAuthStatus === 'authenticated'
+  const isNextAuthLoading = status === 'loading'
+  const isNextAuthAuthenticated = status === 'authenticated'
   const hasSession = !!user || isNextAuthAuthenticated
-  const effectiveUserId = user?.id ?? (nextAuthSession?.user as { id?: string } | undefined)?.id ?? undefined
+  const effectiveUserId = user?.id ?? (nextSession?.user as { id?: string } | undefined)?.id ?? undefined
   const [oauthProcessing, setOauthProcessing] = useState(false)
   const hashHandledRef = useRef(false)
 
@@ -44,15 +44,15 @@ export default function Home() {
 
   useEffect(() => {
     if (loading || isNextAuthLoading || oauthProcessing) return
-    if (hasSession) return
+    if (user || status === 'authenticated') return
     if (typeof window !== 'undefined') {
       const h = window.location.hash?.trim()
       if (h && (h.includes('access_token') || h.includes('refresh_token'))) return
     }
-    if (!user && !isNextAuthAuthenticated) {
+    if (status === 'unauthenticated') {
       router.replace('/login?returnUrl=/')
     }
-  }, [loading, isNextAuthLoading, isNextAuthAuthenticated, user, hasSession, router, oauthProcessing])
+  }, [loading, isNextAuthLoading, user, status, router, oauthProcessing])
 
   const handleEnterBoard = useCallback((boardId: string) => {
     if (!userNickname) {
