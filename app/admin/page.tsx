@@ -14,8 +14,8 @@ type UserRow = {
   created_at?: string | null
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return '—'
+function formatDate(value: string | null | undefined): string {
+  if (value == null) return '—'
   try {
     const d = new Date(value)
     return d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -101,7 +101,7 @@ export default async function AdminPage() {
                         {user.email ?? '—'}
                       </td>
                       <td className="py-3 px-4 text-gray-400 text-sm">
-                        {formatDate(user.created_at)}
+                        {formatDate(user.created_at ?? null)}
                       </td>
                     </tr>
                   ))
