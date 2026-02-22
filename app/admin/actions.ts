@@ -92,3 +92,30 @@ export async function deleteAdminMessage(messageId: string): Promise<{ ok: boole
   if (error) return { ok: false, error: error.message }
   return { ok: true }
 }
+
+/** 해당 유저의 모든 활동(메시지, 참여 기록, 기여도) 영구 삭제. 관리자 전용. */
+export async function deleteAllUserActivity(userId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.email || session.user.email !== ADMIN_EMAIL) {
+    redirect('/')
+  }
+  const id = userId?.trim()
+  if (!id) return { ok: false, error: 'invalid user id' }
+
+  const supabase = createServerClient()
+  if (!supabase) return { ok: false, error: 'database unavailable' }
+
+  const [messagesErr, participantsErr, contributionsErr] = await Promise.all([
+    supabase.from('messages').delete().eq('user_id', id).then((r) => r.error),
+    supabase.from('room_participants').delete().eq('user_id', id).then((r) => r.error),
+    supabase.from('contributions').delete().eq('user_id', id).then((r) => r.error),
+  ])
+
+  if (messagesErr) return { ok: false, error: `messages: ${messagesErr.message}` }
+  if (participantsErr) return { ok: false, error: `참여 기록: ${participantsErr.message}` }
+  if (contributionsErr) return { ok: false, error: `기여도: ${contributionsErr.message}` }
+
+  revalidatePath('/admin')
+  revalidatePath(`/admin/users/${id}`)
+  return { ok: true }
+}

@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { createServerClient } from '@/lib/supabase/server'
 import AdminUserDetailTabs from './AdminUserDetailTabs'
 import AdminUserBanControl from './AdminUserBanControl'
+import AdminUserBulkDeleteButton from './AdminUserBulkDeleteButton'
 
 const ADMIN_EMAIL = 'hesedhouse2@gmail.com'
 
@@ -41,10 +42,14 @@ type ContributionRow = {
   minutes: number
 }
 
+const ITEMS_PER_PAGE = 30
+
 export default async function AdminUserDetailPage({
   params,
+  searchParams,
 }: {
   params: { id: string }
+  searchParams: { page?: string }
 }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.email || session.user.email !== ADMIN_EMAIL) {
@@ -53,6 +58,11 @@ export default async function AdminUserDetailPage({
 
   const userId = params.id?.trim()
   if (!userId) redirect('/admin')
+
+  const pageParam = typeof searchParams?.page === 'string' ? searchParams.page : undefined
+  const currentPage = Math.max(1, parseInt(pageParam ?? '1', 10) || 1)
+  const from = (currentPage - 1) * ITEMS_PER_PAGE
+  const to = currentPage * ITEMS_PER_PAGE - 1
 
   const supabase = createServerClient()
   if (!supabase) redirect('/admin')
@@ -69,10 +79,10 @@ export default async function AdminUserDetailPage({
   const [messagesRes, participantsRes, contributionsRes] = await Promise.all([
     supabase
       .from('messages')
-      .select('id, board_id, content, author_nickname, created_at')
+      .select('id, board_id, content, author_nickname, created_at', { count: 'exact' })
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .limit(10),
+      .range(from, to),
     supabase
       .from('room_participants')
       .select('board_id, user_display_name')
@@ -82,6 +92,8 @@ export default async function AdminUserDetailPage({
   ])
 
   const messages: MessageRow[] = (messagesRes.data ?? []) as MessageRow[]
+  const totalMessageCount = messagesRes.count ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalMessageCount / ITEMS_PER_PAGE))
   const participants: RoomParticipantRow[] = (participantsRes.data ?? []) as RoomParticipantRow[]
   const contributions: ContributionRow[] = (contributionsRes.data ?? []) as ContributionRow[]
 
@@ -145,11 +157,14 @@ export default async function AdminUserDetailPage({
                   <p className="text-gray-400 text-sm">{user.email ?? '—'}</p>
                   <p className="text-gray-500 text-xs mt-1">ID: {user.id}</p>
                 </div>
-                <AdminUserBanControl
-                  userId={user.id}
-                  isBanned={!!user.is_banned}
-                  isSelf={session.user.email !== undefined && session.user.email === user.email}
-                />
+                <div className="flex items-center gap-3 flex-wrap">
+                  <AdminUserBanControl
+                    userId={user.id}
+                    isBanned={!!user.is_banned}
+                    isSelf={session.user.email !== undefined && session.user.email === user.email}
+                  />
+                  <AdminUserBulkDeleteButton userId={user.id} />
+                </div>
               </div>
             </div>
           </div>
@@ -164,6 +179,12 @@ export default async function AdminUserDetailPage({
             authorNickname: m.author_nickname,
             createdAt: m.created_at,
           }))}
+          messagesPagination={{
+            totalCount: totalMessageCount,
+            currentPage,
+            totalPages,
+            basePath: `/admin/users/${userId}`,
+          }}
           participants={participants.map((p) => ({
             boardId: p.board_id,
             boardKeyword: boardsMap[p.board_id]?.keyword ?? p.board_id,

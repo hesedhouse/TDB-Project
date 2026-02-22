@@ -83,6 +83,58 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const [inputShakeTrigger, setInputShakeTrigger] = useState(0)
   const createRoomInputRef = useRef<HTMLInputElement>(null)
 
+  /** 워프존 가로 리스트: 마우스 드래그 스크롤 */
+  const warpZoneScrollRef = useRef<HTMLDivElement>(null)
+  const warpZoneDragRef = useRef({ startX: 0, scrollLeft: 0, isMouseDown: false, didDrag: false })
+  const [warpZoneDragging, setWarpZoneDragging] = useState(false)
+  const WARP_ZONE_DRAG_THRESHOLD = 5
+
+  const onWarpZoneMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    const el = warpZoneScrollRef.current
+    if (!el) return
+    warpZoneDragRef.current = {
+      startX: e.clientX,
+      scrollLeft: el.scrollLeft,
+      isMouseDown: true,
+      didDrag: false,
+    }
+  }, [])
+
+  const onWarpZoneMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const { isMouseDown, startX, scrollLeft, didDrag } = warpZoneDragRef.current
+    if (!isMouseDown) return
+    const el = warpZoneScrollRef.current
+    if (!el) return
+    const dx = startX - e.clientX
+    const startedDrag = didDrag || Math.abs(dx) > WARP_ZONE_DRAG_THRESHOLD
+    if (startedDrag && !didDrag) {
+      warpZoneDragRef.current.didDrag = true
+      setWarpZoneDragging(true)
+    }
+    if (warpZoneDragRef.current.didDrag) {
+      el.scrollLeft = scrollLeft + (startX - e.clientX)
+    }
+  }, [])
+
+  const onWarpZoneMouseUp = useCallback(() => {
+    warpZoneDragRef.current.isMouseDown = false
+    setWarpZoneDragging(false)
+  }, [])
+
+  const onWarpZoneMouseLeave = useCallback(() => {
+    warpZoneDragRef.current.isMouseDown = false
+    setWarpZoneDragging(false)
+  }, [])
+
+  const onWarpZoneClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (warpZoneDragRef.current.didDrag) {
+      e.preventDefault()
+      e.stopPropagation()
+      warpZoneDragRef.current.didDrag = false
+    }
+  }, [])
+
   const MAX_ROOM_TITLE_LENGTH = 25
 
   /** 드롭다운 외부 클릭 시 하이라이트만 초기화 (입력값은 유지) */
@@ -770,7 +822,18 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           <span className="text-neon-orange">⚡</span>
           Warp Zone
         </h2>
-        <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide relative">
+        <div
+          ref={warpZoneScrollRef}
+          role="region"
+          aria-label="워프존 가로 스크롤"
+          className={`flex gap-4 overflow-x-auto pb-2 scrollbar-hide relative ${warpZoneDragging ? 'select-none' : ''}`}
+          style={{ cursor: warpZoneDragging ? 'grabbing' : 'grab' }}
+          onMouseDown={onWarpZoneMouseDown}
+          onMouseMove={onWarpZoneMouseMove}
+          onMouseUp={onWarpZoneMouseUp}
+          onMouseLeave={onWarpZoneMouseLeave}
+          onClickCapture={onWarpZoneClickCapture}
+        >
           {activeSessions.length === 0 ? (
             <p className="text-gray-500 text-sm py-4">방에 입장하면 여기에 표시됩니다.</p>
           ) : (

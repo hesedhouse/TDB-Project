@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { deleteAdminMessage } from '../../actions'
@@ -40,6 +40,13 @@ type ContributionSummary = {
 
 type TabId = 'messages' | 'rooms' | 'contributions'
 
+type MessagesPagination = {
+  totalCount: number
+  currentPage: number
+  totalPages: number
+  basePath: string
+}
+
 const TABS: { id: TabId; label: string }[] = [
   { id: 'messages', label: '메시지' },
   { id: 'rooms', label: '참여한 방' },
@@ -48,16 +55,25 @@ const TABS: { id: TabId; label: string }[] = [
 
 export default function AdminUserDetailTabs({
   messages,
+  messagesPagination,
   participants,
   contributionSummary,
 }: {
   messages: MessageItem[]
+  messagesPagination: MessagesPagination
   participants: ParticipantItem[]
   contributionSummary: ContributionSummary
 }) {
   const router = useRouter()
+  const messageListRef = useRef<HTMLDivElement>(null)
   const [activeTab, setActiveTab] = useState<TabId>('messages')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const { totalCount, currentPage, totalPages, basePath } = messagesPagination
+
+  useEffect(() => {
+    messageListRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [currentPage])
 
   const handleDeleteMessage = async (messageId: string) => {
     if (!confirm('정말 이 메시지를 삭제하시겠습니까?')) return
@@ -96,42 +112,80 @@ export default function AdminUserDetailTabs({
       <div className="p-4 sm:p-6 min-h-[280px]">
         {activeTab === 'messages' && (
           <div className="space-y-3">
-            <p className="text-gray-400 text-sm mb-4">최근 메시지 10건</p>
+            <p className="text-gray-400 text-sm mb-2">총 작성 메시지: {totalCount}개</p>
             {messages.length === 0 ? (
               <p className="text-gray-500 py-8 text-center">작성한 메시지가 없습니다.</p>
             ) : (
-              <ul className="space-y-3">
-                {messages.map((m) => (
-                  <li
-                    key={m.id}
-                    className="py-3 px-4 rounded-xl bg-white/5 border border-white/5 text-sm"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between text-gray-400 text-xs mb-1">
-                          <span>{m.authorNickname}</span>
-                          <span>{formatDate(m.createdAt)}</span>
-                        </div>
-                        <p className="text-white break-words">{m.content || '—'}</p>
-                        <Link
-                          href={`/board/${encodeURIComponent(m.boardKeyword)}`}
-                          className="text-[#FF6B00] hover:underline text-xs mt-1 inline-block"
-                        >
-                          방으로 이동 →
-                        </Link>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteMessage(m.id)}
-                        disabled={deletingId === m.id}
-                        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 disabled:opacity-50 transition-colors"
+              <>
+                <div
+                  ref={messageListRef}
+                  className="max-h-[500px] overflow-y-auto pr-1"
+                >
+                  <ul className="space-y-3">
+                    {messages.map((m) => (
+                      <li
+                        key={m.id}
+                        className="py-3 px-4 rounded-xl bg-white/5 border border-white/5 text-sm"
                       >
-                        {deletingId === m.id ? '삭제 중...' : '삭제'}
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between text-gray-400 text-xs mb-1">
+                              <span>{m.authorNickname}</span>
+                              <span>{formatDate(m.createdAt)}</span>
+                            </div>
+                            <p className="text-white break-words">{m.content || '—'}</p>
+                            <Link
+                              href={`/board/${encodeURIComponent(m.boardKeyword)}`}
+                              className="text-[#FF6B00] hover:underline text-xs mt-1 inline-block"
+                            >
+                              방으로 이동 →
+                            </Link>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMessage(m.id)}
+                            disabled={deletingId === m.id}
+                            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 disabled:opacity-50 transition-colors"
+                          >
+                            {deletingId === m.id ? '삭제 중...' : '삭제'}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                {totalCount > 0 && (
+                  <div className="flex items-center justify-center gap-2 pt-4 pb-1">
+                    {currentPage <= 1 ? (
+                      <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed bg-white/5">
+                        이전
+                      </span>
+                    ) : (
+                      <Link
+                        href={`${basePath}?page=${currentPage - 1}`}
+                        className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-white/10 hover:bg-white/15"
+                      >
+                        이전
+                      </Link>
+                    )}
+                    <span className="px-3 py-1.5 text-gray-300 text-sm font-medium">
+                      {currentPage} / {totalPages}
+                    </span>
+                    {currentPage >= totalPages ? (
+                      <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 cursor-not-allowed bg-white/5">
+                        다음
+                      </span>
+                    ) : (
+                      <Link
+                        href={`${basePath}?page=${currentPage + 1}`}
+                        className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-white/10 hover:bg-white/15"
+                      >
+                        다음
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

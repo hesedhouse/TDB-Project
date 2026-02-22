@@ -51,28 +51,34 @@ export function useBoardChat(
   }, [enabled, boardId])
 
   const send = useCallback(
-    async (content: string, imageUrl?: string | null) => {
+    async (content: string, imageUrl?: string | null): Promise<Message | { error: string } | null> => {
       const text = content.trim()
       if (!text && !imageUrl) return null
       if (sending) return null
       setSending(true)
-      const sent = await sendMessage({
-        boardId,
-        authorCharacter: userCharacter,
-        authorNickname: userNickname,
-        content: text || ' ',
-        imageUrl: imageUrl ?? undefined,
-        userId: userId ?? undefined,
-      })
-      setSending(false)
-      if (sent) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === sent.id)) return prev
-          return [...prev, sent]
+      try {
+        const sent = await sendMessage({
+          boardId,
+          authorCharacter: userCharacter,
+          authorNickname: userNickname,
+          content: text || ' ',
+          imageUrl: imageUrl ?? undefined,
+          userId: userId ?? undefined,
         })
-        return sent
+        setSending(false)
+        if (sent) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === sent.id)) return prev
+            return [...prev, sent]
+          })
+          return sent
+        }
+        return null
+      } catch (err) {
+        setSending(false)
+        const message = err instanceof Error ? err.message : '메시지 전송에 실패했습니다.'
+        return { error: message }
       }
-      return null
     },
     [boardId, userCharacter, userNickname, userId, sending]
   )

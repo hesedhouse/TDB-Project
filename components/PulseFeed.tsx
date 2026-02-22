@@ -409,6 +409,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const handleSendMessage = useCallback(async () => {
     if ((!chatInput.trim()) || sending || uploadingImage || !useSupabaseWithUuid) return
     const sent = await send(chatInput)
+    if (sent && 'error' in sent) {
+      alert(sent.error)
+      return
+    }
     if (sent) {
       setChatInput('')
       // 새 글이 등록되면 목록 최상단으로 부드럽게 스크롤
@@ -436,6 +440,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       }
       setUploadingImage(false)
       const sent = await send(text || '', imageUrl)
+      if (sent && 'error' in sent) {
+        alert(sent.error)
+        return
+      }
       if (sent) {
         handleCloseWriteModal()
         // 새 글이 등록되면 목록 최상단으로 부드럽게 스크롤

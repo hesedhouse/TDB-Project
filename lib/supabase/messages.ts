@@ -88,11 +88,25 @@ export async function sendMessage(params: {
   const supabase = createClient()
   if (!supabase) return null
 
+  const content = params.content.trim()
+  const { data: bannedRows } = await supabase.from('banned_words').select('word')
+  const bannedWords = (bannedRows ?? [])
+    .map((r: { word?: string | null }) => (r.word ?? '').trim())
+    .filter(Boolean)
+  if (bannedWords.length > 0) {
+    const lower = content.toLowerCase()
+    for (const w of bannedWords) {
+      if (w && lower.includes(w.toLowerCase())) {
+        throw new Error(`포함된 금지어: [${w}] - 부적절한 단어가 포함되어 전송할 수 없습니다.`)
+      }
+    }
+  }
+
   const row: Record<string, unknown> = {
     board_id: params.boardId,
     author_character: params.authorCharacter,
     author_nickname: params.authorNickname,
-    content: params.content.trim(),
+    content,
     heart_count: 0,
     image_url: params.imageUrl ?? null,
   }
