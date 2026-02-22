@@ -1,0 +1,170 @@
+/**
+ * NextAuth용 Supabase 어댑터 — public 스키마 전용.
+ * public.users, public.accounts, public.sessions, public.verification_tokens 테이블을 사용합니다.
+ * 컬럼명은 NextAuth 스키마와 동일하게 userId, sessionToken, providerAccountId, emailVerified 등 camelCase를 사용한다고 가정합니다.
+ */
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Adapter, AdapterUser, AdapterSession, AdapterAccount } from 'next-auth/adapters'
+import type { VerificationToken } from 'next-auth/adapters'
+
+function isDate(value: unknown): value is Date {
+  return value instanceof Date
+}
+
+function format<T>(obj: Record<string, unknown>): T {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === null) continue
+    if (isDate(value)) result[key] = value
+    else if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) result[key] = new Date(value)
+    else result[key] = value
+  }
+  return result as T
+}
+
+export interface SupabaseLocalAdapterOptions {
+  url: string
+  secret: string
+}
+
+export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adapter {
+  const { url, secret } = options
+  const supabase: SupabaseClient = createClient(url, secret, {
+    db: { schema: 'public' },
+    auth: { persistSession: false },
+  })
+
+  return {
+    async createUser(user) {
+      const insert: Record<string, unknown> = {
+        ...user,
+        emailVerified: user.emailVerified?.toISOString?.() ?? null,
+      }
+      const { data, error } = await supabase.from('users').insert(insert).select().single()
+      if (error) throw error
+      return format<AdapterUser>(data as Record<string, unknown>)
+    },
+
+    async getUser(id) {
+      const { data, error } = await supabase.from('users').select().eq('id', id).maybeSingle()
+      if (error) throw error
+      if (!data) return null
+      return format<AdapterUser>(data as Record<string, unknown>)
+    },
+
+    async getUserByEmail(email) {
+      const { data, error } = await supabase.from('users').select().eq('email', email).maybeSingle()
+      if (error) throw error
+      if (!data) return null
+      return format<AdapterUser>(data as Record<string, unknown>)
+    },
+
+    async getUserByAccount({ providerAccountId, provider }) {
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('users(*)')
+        .match({ provider, providerAccountId })
+        .maybeSingle()
+      if (error) throw error
+      if (!data || !(data as { users: unknown }).users) return null
+      const user = (data as { users: Record<string, unknown> }).users
+      return format<AdapterUser>(user)
+    },
+
+    async updateUser(user) {
+      const update: Record<string, unknown> = {
+        ...user,
+        emailVerified: user.emailVerified?.toISOString?.() ?? null,
+      }
+      const { data, error } = await supabase
+        .from('users')
+        .update(update)
+        .eq('id', user.id)
+        .select()
+        .single()
+      if (error) throw error
+      return format<AdapterUser>(data as Record<string, unknown>)
+    },
+
+    async deleteUser(userId) {
+      const { error } = await supabase.from('users').delete().eq('id', userId)
+      if (error) throw error
+    },
+
+    async linkAccount(account: AdapterAccount) {
+      const { error } = await supabase.from('accounts').insert(account as Record<string, unknown>)
+      if (error) throw error
+    },
+
+    async unlinkAccount({ providerAccountId, provider }) {
+      const { error } = await supabase.from('accounts').delete().match({ provider, providerAccountId })
+      if (error) throw error
+    },
+
+    async createSession({ sessionToken, userId, expires }) {
+      const insert = { sessionToken, userId, expires: expires.toISOString() }
+      const { data, error } = await supabase.from('sessions').insert(insert).select().single()
+      if (error) throw error
+      return format<AdapterSession>(data as Record<string, unknown>)
+    },
+
+    async getSessionAndUser(sessionToken: string) {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*, users(*)')
+        .eq('sessionToken', sessionToken)
+        .maybeSingle()
+      if (error) throw error
+      if (!data) return null
+      const row = data as { users: Record<string, unknown>; [k: string]: unknown }
+      const { users: userRow, ...sessionRow } = row
+      return {
+        session: format<AdapterSession>(sessionRow),
+        user: format<AdapterUser>(userRow),
+      }
+    },
+
+    async updateSession(session) {
+      const update = {
+        ...session,
+        expires: session.expires?.toISOString?.() ?? undefined,
+      }
+      const { data, error } = await supabase
+        .from('sessions')
+        .update(update)
+        .eq('sessionToken', session.sessionToken)
+        .select()
+        .single()
+      if (error) throw error
+      return data ? format<AdapterSession>(data as Record<string, unknown>) : null
+    },
+
+    async deleteSession(sessionToken: string) {
+      const { error } = await supabase.from('sessions').delete().eq('sessionToken', sessionToken)
+      if (error) throw error
+    },
+
+    async createVerificationToken(token: VerificationToken) {
+      const insert = { ...token, expires: token.expires.toISOString() }
+      const { data, error } = await supabase.from('verification_tokens').insert(insert).select().single()
+      if (error) throw error
+      const row = data as Record<string, unknown>
+      const { id: _id, ...rest } = row
+      return format<VerificationToken>(rest)
+    },
+
+    async useVerificationToken({ identifier, token }) {
+      const { data, error } = await supabase
+        .from('verification_tokens')
+        .delete()
+        .match({ identifier, token })
+        .select()
+        .maybeSingle()
+      if (error) throw error
+      if (!data) return null
+      const row = data as Record<string, unknown>
+      const { id: _id, ...rest } = row
+      return format<VerificationToken>(rest)
+    },
+  }
+}

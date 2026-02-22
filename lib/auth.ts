@@ -1,6 +1,6 @@
 import type { Session } from 'next-auth'
 import NaverProvider from 'next-auth/providers/naver'
-import { SupabaseAdapter } from '@auth/supabase-adapter'
+import { SupabaseLocalAdapter } from '@/lib/auth/supabase-local-adapter'
 import { createServerClient } from '@/lib/supabase/server'
 
 /** 어댑터(DB)에서 오는 user; 프로바이더에 따라 필드가 유동적이라 넓게 타입 지정 */
@@ -20,7 +20,7 @@ export const authOptions = {
   ],
   adapter:
     supabaseUrl && supabaseSecret
-      ? SupabaseAdapter({
+      ? SupabaseLocalAdapter({
           url: supabaseUrl,
           secret: supabaseSecret,
         })
