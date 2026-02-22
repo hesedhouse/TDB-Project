@@ -145,7 +145,11 @@ export default async function AdminUserDetailPage({
                   <p className="text-gray-400 text-sm">{user.email ?? '—'}</p>
                   <p className="text-gray-500 text-xs mt-1">ID: {user.id}</p>
                 </div>
-                <AdminUserBanControl userId={user.id} isBanned={!!user.is_banned} />
+                <AdminUserBanControl
+                  userId={user.id}
+                  isBanned={!!user.is_banned}
+                  isSelf={session.user.email !== undefined && session.user.email === user.email}
+                />
               </div>
             </div>
           </div>

@@ -22,11 +22,16 @@ export async function toggleUserBan(userId: string): Promise<{ ok: boolean; erro
 
   const { data: user } = await supabase
     .from('users')
-    .select('is_banned')
+    .select('is_banned, email')
     .eq('id', id)
     .maybeSingle()
 
   if (!user) return { ok: false, error: 'user not found' }
+
+  const targetEmail = (user as { email?: string | null }).email
+  if (targetEmail && session.user.email && targetEmail === session.user.email) {
+    return { ok: false, error: '본인을 차단할 수 없습니다.' }
+  }
 
   const nextBanned = !(user as { is_banned?: boolean }).is_banned
   const { error } = await supabase.from('users').update({ is_banned: nextBanned }).eq('id', id)

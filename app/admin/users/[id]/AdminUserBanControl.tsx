@@ -7,12 +7,20 @@ import { toggleUserBan } from '../../actions'
 export default function AdminUserBanControl({
   userId,
   isBanned,
+  isSelf,
 }: {
   userId: string
   isBanned: boolean
+  isSelf?: boolean
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+
+  if (isSelf) {
+    return (
+      <p className="text-gray-400 italic text-sm">본인 계정은 관리할 수 없습니다.</p>
+    )
+  }
 
   const handleClick = async () => {
     const message = isBanned
