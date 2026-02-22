@@ -55,13 +55,15 @@ export const authOptions = {
       if (email) {
         const supabase = createServerClient()
         if (supabase) {
-          const { data: existing } = await supabase
+          const { data } = await supabase
             .from('users')
             .select('is_banned')
             .eq('email', email)
             .maybeSingle()
-          if ((existing as { is_banned?: boolean } | null)?.is_banned === true) {
-            return false
+          const row = data as { is_banned?: boolean } | null
+          if (row?.is_banned === true) {
+            const base = process.env.NEXTAUTH_URL ?? ''
+            return `${base}/auth/error?error=Banned`
           }
         }
       }
@@ -92,6 +94,7 @@ export const authOptions = {
   },
   pages: {
     signIn: '/login',
+    error: '/auth/error',
   },
   session: { strategy: 'jwt' as const, maxAge: 30 * 24 * 60 * 60 },
   secret: process.env.NEXTAUTH_SECRET,
