@@ -181,7 +181,7 @@ function LoginForm() {
 
           <motion.button
             type="button"
-            onClick={() => handleLogin('google')}
+            onClick={() => signIn('google', { callbackUrl: '/' })}
             className="w-full py-3.5 rounded-xl font-semibold text-base flex items-center justify-center gap-3 bg-white text-gray-800 border border-gray-200"
             style={{ boxShadow: '0 2px 12px rgba(255,255,255,0.2), 0 0 0 1px rgba(255,107,0,0.15)' }}
             whileHover={{ scale: 1.02 }}

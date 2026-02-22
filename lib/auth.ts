@@ -1,4 +1,5 @@
 import type { Session } from 'next-auth'
+import GoogleProvider from 'next-auth/providers/google'
 import NaverProvider from 'next-auth/providers/naver'
 import { SupabaseLocalAdapter } from '@/lib/auth/supabase-local-adapter'
 import { createServerClient } from '@/lib/supabase/server'
@@ -13,6 +14,10 @@ const supabaseSecret = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
 
 export const authOptions = {
   providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    }),
     NaverProvider({
       clientId: process.env.NAVER_CLIENT_ID ?? '',
       clientSecret: process.env.NAVER_CLIENT_SECRET ?? '',
