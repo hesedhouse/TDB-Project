@@ -137,6 +137,10 @@ export default async function AdminUserDetailPage({
               )}
               <div className="flex items-center gap-3 flex-wrap">
                 <div>
+                  <p className="text-sm text-gray-400 mb-1">상태</p>
+                  <p className={`text-2xl font-black mb-2 ${user.is_banned ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {user.is_banned ? '차단됨' : '활동 중'}
+                  </p>
                   <h1 className="text-xl font-bold text-white">{user.name ?? '—'}</h1>
                   <p className="text-gray-400 text-sm">{user.email ?? '—'}</p>
                   <p className="text-gray-500 text-xs mt-1">ID: {user.id}</p>

@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { toggleUserBan } from './actions'
+import { toggleUserBan } from '../../actions'
 
 export default function AdminUserBanControl({
   userId,
@@ -50,7 +50,7 @@ export default function AdminUserBanControl({
           isBanned ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-500 hover:bg-red-600'
         }`}
       >
-        {loading ? '처리 중...' : isBanned ? '차단 해제하기' : '회원 차단하기'}
+        {loading ? '처리 중...' : isBanned ? '차단 해제하고 복구하기' : '이 유저 차단하기'}
       </button>
     </div>
   )

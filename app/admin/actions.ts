@@ -33,6 +33,7 @@ export async function toggleUserBan(userId: string): Promise<{ ok: boolean; erro
 
   if (error) return { ok: false, error: error.message }
 
+  revalidatePath('/admin')
   revalidatePath(`/admin/users/${id}`)
   return { ok: true }
 }
