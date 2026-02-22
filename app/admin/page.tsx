@@ -95,7 +95,9 @@ export default async function AdminPage() {
                         )}
                       </td>
                       <td className="py-3 px-4 font-medium text-white">
-                        {user.name ?? '—'}
+                        <Link href={`/admin/users/${user.id}`} className="text-white hover:text-[#FF6B00] hover:underline">
+                          {user.name ?? '—'}
+                        </Link>
                       </td>
                       <td className="py-3 px-4 text-gray-300 text-sm">
                         {user.email ?? '—'}
