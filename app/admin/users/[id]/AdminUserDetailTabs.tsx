@@ -3,6 +3,16 @@
 import { useState } from 'react'
 import Link from 'next/link'
 
+function formatDate(value: string | null | undefined): string {
+  if (value == null) return '—'
+  try {
+    const d = new Date(value)
+    return d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return '—'
+  }
+}
+
 type MessageItem = {
   id: string
   boardId: string
@@ -38,12 +48,10 @@ export default function AdminUserDetailTabs({
   messages,
   participants,
   contributionSummary,
-  formatDate,
 }: {
   messages: MessageItem[]
   participants: ParticipantItem[]
   contributionSummary: ContributionSummary
-  formatDate: (value: string | null | undefined) => string
 }) {
   const [activeTab, setActiveTab] = useState<TabId>('messages')
 

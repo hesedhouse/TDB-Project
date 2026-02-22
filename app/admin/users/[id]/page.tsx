@@ -39,16 +39,6 @@ type ContributionRow = {
   minutes: number
 }
 
-function formatDate(value: string | null | undefined): string {
-  if (value == null) return '—'
-  try {
-    const d = new Date(value)
-    return d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return '—'
-  }
-}
-
 export default async function AdminUserDetailPage({
   params,
 }: {
@@ -171,7 +161,6 @@ export default async function AdminUserDetailPage({
             byBoard: contributionSummary.byBoard,
             boardsMap,
           }}
-          formatDate={formatDate}
         />
       </div>
     </main>
