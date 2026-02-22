@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useSession } from 'next-auth/react'
 import PulseFeed from '@/components/PulseFeed'
 import { mockBoards } from '@/lib/mockData'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
@@ -41,6 +42,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   const router = useRouter()
   const decodedKeyword = safeDecodeKeyword(params.keyword ?? '')
   const { user: authUser, loading: authLoading } = useAuth()
+  const { data: nextSession, status: nextAuthStatus } = useSession()
   const [showToast, setShowToast] = useState(false)
   const [supabaseBoard, setSupabaseBoard] = useState<BoardFromApi | null>(null)
   const [boardLoading, setBoardLoading] = useState(true)
@@ -49,6 +51,11 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   const [passwordError, setPasswordError] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const useSupabase = isSupabaseConfigured()
+
+  const isNextAuthLoading = nextAuthStatus === 'loading'
+  const isNextAuthAuthenticated = nextAuthStatus === 'authenticated'
+  const hasSession = !!authUser || isNextAuthAuthenticated
+  const effectiveUserId = authUser?.id ?? (nextSession?.user as { id?: string } | undefined)?.id ?? null
 
   const matchedBoard = useMemo(() => {
     const keyword = (decodedKeyword ?? '').toString().trim()
@@ -61,12 +68,11 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   }, [decodedKeyword])
 
   useEffect(() => {
-    if (!useSupabase || authLoading) return
-    if (!authUser) {
-      const path = `/board/${encodeURIComponent(decodedKeyword)}`
-      router.replace(`/login?returnUrl=${encodeURIComponent(path)}`)
-    }
-  }, [useSupabase, authLoading, authUser, router, decodedKeyword])
+    if (authLoading || isNextAuthLoading) return
+    if (hasSession) return
+    const path = `/board/${encodeURIComponent(decodedKeyword)}`
+    router.replace(`/login?returnUrl=${encodeURIComponent(path)}`)
+  }, [authLoading, isNextAuthLoading, hasSession, router, decodedKeyword])
 
   useEffect(() => {
     if (!matchedBoard) {
@@ -162,10 +168,17 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
       </div>
     )
   }
-  if (useSupabase && (authLoading || !authUser)) {
+  if (authLoading || isNextAuthLoading) {
     return (
       <div className="min-h-screen bg-midnight-black text-white flex items-center justify-center">
         <p className="text-gray-400">로그인 확인 중...</p>
+      </div>
+    )
+  }
+  if (useSupabase && !hasSession) {
+    return (
+      <div className="min-h-screen bg-midnight-black text-white flex items-center justify-center">
+        <p className="text-gray-400">로그인이 필요합니다.</p>
       </div>
     )
   }
@@ -275,7 +288,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
             roomIdFromUrl={decodedKeyword}
             userCharacter={0}
             userNickname=""
-            userId={authUser?.id ?? null}
+            userId={effectiveUserId}
             onBack={() => router.push('/')}
             initialExpiresAt={new Date(supabaseBoard.expires_at)}
             initialCreatedAt={new Date(supabaseBoard.created_at)}
