@@ -15,7 +15,9 @@ export default function Home() {
   const { user, loading } = useAuth()
   const { data: nextAuthSession, status: nextAuthStatus } = useSession()
   const useSupabase = isSupabaseConfigured()
-  const hasSession = !!user || nextAuthStatus === 'authenticated'
+  const isNextAuthLoading = nextAuthStatus === 'loading'
+  const isNextAuthAuthenticated = nextAuthStatus === 'authenticated'
+  const hasSession = !!user || isNextAuthAuthenticated
   const effectiveUserId = user?.id ?? (nextAuthSession?.user as { id?: string } | undefined)?.id ?? undefined
   const [oauthProcessing, setOauthProcessing] = useState(false)
   const hashHandledRef = useRef(false)
@@ -41,16 +43,16 @@ export default function Home() {
   }, [router])
 
   useEffect(() => {
+    if (loading || isNextAuthLoading || oauthProcessing) return
     if (hasSession) return
-    if (nextAuthStatus === 'loading' || (useSupabase && loading) || oauthProcessing) return
     if (typeof window !== 'undefined') {
       const h = window.location.hash?.trim()
       if (h && (h.includes('access_token') || h.includes('refresh_token'))) return
     }
-    if (!user && nextAuthStatus !== 'authenticated') {
+    if (!user && !isNextAuthAuthenticated) {
       router.replace('/login?returnUrl=/')
     }
-  }, [useSupabase, loading, user, nextAuthStatus, hasSession, router, oauthProcessing])
+  }, [loading, isNextAuthLoading, isNextAuthAuthenticated, user, hasSession, router, oauthProcessing])
 
   const handleEnterBoard = useCallback((boardId: string) => {
     if (!userNickname) {
@@ -78,7 +80,7 @@ export default function Home() {
     setSelectedBoard(null)
   }
 
-  if (!hasSession && (loading || nextAuthStatus === 'loading' || oauthProcessing)) {
+  if (loading || isNextAuthLoading || oauthProcessing) {
     return (
       <main className="min-h-screen bg-midnight-black flex items-center justify-center">
         <p className="text-gray-400">{oauthProcessing ? '로그인 처리 중...' : '로그인 확인 중...'}</p>
