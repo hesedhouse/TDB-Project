@@ -20,20 +20,18 @@ export default function DashboardPage() {
   const [userCharacter, setUserCharacter] = useState<number>(0)
   const [userNickname, setUserNickname] = useState<string>('')
 
-  const hasSession = !!user || nextAuthStatus === 'authenticated'
+  const isNextAuthLoading = nextAuthStatus === 'loading'
+  const isNextAuthAuthenticated = nextAuthStatus === 'authenticated'
+  const hasSession = !!user || isNextAuthAuthenticated
   const effectiveUserId = user?.id ?? (nextAuthSession?.user as { id?: string } | undefined)?.id ?? undefined
 
   useEffect(() => {
-    if (nextAuthStatus === 'loading' && loading) return
-    if (hasSession) return
-    if (!useSupabase && nextAuthStatus !== 'authenticated') {
+    if (loading || isNextAuthLoading) return
+    if (!hasSession && !isNextAuthAuthenticated) {
       router.replace('/login?returnUrl=/dashboard')
       return
     }
-    if (useSupabase && !loading && !user && nextAuthStatus !== 'authenticated') {
-      router.replace('/login?returnUrl=/dashboard')
-    }
-  }, [useSupabase, loading, user, nextAuthStatus, hasSession, router])
+  }, [loading, isNextAuthLoading, hasSession, isNextAuthAuthenticated, router])
 
   const handleEnterBoard = useCallback((boardId: string) => {
     if (!userNickname) {
@@ -61,14 +59,14 @@ export default function DashboardPage() {
     setSelectedBoard(null)
   }
 
-  if (!hasSession && (loading || nextAuthStatus === 'loading')) {
+  if (loading || isNextAuthLoading) {
     return (
       <main className="min-h-screen bg-midnight-black flex items-center justify-center">
         <p className="text-gray-400">로그인 확인 중...</p>
       </main>
     )
   }
-  if (!hasSession) {
+  if (!hasSession && !isNextAuthAuthenticated) {
     return (
       <main className="min-h-screen bg-midnight-black flex items-center justify-center">
         <p className="text-gray-400">로그인이 필요합니다.</p>
