@@ -1170,26 +1170,39 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 <AnimatePresence>
                   {showPresencePopover && (
                     <motion.div
-                      className="absolute right-0 top-full mt-1.5 z-50 min-w-[140px] max-w-[200px] py-2 px-2 rounded-xl border border-neon-orange/40 bg-black/95 shadow-xl"
+                      className="absolute right-0 top-full mt-1.5 z-50 min-w-[180px] max-w-[220px] p-4 rounded-xl border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 shadow-2xl"
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
                       transition={{ duration: 0.15 }}
                     >
-                      <p className="text-xs text-gray-400 px-2 pb-1.5 border-b border-white/10 mb-1.5">참여 중 ({displayParticipantCount}명)</p>
-                      <ul className="max-h-40 overflow-y-auto space-y-0.5">
+                      <p className="text-lg font-bold text-white pb-3 mb-2 border-b border-gray-600/80">
+                        참여 중 ({displayParticipantCount}명)
+                      </p>
+                      <ul className="max-h-40 overflow-y-auto space-y-1">
                         {displayParticipantCount === 0 ? (
-                          <li className="text-xs text-gray-500 px-2 py-1">아무도 없음</li>
+                          <li className="text-sm text-gray-500 py-2 px-3 rounded-lg">아무도 없음</li>
                         ) : (
                           displayParticipantList.map((p, i) => {
                             const raw = ('nickname' in p ? (p as PresenceUser).nickname : (p as RoomParticipant).user_display_name) ?? ''
                             const displayName = (raw || '').trim() || '이름 없음'
                             const crown = crownByDisplayName.get(displayName)
                             return (
-                              <li key={`${displayName}-${i}`} className="text-xs text-white px-2 py-1 truncate flex items-center gap-1">
-                                <span className="truncate">{displayName}</span>
+                              <li
+                                key={`${displayName}-${i}`}
+                                className="flex items-center gap-2.5 py-2 px-3 rounded-lg text-gray-200 font-sans text-sm transition-colors hover:bg-white/10"
+                              >
+                                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-gray-600/80 overflow-hidden">
+                                  <DotCharacter characterId={i % 10} size={20} className="flex-shrink-0" />
+                                </span>
+                                <span className="truncate flex-1 min-w-0">{displayName}</span>
                                 {crown && (
-                                  <span style={{ color: crown.color }} className="flex-shrink-0" aria-label={`${crown.rank}위`} title={`기여도 ${crown.rank}위`}>
+                                  <span
+                                    style={{ color: crown.color }}
+                                    className="flex-shrink-0 text-sm leading-none"
+                                    aria-label={`${crown.rank}위`}
+                                    title={`기여도 ${crown.rank}위`}
+                                  >
                                     👑
                                   </span>
                                 )}
@@ -1292,20 +1305,36 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             )}
           </div>
           {useSupabaseWithUuid && topContributors.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-amber-500/20">
-              <p className="text-xs text-amber-400/80 mb-1.5">명예의 전당 TOP 3</p>
-              <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-300">
-                {topContributors.map((c) => (
-                  <li key={`${c.rank}-${c.user_display_name}`} className="flex items-center gap-1.5">
-                    <span aria-hidden>
-                      {c.rank === 1 ? '👑' : c.rank === 2 ? '🥈' : '🥉'}
-                    </span>
-                    <span className="font-medium text-white truncate max-w-[100px]" title={c.user_display_name}>
-                      {c.user_display_name}
-                    </span>
-                    <span className="text-amber-400/90 tabular-nums">+{c.total_minutes}분</span>
-                  </li>
-                ))}
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <p className="text-center text-sm font-semibold text-white/90 mb-3 tracking-wide">
+                이 방을 지키는 분들
+              </p>
+              <ul className="space-y-3">
+                {topContributors.map((c) => {
+                  const medal = c.rank === 1 ? '🥇' : c.rank === 2 ? '🥈' : '🥉'
+                  const nameColor =
+                    c.rank === 1
+                      ? 'text-amber-200'
+                      : c.rank === 2
+                        ? 'text-gray-300'
+                        : 'text-amber-600/90'
+                  return (
+                    <li
+                      key={`${c.rank}-${c.user_display_name}`}
+                      className="flex items-center justify-center gap-3"
+                    >
+                      <span className="flex-shrink-0 text-lg leading-none" aria-hidden>
+                        {medal}
+                      </span>
+                      <span
+                        className={`font-medium text-base truncate max-w-[140px] ${nameColor}`}
+                        title={c.user_display_name ?? ''}
+                      >
+                        {c.user_display_name ?? '—'}
+                      </span>
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           )}
