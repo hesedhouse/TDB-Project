@@ -72,9 +72,11 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
         .match({ provider, providerAccountId })
         .maybeSingle()
       if (error) throw error
-      if (!data || !(data as { users: unknown }).users) return null
-      const user = (data as { users: Record<string, unknown> }).users
-      return format<AdapterUser>(user)
+      if (!data) return null
+      const usersRaw = (data as { users: unknown[] }).users
+      const user = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw
+      if (!user) return null
+      return format<AdapterUser>(user as Record<string, unknown>)
     },
 
     async updateUser(user: Partial<AdapterUser> & Pick<AdapterUser, 'id'>) {
@@ -124,11 +126,13 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
         .maybeSingle()
       if (error) throw error
       if (!data) return null
-      const row = data as { users: Record<string, unknown>; [k: string]: unknown }
-      const { users: userRow, ...sessionRow } = row
+      const row = data as { users: unknown[]; [k: string]: unknown }
+      const { users: usersRaw, ...sessionRow } = row
+      const userRow = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw
+      if (!userRow) return null
       return {
         session: format<AdapterSession>(sessionRow),
-        user: format<AdapterUser>(userRow),
+        user: format<AdapterUser>(userRow as Record<string, unknown>),
       }
     },
 
