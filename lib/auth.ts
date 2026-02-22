@@ -52,7 +52,7 @@ export const authOptions = {
       }
       return true
     },
-    redirect: async ({ url }) => {
+    redirect: async ({ url, baseUrl }: { url: string; baseUrl: string }) => {
       const dashboardUrl = 'https://poppinapps.vercel.app/dashboard'
       if (url && (url === dashboardUrl || url.startsWith('https://poppinapps.vercel.app/'))) return url
       if (url?.startsWith('/')) return `${process.env.NEXTAUTH_URL ?? 'https://poppinapps.vercel.app'}${url}`
