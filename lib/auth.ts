@@ -1,6 +1,10 @@
+import type { Session } from 'next-auth'
 import NaverProvider from 'next-auth/providers/naver'
 import { SupabaseAdapter } from '@auth/supabase-adapter'
 import { createServerClient } from '@/lib/supabase/server'
+
+/** 어댑터(DB)에서 오는 user; 프로바이더에 따라 필드가 유동적이라 넓게 타입 지정 */
+type AdapterUser = { id?: string; email?: string | null; name?: string | null; image?: string | null }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
 const supabaseSecret = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
@@ -20,16 +24,16 @@ export const authOptions = {
         })
       : undefined,
   callbacks: {
-    async session({ session, user }) {
+    async session({ session, user }: { session: Session; user: AdapterUser }) {
       if (session?.user) {
-        session.user.id = user?.id ?? (session.user as { id?: string }).id
-        session.user.email = session.user.email ?? (user as { email?: string })?.email ?? null
-        session.user.name = session.user.name ?? (user as { name?: string })?.name ?? null
-        session.user.image = session.user.image ?? (user as { image?: string })?.image ?? null
+        session.user.id = user?.id ?? session.user.id
+        session.user.email = session.user.email ?? user?.email ?? null
+        session.user.name = session.user.name ?? user?.name ?? null
+        session.user.image = session.user.image ?? user?.image ?? null
       }
       return session
     },
-    async signIn({ user, account }) {
+    async signIn({ user, account }: { user: AdapterUser; account: { provider?: string } | null }) {
       if (account?.provider === 'naver' && user?.id) {
         const supabase = createServerClient()
         if (supabase) {
