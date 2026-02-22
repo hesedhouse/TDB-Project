@@ -1198,12 +1198,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                                 <span className="truncate flex-1 min-w-0">{displayName}</span>
                                 {crown && (
                                   <span
-                                    style={{ color: crown.color }}
-                                    className="flex-shrink-0 text-sm leading-none"
+                                    className="flex-shrink-0 text-lg leading-none"
                                     aria-label={`${crown.rank}위`}
                                     title={`기여도 ${crown.rank}위`}
                                   >
-                                    👑
+                                    {crown.rank === 1 ? '🥇' : crown.rank === 2 ? '🥈' : '🥉'}
                                   </span>
                                 )}
                               </li>
@@ -1406,15 +1405,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                       <div className="flex items-center gap-1 flex-wrap">
                         <span className="text-[11px] font-semibold text-white/90 flex items-center gap-0.5">
                           {msg.authorNickname}
-                          {crownByDisplayName.get((msg.authorNickname ?? '').trim()) && (
-                            <span
-                              style={{ color: crownByDisplayName.get((msg.authorNickname ?? '').trim())!.color }}
-                              className="flex-shrink-0"
-                              aria-label={`기여도 ${crownByDisplayName.get((msg.authorNickname ?? '').trim())!.rank}위`}
-                            >
-                              👑
-                            </span>
-                          )}
+                          {crownByDisplayName.get((msg.authorNickname ?? '').trim()) && (() => {
+                            const r = crownByDisplayName.get((msg.authorNickname ?? '').trim())!.rank
+                            return (
+                              <span
+                                className="flex-shrink-0 text-lg leading-none"
+                                aria-label={`기여도 ${r}위`}
+                              >
+                                {r === 1 ? '🥇' : r === 2 ? '🥈' : '🥉'}
+                              </span>
+                            )
+                          })()}
                         </span>
                         <span className="text-[9px] text-gray-400">{formatTimeAgo(msg.createdAt)}</span>
                       </div>
@@ -1485,9 +1486,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                           <div className="flex-1 min-w-0">
                             <span className="text-[10px] font-medium text-gray-400 inline-flex items-center gap-0.5">
                               {c.authorNickname}
-                              {crownByDisplayName.get((c.authorNickname ?? '').trim()) && (
-                                <span style={{ color: crownByDisplayName.get((c.authorNickname ?? '').trim())!.color }} className="flex-shrink-0">👑</span>
-                              )}
+                              {crownByDisplayName.get((c.authorNickname ?? '').trim()) && (() => {
+                                const r = crownByDisplayName.get((c.authorNickname ?? '').trim())!.rank
+                                return (
+                                  <span className="flex-shrink-0 text-lg leading-none">
+                                    {r === 1 ? '🥇' : r === 2 ? '🥈' : '🥉'}
+                                  </span>
+                                )
+                              })()}
                             </span>
                             <p className="text-xs text-white/90 break-words leading-tight">{c.content}</p>
                             <span className="text-[9px] text-gray-500">{formatTimeAgo(c.createdAt)}</span>
@@ -1603,15 +1609,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-white flex items-center gap-1">
                     {post.authorNickname}
-                    {crownByDisplayName.get((post.authorNickname ?? '').trim()) && (
-                      <span
-                        style={{ color: crownByDisplayName.get((post.authorNickname ?? '').trim())!.color }}
-                        className="flex-shrink-0"
-                        aria-label={`기여도 ${crownByDisplayName.get((post.authorNickname ?? '').trim())!.rank}위`}
-                      >
-                        👑
-                      </span>
-                    )}
+                    {crownByDisplayName.get((post.authorNickname ?? '').trim()) && (() => {
+                      const r = crownByDisplayName.get((post.authorNickname ?? '').trim())!.rank
+                      return (
+                        <span
+                          className="flex-shrink-0 text-lg leading-none"
+                          aria-label={`기여도 ${r}위`}
+                        >
+                          {r === 1 ? '🥇' : r === 2 ? '🥈' : '🥉'}
+                        </span>
+                      )
+                    })()}
                   </div>
                   <div className="text-xs text-gray-400">{formatTimeAgo(post.createdAt)}</div>
                 </div>
@@ -1734,9 +1742,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                       <div className="flex-1 min-w-0">
                         <span className="text-xs font-medium text-gray-300 inline-flex items-center gap-1">
                           {c.authorNickname}
-                          {crownByDisplayName.get((c.authorNickname ?? '').trim()) && (
-                            <span style={{ color: crownByDisplayName.get((c.authorNickname ?? '').trim())!.color }} className="flex-shrink-0">👑</span>
-                          )}
+                          {crownByDisplayName.get((c.authorNickname ?? '').trim()) && (() => {
+                            const r = crownByDisplayName.get((c.authorNickname ?? '').trim())!.rank
+                            return (
+                              <span className="flex-shrink-0 text-lg leading-none">
+                                {r === 1 ? '🥇' : r === 2 ? '🥈' : '🥉'}
+                              </span>
+                            )
+                          })()}
                         </span>
                         <p className="text-sm text-white/90 break-words">{c.content}</p>
                         <span className="text-[10px] text-gray-500">{formatTimeAgo(c.createdAt)}</span>
