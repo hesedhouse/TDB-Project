@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useId } from 'react'
+import React, { useEffect, useRef, useId } from 'react'
 import { getServerTimeMs } from '@/lib/serverTime'
 import { getCurrentVideoTimeSeconds } from '@/lib/serverTime'
 
@@ -49,12 +49,12 @@ export interface PinnedYouTubePlayerProps {
  * 전광판용 유튜브 플레이어. 서버 시간 기준 동시 시청(Watch Together):
  * - PLAYING 시 강제 워프(seekTo), 주기적 드리프트 보정, 영상 종료 시 대기 UI.
  */
-export default function PinnedYouTubePlayer({
+const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedYouTubePlayer({
   videoId,
   pinnedAt,
   onEnded,
   className = 'w-full h-full',
-}: PinnedYouTubePlayerProps) {
+}) {
   const containerId = useId().replace(/:/g, '-')
   const playerRef = useRef<YTPlayerInstance | null>(null)
   const onEndedRef = useRef(onEnded)
@@ -150,3 +150,4 @@ export default function PinnedYouTubePlayer({
 
   return <div id={containerId} className={className} />
 }
+export default PinnedYouTubePlayer

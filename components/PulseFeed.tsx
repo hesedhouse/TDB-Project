@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { createPortal } from 'react-dom'
 import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LogOut, Pin, ShoppingBag } from 'lucide-react'
@@ -162,7 +161,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     setHourglassesState(getHourglasses())
   }, [])
 
-  /** 스토어에서 복귀 시 등 탭이 다시 보일 때 모래시계 잔액 동기화 (FAB·헤더 동일한 hourglasses 사용) */
+  /** 스토어에서 복귀 시 등 탭이 다시 보일 때 모래시계 잔액 동기화 */
   useEffect(() => {
     const sync = () => setHourglassesState(getHourglasses())
     if (typeof document === 'undefined') return
@@ -1067,7 +1066,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId, selectedCharacterInModal])
 
   return (
-    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-midnight-black text-white safe-bottom">
+    <div className="h-screen max-h-[100dvh] min-h-0 flex flex-col overflow-hidden bg-midnight-black text-white safe-bottom">
       <AnimatePresence>
         {nicknameModalMounted && showNicknameModal && (
           <motion.div
@@ -1316,9 +1315,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       <div className="flex-none shrink-0">
       <div className="z-10 glass-strong border-b border-neon-orange/20 safe-top pt-2 sm:pt-2.5 pb-1.5 md:pb-1">
         <div className="px-2 py-1 sm:px-3 sm:py-1.5">
-          <div className="flex flex-wrap items-center justify-between gap-y-0.5 gap-x-0.5 sm:gap-x-1 mb-2">
+          <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-2 sm:gap-x-3 mb-2">
             {/* 왼쪽 그룹: 모바일은 화살표만, 데스크톱은 ← 뒤로 */}
-            <div className="flex items-center gap-0.5 sm:gap-3 min-w-0 flex-1">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
               <button
                 onClick={onBack}
                 className="text-gray-400 hover:text-white text-base flex-shrink-0 p-0.5 -m-0.5 sm:p-0 sm:m-0"
@@ -1355,8 +1354,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 )}
               </button>
             </div>
-            {/* 오른쪽 그룹: 공유 + 참여자 + 전광판/충전 + 닉네임 + 나가기 (간격 최소화) */}
-            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 min-w-0">
+            {/* 오른쪽 그룹: 모래시계(원형) + 전광판 고정 + 충전 + 닉네임 + 나가기 */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0">
               <motion.button
                 type="button"
                 onClick={handleShare}
@@ -1435,7 +1434,23 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   )}
                 </AnimatePresence>
               </div>
-              <span className="text-amber-400 text-sm sm:text-base flex-shrink-0" aria-hidden>⏳</span>
+              {useSupabaseWithUuid && (
+                <motion.button
+                  type="button"
+                  onClick={handleHourglassExtend}
+                  disabled={hourglasses <= 0 || extendingHourglass}
+                  className="flex-shrink-0 relative w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed bg-gray-900/90 border-2 border-amber-400/40 shadow-md"
+                  aria-label={`모래시계 보유 ${hourglasses}개 · +30분 연장`}
+                  title={extendingHourglass ? '연장 중…' : `⏳ ${hourglasses}개 · +30분`}
+                  whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.05 } : {}}
+                  whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.98 } : {}}
+                >
+                  <span className="text-base sm:text-lg leading-none" aria-hidden>⏳</span>
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[1rem] h-4 px-0.5 rounded-full bg-gray-900 border border-amber-400/80 text-amber-300 text-[10px] font-bold tabular-nums flex items-center justify-center">
+                    {hourglasses}
+                  </span>
+                </motion.button>
+              )}
               {useSupabaseWithUuid && (
                 <motion.button
                   type="button"
@@ -1498,9 +1513,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             />
           </div>
 
-          {/* 한 줄: 남은 시간 + 연장 (좌) | 명예의 전당 (우, 모바일 시 가로 스크롤·닉네임 생략) */}
-          <div className="relative flex flex-row justify-between items-center gap-1 sm:gap-2 py-1 min-w-0 min-h-[28px] sm:min-h-0">
-            <div className="flex flex-row items-center gap-1 sm:gap-2 min-w-0 flex-shrink-0">
+          {/* 한 줄: 남은 시간 + 연장 (좌) | 명예의 전당 (우) — items-center·gap-2로 슬림 유지 */}
+          <div className="relative flex flex-row justify-between items-center gap-2 sm:gap-3 py-1 min-w-0 min-h-[28px] sm:min-h-0">
+            <div className="flex flex-row items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
               <motion.span
                 className={`inline-flex items-baseline gap-1 flex-shrink-0 whitespace-nowrap font-bold font-mono tabular-nums text-xs sm:text-sm ${isEmergency || isUnderOneMinute ? 'text-red-400' : 'text-yellow-400'}`}
                 animate={isUnderOneMinute ? { scale: [1, 1.04, 1] } : {}}
@@ -1725,12 +1740,13 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       )}
       </div>
 
-      {/* 중간 파티션: 채팅 오버레이 — 전광판 하단부터 겹치며 화면 끝까지 스크롤, 영상 비침 */}
+      {/* The Scroll Zone: 상단 전광판·하단 입력창 사이 남는 공간만 차지, 이 안에서만 스크롤 */}
       {useSupabaseWithUuid && (
         <>
         <div
           ref={listRef}
           className="relative z-10 flex-1 min-h-0 overflow-y-auto flex flex-col -mt-6 sm:-mt-8 pt-4 sm:pt-6 px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-2 scrollbar-hide bg-black/10"
+          style={{ minHeight: 0 }}
         >
             {[...messages]
               .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
@@ -1900,7 +1916,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             <div ref={feedEndRef} />
         </div>
 
-        {/* 하단 파티션: 채팅 입력 (여백 최소화, 화면 맨 아래 고정) */}
+        {/* 하단 입력창: shrink-0 으로 채팅이 길어져도 화면 하단에 고정 */}
         <div className="flex-none shrink-0 sticky bottom-0 glass-strong border-t border-neon-orange/20 safe-bottom px-2 py-1.5 sm:px-3 sm:py-2">
             <div className="app-shell mx-auto flex gap-2 items-center">
               <motion.button
@@ -2171,51 +2187,6 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         )}
       </div>
       )}
-
-      {/* FAB: 모래시계 좌측 하단, 글쓰기 우측 하단 — fixed·z-50·여백으로 채팅창 가리지 않고 대칭 배치 */}
-      {typeof document !== 'undefined' &&
-        createPortal(
-          <>
-            {useSupabaseWithUuid && (
-              <motion.button
-                type="button"
-                onClick={handleHourglassExtend}
-                disabled={hourglasses <= 0 || extendingHourglass}
-                className="fab-hourglass fixed left-8 bottom-24 z-50 w-12 h-12 rounded-xl flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed relative shadow-lg bg-gray-900/90 border border-amber-400/40"
-                style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
-                aria-label={`모래시계 충전 (보유 ${hourglasses}개)`}
-                title={extendingHourglass ? '연장 중…' : `⏳ 보유 ${hourglasses}개 · 채우기 (+30분)`}
-                whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.08 } : {}}
-                whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.95 } : {}}
-              >
-                <span className="text-xl leading-none" aria-hidden>⏳</span>
-                <span
-                  className="absolute -top-0.5 -right-0.5 min-w-[1.25rem] h-5 px-1 rounded-full bg-gray-900 border-2 border-amber-400/80 text-amber-300 text-xs font-bold tabular-nums flex items-center justify-center shadow-lg"
-                  aria-hidden
-                >
-                  {hourglasses}
-                </span>
-              </motion.button>
-            )}
-            <motion.button
-              type="button"
-              onClick={() => setShowWriteModal(true)}
-              className="fab-write fixed z-50 w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-neon-orange/90 border border-neon-orange"
-              style={{
-                right: '24px',
-                bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))',
-              }}
-              aria-label="글쓰기"
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </motion.button>
-          </>,
-          document.body
-        )}
 
       {/* 글쓰기 모달 */}
       <AnimatePresence>
