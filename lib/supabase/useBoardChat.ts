@@ -55,6 +55,11 @@ export function useBoardChat(
       const text = content.trim()
       if (!text && !imageUrl) return null
       if (sending) return null
+      // useSession()으로 전달된 session.user.id가 없으면 전송 불가 (로그인 필요)
+      if (userId == null || String(userId).trim() === '') {
+        if (typeof window !== 'undefined') window.alert('로그인이 필요합니다.')
+        return { error: '로그인이 필요합니다.' }
+      }
       console.log('전송되는 UUID:', userId)
       setSending(true)
       try {

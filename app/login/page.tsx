@@ -193,7 +193,7 @@ function LoginForm() {
 
           <motion.button
             type="button"
-            onClick={() => handleLogin('kakao')}
+            onClick={() => signIn('kakao', { callbackUrl: returnUrl || '/dashboard' })}
             className="w-full py-3.5 rounded-xl font-semibold text-base flex items-center justify-center gap-3 text-[#1a1a1a]"
             style={{ background: '#FEE500', boxShadow: '0 2px 12px rgba(254,229,0,0.35)' }}
             whileHover={{ scale: 1.02 }}
