@@ -104,13 +104,17 @@ export default function Home() {
         />
       )}
       {currentView === 'feed' && selectedBoard && hasSession && (
-        <PulseFeed
-          boardId={selectedBoard}
-          userCharacter={userCharacter}
-          userNickname={userNickname}
-          userId={effectiveUserId}
-          onBack={handleBackToHome}
-        />
+        <div className="h-screen max-h-[100dvh] overflow-hidden flex flex-col">
+          <div className="flex-1 min-h-0 min-w-0">
+            <PulseFeed
+              boardId={selectedBoard}
+              userCharacter={userCharacter}
+              userNickname={userNickname}
+              userId={effectiveUserId}
+              onBack={handleBackToHome}
+            />
+          </div>
+        </div>
       )}
     </main>
   )

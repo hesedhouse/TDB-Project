@@ -222,7 +222,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     }
     const needsPassword = supabaseBoard.has_password && !passwordUnlocked
     return (
-      <div className="min-h-screen bg-midnight-black text-white">
+      <div className="h-screen max-h-[100dvh] overflow-hidden flex flex-col bg-midnight-black text-white">
         <AnimatePresence>
           {showToast && (
             <motion.div
@@ -283,6 +283,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
             </motion.div>
           </motion.div>
         ) : (
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
           <PulseFeed
             boardId={supabaseBoard.id}
             boardPublicId={supabaseBoard.room_no ?? supabaseBoard.public_id ?? (/^\d+$/.test(decodedKeyword) ? Number(decodedKeyword) : null)}
@@ -295,6 +296,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
             initialCreatedAt={new Date(supabaseBoard.created_at)}
             initialBoardName={supabaseBoard.name ?? `#${decodedKeyword}`}
           />
+          </div>
         )}
       </div>
     )

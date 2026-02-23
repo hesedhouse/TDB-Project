@@ -8,11 +8,17 @@ export type PinnedContentPayload =
 export type PinnedState = {
   content: PinnedContentPayload
   pinnedUntil: Date
+  /** 영상이 처음 고정된 시각. 동시 시청(Watch Together) 싱크용. */
+  pinnedAt?: Date
 } | null
 
 const PIN_DURATION_MS = 5 * 60 * 1000
 
-function parseRow(row: { pinned_content?: unknown; pinned_until?: string | null }): PinnedState {
+function parseRow(row: {
+  pinned_content?: unknown
+  pinned_until?: string | null
+  pinned_at?: string | null
+}): PinnedState {
   const raw = row?.pinned_content
   const until = row?.pinned_until
   if (!raw || typeof raw !== 'object' || !until) return null
@@ -22,7 +28,9 @@ function parseRow(row: { pinned_content?: unknown; pinned_until?: string | null 
   if ((type !== 'youtube' && type !== 'image') || !url) return null
   const pinnedUntil = new Date(until)
   if (Number.isNaN(pinnedUntil.getTime())) return null
-  return { content: { type: type as 'youtube' | 'image', url }, pinnedUntil }
+  const pinnedAt = row?.pinned_at ? new Date(row.pinned_at) : undefined
+  if (pinnedAt != null && Number.isNaN(pinnedAt.getTime())) return { content: { type: type as 'youtube' | 'image', url }, pinnedUntil }
+  return { content: { type: type as 'youtube' | 'image', url }, pinnedUntil, pinnedAt }
 }
 
 /** 해당 방의 현재 고정 전광판 조회. 만료됐으면 null. */
@@ -32,11 +40,11 @@ export async function getPinnedContent(boardId: string): Promise<PinnedState> {
   if (!supabase) return null
   const { data, error } = await supabase
     .from('boards')
-    .select('pinned_content, pinned_until')
+    .select('pinned_content, pinned_until, pinned_at')
     .eq('id', boardId)
     .maybeSingle()
   if (error || !data) return null
-  const state = parseRow(data as { pinned_content?: unknown; pinned_until?: string | null })
+  const state = parseRow(data as { pinned_content?: unknown; pinned_until?: string | null; pinned_at?: string | null })
   if (!state) return null
   if (state.pinnedUntil.getTime() <= Date.now()) return null
   return state
@@ -53,12 +61,14 @@ export async function setPinnedContent(
   if (!isValidUuid(boardId)) return false
   const supabase = createClient()
   if (!supabase) return false
-  const pinnedUntil = new Date(Date.now() + PIN_DURATION_MS)
+  const now = new Date()
+  const pinnedUntil = new Date(now.getTime() + PIN_DURATION_MS)
   const { error } = await supabase
     .from('boards')
     .update({
       pinned_content: payload,
       pinned_until: pinnedUntil.toISOString(),
+      pinned_at: now.toISOString(),
     })
     .eq('id', boardId)
   if (error) {
@@ -88,7 +98,7 @@ export function subscribePinnedContent(
         filter: `id=eq.${boardId}`,
       },
       (payload) => {
-        const row = payload.new as { pinned_content?: unknown; pinned_until?: string | null }
+        const row = payload.new as { pinned_content?: unknown; pinned_until?: string | null; pinned_at?: string | null }
         const state = parseRow(row)
         if (state && state.pinnedUntil.getTime() <= Date.now()) {
           onUpdate(null)

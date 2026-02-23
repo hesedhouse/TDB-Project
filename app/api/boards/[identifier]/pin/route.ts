@@ -48,10 +48,12 @@ export async function POST(
     }
     const boardId = String((row as { id: string }).id)
 
-    const pinnedUntil = new Date(Date.now() + pinDurationMs)
+    const now = new Date()
+    const pinnedUntil = new Date(now.getTime() + pinDurationMs)
     const payload = {
       pinned_content: { type, url },
       pinned_until: pinnedUntil.toISOString(),
+      pinned_at: now.toISOString(),
     }
     let updateErr: { message: string; details?: unknown; code?: string; hint?: string } | null = null
     try {

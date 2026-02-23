@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LogOut } from 'lucide-react'
+import { LogOut, Pin, ShoppingBag } from 'lucide-react'
 import DotCharacter from './DotCharacter'
 import { mockBoards, mockPosts, extendBoardLifespan, formatRemainingTimer } from '@/lib/mockData'
 import type { Post, Board } from '@/lib/mockData'
@@ -18,6 +18,7 @@ import { subscribeBoardPresence, type PresenceUser } from '@/lib/supabase/presen
 import { joinRoom, leaveRoom, getActiveParticipants, getExistingParticipantForUser, subscribeToRoomParticipants, type RoomParticipant } from '@/lib/supabase/roomParticipants'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
 import { getPinnedContent, subscribePinnedContent, getYouTubeVideoId, getPinTier, type PinnedState } from '@/lib/supabase/pinnedContent'
+import PinnedYouTubePlayer from './PinnedYouTubePlayer'
 import { shareBoard } from '@/lib/shareBoard'
 import { addOrUpdateSession, findSession } from '@/lib/activeSessions'
 import { upsertWarpZone } from '@/lib/supabase/warpZones'
@@ -135,8 +136,15 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const lastPinnedUntilRef = useRef<string | null>(null)
   /** 전광판 남은 시간 실시간 표시용 (1초마다 갱신) */
   const [pinnedTimerTick, setPinnedTimerTick] = useState(0)
+  /** 유튜브 전광판: 새 영상/새 고정 시 재생 종료 플래그 초기화 */
+  useEffect(() => {
+    if (!pinnedState?.content || pinnedState.content.type !== 'youtube') return
+    setPinnedVideoEnded(false)
+  }, [pinnedState?.content?.url, pinnedState?.pinnedAt?.getTime()])
   /** 전광판 연장 로딩 */
   const [extendPinnedLoading, setExtendPinnedLoading] = useState(false)
+  /** 유튜브 전광판 재생 종료 시 대기 상태 UI 표시 */
+  const [pinnedVideoEnded, setPinnedVideoEnded] = useState(false)
   /** 실시간 접속자 (Supabase Presence). DB 참여자와 병합해 참여자 목록 표시 */
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
   /** Presence 기준 실시간 접속자 수 (presenceState 키 개수). 0이면 DB 참여자 수 사용 */
@@ -1059,7 +1067,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId, selectedCharacterInModal])
 
   return (
-    <div className="min-h-screen h-full flex flex-col overflow-hidden bg-midnight-black text-white safe-bottom pt-6">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-midnight-black text-white safe-bottom">
       <AnimatePresence>
         {nicknameModalMounted && showNicknameModal && (
           <motion.div
@@ -1306,9 +1314,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
 
       {/* 상단 파티션: 헤더 + 전광판 (스크롤 없음) */}
       <div className="flex-none shrink-0">
-      <div className="z-10 glass-strong border-b border-neon-orange/20 safe-top pt-4 sm:pt-5 pb-3 md:pb-2">
-        <div className="px-2 py-2 sm:px-4 sm:py-3">
-          <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-0.5 sm:gap-x-2 mb-4">
+      <div className="z-10 glass-strong border-b border-neon-orange/20 safe-top pt-2 sm:pt-2.5 pb-1.5 md:pb-1">
+        <div className="px-2 py-1 sm:px-3 sm:py-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-y-0.5 gap-x-0.5 sm:gap-x-1 mb-2">
             {/* 왼쪽 그룹: 모바일은 화살표만, 데스크톱은 ← 뒤로 */}
             <div className="flex items-center gap-0.5 sm:gap-3 min-w-0 flex-1">
               <button
@@ -1347,8 +1355,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 )}
               </button>
             </div>
-            {/* 오른쪽 그룹: 공유 + 참여자 + 충전하기 + 닉네임(모바일 👤만) + 나가기 */}
-            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 min-w-0">
+            {/* 오른쪽 그룹: 공유 + 참여자 + 전광판/충전 + 닉네임 + 나가기 (간격 최소화) */}
+            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 min-w-0">
               <motion.button
                 type="button"
                 onClick={handleShare}
@@ -1432,25 +1440,27 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 <motion.button
                   type="button"
                   onClick={() => setShowPinModal(true)}
-                  className="flex-shrink-0 px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-lg border border-neon-orange/50 text-neon-orange hover:bg-neon-orange/20 text-xs font-semibold transition-colors"
+                  className="flex-shrink-0 p-1.5 sm:px-3 sm:py-1.5 rounded-lg border border-neon-orange/50 text-neon-orange hover:bg-neon-orange/20 text-xs font-semibold transition-colors flex items-center gap-1"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.98 }}
                   title="전광판 고정"
                   aria-label="전광판 고정"
                 >
-                  전광판 고정
+                  <Pin className="w-4 h-4 sm:w-3.5 sm:h-3.5 flex-shrink-0" aria-hidden />
+                  <span className="hidden sm:inline">전광판 고정</span>
                 </motion.button>
               )}
               <motion.button
                 type="button"
                 onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
-                className="flex-shrink-0 px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-lg border border-amber-400/50 text-amber-300 hover:bg-amber-500/20 hover:border-amber-400/70 text-xs font-semibold transition-colors"
+                className="flex-shrink-0 p-1.5 sm:px-4 sm:py-1.5 rounded-lg border border-amber-400/50 text-amber-300 hover:bg-amber-500/20 hover:border-amber-400/70 text-xs font-semibold transition-colors flex items-center gap-1"
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.98 }}
                 title="모래시계 충전소"
                 aria-label="모래시계 충전하기"
               >
-                충전하기
+                <ShoppingBag className="w-4 h-4 sm:w-3.5 sm:h-3.5 flex-shrink-0" aria-hidden />
+                <span className="hidden sm:inline">충전하기</span>
               </motion.button>
               <button
                 type="button"
@@ -1481,18 +1491,18 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
           </div>
           
           {/* Progress Bar (24h 기준, 1시간 미만 시 긴급) */}
-          <div className="relative h-1 bg-gray-800 rounded-full overflow-hidden mt-1">
+          <div className="relative h-1 bg-gray-800 rounded-full overflow-hidden mt-0.5">
             <div
               className={`absolute top-0 left-0 h-full transition-[width] duration-1000 ease-linear ${isEmergency ? 'bg-red-600 animate-emergency-blink' : 'bg-neon-orange neon-glow'}`}
               style={{ width: `${progress}%` }}
             />
           </div>
 
-          {/* 한 줄: 남은 시간 + 모래시계 채우기 (좌) | 명예의 전당 (우) */}
-          <div className="relative flex flex-row justify-between items-center gap-3 py-2 min-w-0 overflow-hidden">
-            <div className="flex flex-row items-center gap-3 min-w-0 flex-1">
+          {/* 한 줄: 남은 시간 + 연장 (좌) | 명예의 전당 (우, 모바일 시 가로 스크롤·닉네임 생략) */}
+          <div className="relative flex flex-row justify-between items-center gap-1 sm:gap-2 py-1 min-w-0 min-h-[28px] sm:min-h-0">
+            <div className="flex flex-row items-center gap-1 sm:gap-2 min-w-0 flex-shrink-0">
               <motion.span
-                className={`inline-flex items-baseline gap-1 shrink-0 whitespace-nowrap font-bold font-mono tabular-nums text-sm ${isEmergency || isUnderOneMinute ? 'text-red-400' : 'text-yellow-400'}`}
+                className={`inline-flex items-baseline gap-1 flex-shrink-0 whitespace-nowrap font-bold font-mono tabular-nums text-xs sm:text-sm ${isEmergency || isUnderOneMinute ? 'text-red-400' : 'text-yellow-400'}`}
                 animate={isUnderOneMinute ? { scale: [1, 1.04, 1] } : {}}
                 transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
                 aria-label="남은 시간"
@@ -1505,7 +1515,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   type="button"
                   onClick={handleHourglassExtend}
                   disabled={hourglasses <= 0 || extendingHourglass}
-                  className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-shrink-0 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.03 } : {}}
                   whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.98 } : {}}
                 >
@@ -1514,19 +1524,19 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               )}
             </div>
             {useSupabaseWithUuid && topContributors.length > 0 && (
-              <div className="flex flex-row items-center gap-x-2 shrink-0 min-w-0">
-                <span className="text-xs text-gray-400 shrink-0">명예의 전당</span>
-                <ul className="flex flex-row items-center gap-x-2 sm:gap-x-3 flex-wrap justify-end">
+              <div className="flex flex-row items-center gap-x-1 sm:gap-x-2 min-w-0 overflow-x-auto scrollbar-hide flex-shrink max-w-[50%] sm:max-w-none">
+                <span className="text-[9px] sm:text-xs text-gray-400 flex-shrink-0 hidden sm:inline">명예의 전당</span>
+                <ul className="flex flex-row items-center gap-x-1 sm:gap-x-2 flex-shrink-0 justify-end">
                   {topContributors.map((c) => {
                     const medal = c.rank === 1 ? '🥇' : c.rank === 2 ? '🥈' : '🥉'
                     const nameColor = c.rank === 1 ? 'text-amber-200' : c.rank === 2 ? 'text-gray-300' : 'text-amber-600/90'
                     return (
                       <li
                         key={`${c.rank}-${c.user_display_name}`}
-                        className="flex items-center gap-1 shrink-0"
+                        className="flex items-center gap-0.5 flex-shrink-0"
                       >
-                        <span className="text-sm leading-none" aria-hidden>{medal}</span>
-                        <span className={`text-sm font-medium truncate max-w-[80px] sm:max-w-[100px] ${nameColor}`} title={c.user_display_name ?? ''}>
+                        <span className="text-xs leading-none" aria-hidden>{medal}</span>
+                        <span className={`text-[9px] sm:text-sm font-medium truncate max-w-[40px] sm:max-w-[100px] ${nameColor}`} title={c.user_display_name ?? ''}>
                           {c.user_display_name ?? '—'}
                         </span>
                       </li>
@@ -1549,9 +1559,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         </div>
       </div>
 
-      {/* 5분 전광판: 고정된 영상/사진 + 신고(🚨) + 접기/펼치기 */}
+      {/* 5분 전광판: 영상/사진 (z-0, 채팅 오버레이 배경) */}
       {useSupabaseWithUuid && pinnedState && pinnedState.pinnedUntil.getTime() > Date.now() && (
-        <div className="relative mx-2 mt-2 sm:mx-3 sm:mt-3 rounded-xl overflow-hidden border border-neon-orange/30 bg-black/40">
+        <div className="relative z-0 mx-1 mt-1 sm:mx-2 sm:mt-2 rounded-lg sm:rounded-xl overflow-hidden border border-neon-orange/30 bg-black/40">
           {pinnedCollapsed ? (
             /* 접힌 상태: 최소화 바 */
             <div className="flex items-center justify-between gap-2 px-3 py-2 flex-wrap">
@@ -1638,15 +1648,24 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               {pinnedState.content.type === 'youtube' ? (
                 (() => {
                   const videoId = getYouTubeVideoId(pinnedState.content.url)
+                  const pinKey = pinnedState.pinnedAt?.getTime() ?? pinnedState.pinnedUntil.getTime()
                   return videoId ? (
-                    <div className="aspect-video w-full">
-                      <iframe
-                        title="고정 영상"
-                        src={`https://www.youtube.com/embed/${videoId}`}
-                        className="w-full h-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                      />
+                    <div className="aspect-video w-full relative bg-black/60">
+                      {pinnedVideoEnded ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 py-6 text-center">
+                          <span className="text-4xl opacity-80" aria-hidden>⏹️</span>
+                          <p className="text-sm font-medium text-white/90">영상이 끝났습니다</p>
+                          <p className="text-xs text-gray-400">다음 전광판을 기다려 주세요</p>
+                        </div>
+                      ) : (
+                        <PinnedYouTubePlayer
+                          key={`yt-${videoId}-${pinKey}`}
+                          videoId={videoId}
+                          pinnedAt={pinnedState.pinnedAt}
+                          onEnded={() => setPinnedVideoEnded(true)}
+                          className="w-full h-full aspect-video"
+                        />
+                      )}
                     </div>
                   ) : null
                 })()
@@ -1654,7 +1673,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 <img
                   src={pinnedState.content.url}
                   alt="고정 사진"
-                  className="w-full max-h-[280px] object-cover"
+                  className="w-full max-h-[280px] object-cover aspect-video"
                 />
               )}
               <div className="flex items-center justify-between gap-2 px-2 py-1.5 flex-wrap">
@@ -1706,12 +1725,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       )}
       </div>
 
-      {/* 중간 파티션: 채팅 메시지 리스트 (이 영역만 스크롤) + 하단 입력 */}
+      {/* 중간 파티션: 채팅 오버레이 — 전광판 하단부터 겹치며 화면 끝까지 스크롤, 영상 비침 */}
       {useSupabaseWithUuid && (
         <>
         <div
           ref={listRef}
-          className="flex-1 min-h-0 overflow-y-auto flex flex-col px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-2 scrollbar-hide"
+          className="relative z-10 flex-1 min-h-0 overflow-y-auto flex flex-col -mt-6 sm:-mt-8 pt-4 sm:pt-6 px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-2 scrollbar-hide bg-black/10"
         >
             {[...messages]
               .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
@@ -1881,8 +1900,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             <div ref={feedEndRef} />
         </div>
 
-        {/* 하단 파티션: 채팅 입력 (스크롤 없음) */}
-        <div className="flex-none shrink-0 glass-strong border-t border-neon-orange/20 safe-bottom px-3 py-2.5 sm:px-4 sm:py-3">
+        {/* 하단 파티션: 채팅 입력 (여백 최소화, 화면 맨 아래 고정) */}
+        <div className="flex-none shrink-0 sticky bottom-0 glass-strong border-t border-neon-orange/20 safe-bottom px-2 py-1.5 sm:px-3 sm:py-2">
             <div className="app-shell mx-auto flex gap-2 items-center">
               <motion.button
                 type="button"
