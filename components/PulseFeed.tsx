@@ -1226,25 +1226,23 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 </AnimatePresence>
               </div>
               <div
-                className="flex items-center gap-1 text-amber-400 flex-shrink-0 min-w-0"
+                className="flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0"
                 role="status"
                 aria-label={`보유 모래시계 ${hourglasses}개`}
               >
-                <span className="text-sm sm:text-base leading-none flex-shrink-0" aria-hidden>⏳</span>
-                <span className="font-medium text-amber-400/90 text-xs sm:text-sm" aria-hidden>×</span>
-                <span className="font-bold tabular-nums text-white text-xs sm:text-sm">{hourglasses}</span>
+                <span className="text-sm sm:text-base leading-none text-amber-400 flex-shrink-0" aria-hidden>⏳</span>
+                <motion.button
+                  type="button"
+                  onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
+                  className="flex-shrink-0 px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-lg border border-amber-400/50 text-amber-300 hover:bg-amber-500/20 hover:border-amber-400/70 text-xs font-semibold transition-colors"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.98 }}
+                  title="모래시계 충전소"
+                  aria-label="모래시계 충전하기"
+                >
+                  충전하기
+                </motion.button>
               </div>
-              <motion.button
-                type="button"
-                onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
-                className="flex-shrink-0 px-2 py-1 sm:px-2.5 sm:py-1 rounded-lg border border-amber-400/50 text-amber-300 hover:bg-amber-500/20 hover:border-amber-400/70 text-xs font-semibold transition-colors"
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-                title="모래시계 충전소"
-                aria-label="모래시계 충전하기"
-              >
-                충전하기
-              </motion.button>
               <button
                 type="button"
                 onClick={() => setShowNicknameModal(true)}
@@ -1841,13 +1839,13 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       </div>
       )}
 
-      {/* FAB 모래시계 충전 (황금색 원형 + 잔액 배지, hourglasses 상태와 동기화) */}
+      {/* FAB 모래시계 충전: 우측 하단, '+' 버튼 정확히 위에 수직 배치 (bottom-24 / right-6) */}
       {useSupabaseWithUuid && (
         <motion.button
           type="button"
           onClick={handleHourglassExtend}
           disabled={hourglasses <= 0 || extendingHourglass}
-          className="fab-hourglass fixed right-4 sm:right-6 bottom-36 sm:bottom-40 safe-bottom flex items-center justify-center z-40 disabled:opacity-60 disabled:cursor-not-allowed relative"
+          className="fab-hourglass fixed right-6 bottom-24 flex items-center justify-center z-40 disabled:opacity-60 disabled:cursor-not-allowed relative shadow-lg"
           style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
           aria-label={`모래시계 충전 (보유 ${hourglasses}개)`}
           title={extendingHourglass ? '연장 중…' : `⏳ 보유 ${hourglasses}개 · 채우기 (+30분)`}
@@ -1856,18 +1854,18 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         >
           <span className="text-xl leading-none" aria-hidden>⏳</span>
           <span
-            className="absolute -top-0.5 -right-0.5 min-w-[1.25rem] h-5 px-1 rounded-full bg-gray-900 border border-amber-400/60 text-amber-300 text-xs font-bold tabular-nums flex items-center justify-center shadow-md"
+            className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-gray-900 border-2 border-amber-400/80 text-amber-300 text-xs font-bold tabular-nums flex items-center justify-center shadow-lg"
             aria-hidden
           >
             {hourglasses}
           </span>
         </motion.button>
       )}
-      {/* FAB 글쓰기 버튼 (오렌지 원형 + 글로우) */}
+      {/* FAB 글쓰기 버튼 (오렌지 원형, 우측 하단 bottom-6 right-6) */}
       <motion.button
         type="button"
         onClick={() => setShowWriteModal(true)}
-        className="fab-write fixed right-4 sm:right-6 bottom-20 sm:bottom-24 safe-bottom flex items-center justify-center z-40"
+        className="fab-write fixed right-6 bottom-6 flex items-center justify-center z-40 safe-bottom shadow-lg"
         style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
         aria-label="글쓰기"
         whileHover={{ scale: 1.08 }}
