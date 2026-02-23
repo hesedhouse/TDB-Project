@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LogOut } from 'lucide-react'
@@ -1145,8 +1146,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 )}
               </button>
             </div>
-            {/* 오른쪽 그룹: 공유 + 참여자 + 모래시계 + 닉네임(모바일 👤만) + 나가기 */}
-            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 min-w-0">
+            {/* 오른쪽 그룹: 공유 + 참여자 + 충전하기 + 닉네임(모바일 👤만) + 나가기 */}
+            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 min-w-0">
               <motion.button
                 type="button"
                 onClick={handleShare}
@@ -1225,24 +1226,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   )}
                 </AnimatePresence>
               </div>
-              <div
-                className="flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0"
-                role="status"
-                aria-label={`보유 모래시계 ${hourglasses}개`}
+              <motion.button
+                type="button"
+                onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
+                className="flex-shrink-0 px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-lg border border-amber-400/50 text-amber-300 hover:bg-amber-500/20 hover:border-amber-400/70 text-xs font-semibold transition-colors"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.98 }}
+                title="모래시계 충전소"
+                aria-label="모래시계 충전하기"
               >
-                <span className="text-sm sm:text-base leading-none text-amber-400 flex-shrink-0" aria-hidden>⏳</span>
-                <motion.button
-                  type="button"
-                  onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
-                  className="flex-shrink-0 px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-lg border border-amber-400/50 text-amber-300 hover:bg-amber-500/20 hover:border-amber-400/70 text-xs font-semibold transition-colors"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.98 }}
-                  title="모래시계 충전소"
-                  aria-label="모래시계 충전하기"
-                >
-                  충전하기
-                </motion.button>
-              </div>
+                충전하기
+              </motion.button>
               <button
                 type="button"
                 onClick={() => setShowNicknameModal(true)}
@@ -1839,42 +1833,59 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       </div>
       )}
 
-      {/* FAB 모래시계 충전: 우측 하단, '+' 버튼 정확히 위에 수직 배치 (bottom-24 / right-6) */}
-      {useSupabaseWithUuid && (
-        <motion.button
-          type="button"
-          onClick={handleHourglassExtend}
-          disabled={hourglasses <= 0 || extendingHourglass}
-          className="fab-hourglass fixed right-6 bottom-24 flex items-center justify-center z-40 disabled:opacity-60 disabled:cursor-not-allowed relative shadow-lg"
-          style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
-          aria-label={`모래시계 충전 (보유 ${hourglasses}개)`}
-          title={extendingHourglass ? '연장 중…' : `⏳ 보유 ${hourglasses}개 · 채우기 (+30분)`}
-          whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.08 } : {}}
-          whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.95 } : {}}
-        >
-          <span className="text-xl leading-none" aria-hidden>⏳</span>
-          <span
-            className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-gray-900 border-2 border-amber-400/80 text-amber-300 text-xs font-bold tabular-nums flex items-center justify-center shadow-lg"
-            aria-hidden
-          >
-            {hourglasses}
-          </span>
-        </motion.button>
-      )}
-      {/* FAB 글쓰기 버튼 (오렌지 원형, 우측 하단 bottom-6 right-6) */}
-      <motion.button
-        type="button"
-        onClick={() => setShowWriteModal(true)}
-        className="fab-write fixed right-6 bottom-6 flex items-center justify-center z-40 safe-bottom shadow-lg"
-        style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
-        aria-label="글쓰기"
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </motion.button>
+      {/* FAB: body에 포탈하여 부모 레이아웃 영향 없이 우측 하단 고정 (bottom-6 right-6 / bottom-24 right-6) */}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            {useSupabaseWithUuid && (
+              <motion.button
+                type="button"
+                onClick={handleHourglassExtend}
+                disabled={hourglasses <= 0 || extendingHourglass}
+                className="fab-hourglass flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed relative shadow-lg"
+                style={{
+                  position: 'fixed',
+                  bottom: '6rem',
+                  right: '1.5rem',
+                  zIndex: 50,
+                  marginBottom: 'env(safe-area-inset-bottom, 0)',
+                }}
+                aria-label={`모래시계 충전 (보유 ${hourglasses}개)`}
+                title={extendingHourglass ? '연장 중…' : `⏳ 보유 ${hourglasses}개 · 채우기 (+30분)`}
+                whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.08 } : {}}
+                whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.95 } : {}}
+              >
+                <span className="text-xl leading-none" aria-hidden>⏳</span>
+                <span
+                  className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-gray-900 border-2 border-amber-400/80 text-amber-300 text-xs font-bold tabular-nums flex items-center justify-center shadow-lg"
+                  aria-hidden
+                >
+                  {hourglasses}
+                </span>
+              </motion.button>
+            )}
+            <motion.button
+              type="button"
+              onClick={() => setShowWriteModal(true)}
+              className="fab-write flex items-center justify-center shadow-lg"
+              style={{
+                position: 'fixed',
+                bottom: '1.5rem',
+                right: '1.5rem',
+                zIndex: 50,
+                marginBottom: 'env(safe-area-inset-bottom, 0)',
+              }}
+              aria-label="글쓰기"
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </motion.button>
+          </>,
+          document.body
+        )}
 
       {/* 글쓰기 모달 */}
       <AnimatePresence>
