@@ -32,7 +32,8 @@ export const authOptions = {
       : undefined,
   callbacks: {
     async jwt({ token, user }: { token: JwtToken; user?: AdapterUser; account?: { provider?: string } | null }) {
-      if (user) {
+      // 로그인 시 user는 어댑터가 반환한 public.users 행 → user.id는 DB UUID (네이버/구글 등 소셜 ID 아님)
+      if (user?.id) {
         const t = token as JwtToken
         t.sub = t.id = user.id
         t.email = user.email ?? t.email
@@ -43,15 +44,29 @@ export const authOptions = {
     },
     async session({ session, token }: { session: Session; token: JwtToken }) {
       if (session?.user) {
-        // 세션에 DB(public.users) UUID를 넣어 messages.user_id FK(23503) 방지. token.sub에 유저 UUID가 들어있음.
-        session.user.id = token?.sub ?? token?.id ?? session.user.id
         session.user.email = session.user.email ?? token?.email ?? null
         session.user.name = session.user.name ?? token?.name ?? null
         session.user.image = session.user.image ?? token?.picture ?? token?.image ?? null
+        // 세션 ID는 반드시 public.users.id(UUID). token.sub = 어댑터 user.id(첫 로그인 시 DB insert 후 반환된 UUID)
+        let dbUserId: string | undefined = (token?.sub ?? token?.id) as string | undefined
+        if (typeof dbUserId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbUserId)) {
+          // token.sub가 UUID가 아니면(이메일/소셜 ID 등) 이메일로 public.users 조회해 UUID로 교정
+          const email = session.user.email ?? token?.email ?? null
+          if (email && typeof email === 'string') {
+            const supabase = createServerClient()
+            if (supabase) {
+              const { data: row } = await supabase.from('users').select('id').eq('email', email).maybeSingle()
+              const id = (row as { id?: string } | null)?.id
+              if (id && typeof id === 'string') dbUserId = id
+            }
+          }
+        }
+        session.user.id = dbUserId ?? session.user.id
       }
       return session
     },
     async signIn({ user, account }: { user: AdapterUser; account: { provider?: string } | null }) {
+      // 네이버/구글 첫 로그인 시 어댑터가 이미 public.users에 insert 후 user.id = DB UUID로 반환함
       const email = user?.email?.trim()
       if (email) {
         const supabase = createServerClient()

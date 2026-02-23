@@ -41,8 +41,10 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
 
   return {
     async createUser(user: Omit<AdapterUser, 'id'>) {
+      // id는 넣지 않음 → DB가 UUID 생성. 네이버/구글 등 소셜 ID가 절대 들어가지 않도록 함.
+      const { id: _id, ...rest } = user as AdapterUser
       const insert: Record<string, unknown> = {
-        ...user,
+        ...rest,
         emailVerified: user.emailVerified?.toISOString?.() ?? null,
       }
       const { data, error } = await supabase.from('users').insert(insert).select().single()

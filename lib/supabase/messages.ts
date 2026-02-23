@@ -82,7 +82,7 @@ export async function sendMessage(params: {
   authorNickname: string
   content: string
   imageUrl?: string | null
-  /** 로그인 유저의 Auth UID (관리자 추적용). Supabase Auth user.id */
+  /** 로그인 유저 ID. public.users(id) FK 참조 → NextAuth session.user.id(DB UUID)만 사용해야 함 (23503 방지) */
   userId?: string | null
 }): Promise<Message | null> {
   const supabase = createClient()
@@ -110,6 +110,7 @@ export async function sendMessage(params: {
     heart_count: 0,
     image_url: params.imageUrl ?? null,
   }
+  // user_id는 public.users(id) FK이므로 반드시 DB UUID만 전달 (이메일/다른 값 사용 시 23503)
   if (params.userId != null && params.userId !== '') {
     row.user_id = params.userId
   }

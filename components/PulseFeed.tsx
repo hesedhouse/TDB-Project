@@ -1097,14 +1097,16 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       {/* Top Bar with Progress */}
       <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top pt-4 sm:pt-5 pb-3 md:pb-2">
         <div className="px-2 py-2 sm:px-4 sm:py-3">
-          <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-2 mb-4">
-            {/* 왼쪽 그룹: 뒤로 + 방 제목 + No. 배지 */}
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-1 sm:gap-x-2 mb-4">
+            {/* 왼쪽 그룹: 뒤로(모바일은 화살표만) + 방 제목 + No. 배지 */}
+            <div className="flex items-center gap-1 sm:gap-3 min-w-0 flex-1">
               <button
                 onClick={onBack}
-                className="text-gray-400 hover:text-white text-xs sm:text-base flex-shrink-0"
+                className="text-gray-400 hover:text-white text-base flex-shrink-0 p-0.5 -m-0.5 sm:p-0 sm:m-0"
+                aria-label="뒤로"
               >
-                ← 뒤로
+                <span aria-hidden>←</span>
+                <span className="hidden sm:inline ml-0.5">뒤로</span>
               </button>
               <h1 className="text-sm sm:text-xl font-black truncate min-w-0 text-white">
                 {headerTitle}
@@ -1134,8 +1136,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 )}
               </button>
             </div>
-            {/* 오른쪽 그룹: 공유 + 참여자 + 모래시계 + 닉네임 + 나가기 */}
-            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+            {/* 오른쪽 그룹: 공유 + 참여자 + 모래시계 + 닉네임(모바일 아이콘만) + 나가기 */}
+            <div className="flex items-center gap-1 flex-shrink-0 min-w-0">
               <motion.button
                 type="button"
                 onClick={handleShare}
@@ -1226,12 +1228,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               <button
                 type="button"
                 onClick={() => setShowNicknameModal(true)}
-                className="flex-shrink-0 min-w-0 max-w-[72px] sm:max-w-[140px] flex items-center gap-0.5 sm:gap-1 text-xs sm:text-sm text-neon-orange hover:brightness-110 truncate"
+                className="flex-shrink-0 min-w-0 flex items-center gap-0.5 sm:gap-1 text-xs sm:text-sm text-neon-orange hover:brightness-110"
                 title="닉네임 변경"
                 aria-label={`활동명: ${authorNickname}. 클릭하면 닉네임을 변경할 수 있습니다.`}
               >
                 <span className="flex-shrink-0" aria-hidden>👤</span>
-                <span className="truncate">{authorNickname || '이름 없음'}</span>
+                <span className="hidden sm:inline truncate max-w-[100px]">{authorNickname || '이름 없음'}</span>
               </button>
               {useSupabaseWithUuid && (
                 <motion.button
