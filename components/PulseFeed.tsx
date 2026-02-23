@@ -1478,92 +1478,72 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             </div>
           </div>
           
-          {/* Progress Bar (24h 기준, 1시간 미만 시 긴급: 빨간색 + 점멸) */}
-          <div className="relative h-1 bg-gray-800 rounded-full overflow-hidden">
+          {/* Progress Bar (24h 기준, 1시간 미만 시 긴급) */}
+          <div className="relative h-1 bg-gray-800 rounded-full overflow-hidden mt-1">
             <div
               className={`absolute top-0 left-0 h-full transition-[width] duration-1000 ease-linear ${isEmergency ? 'bg-red-600 animate-emergency-blink' : 'bg-neon-orange neon-glow'}`}
               style={{ width: `${progress}%` }}
             />
           </div>
-          
-          <div className="text-neon-orange mt-2 text-center relative flex flex-col sm:flex-row items-center justify-center gap-2 min-w-0 overflow-hidden">
-            <motion.span
-              className={`inline-flex items-baseline gap-1 shrink min-w-0 whitespace-nowrap ${isEmergency || isUnderOneMinute ? 'text-red-500 font-bold' : ''}`}
-              style={{
-                fontSize:
-                  timerLabel.length > 18
-                    ? '0.5rem'
-                    : timerLabel.length > 14
-                      ? '0.6rem'
-                      : timerLabel.length > 11
-                        ? '0.65rem'
-                        : 'clamp(0.5rem, 2.5vw, 0.75rem)',
-              }}
-              animate={isUnderOneMinute ? { scale: [1, 1.04, 1] } : {}}
-              transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              <span className="font-mono tabular-nums text-left" aria-label="남은 시간">
-                {timerMounted ? timerLabel : '\u00A0'}
-              </span>
-              <span>남음</span>
-            </motion.span>
-            {useSupabaseWithUuid && (
-              <motion.button
-                type="button"
-                onClick={handleHourglassExtend}
-                disabled={hourglasses <= 0 || extendingHourglass}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.03 } : {}}
-                whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.98 } : {}}
+
+          {/* 한 줄: 남은 시간 + 모래시계 채우기 (좌) | 명예의 전당 (우) */}
+          <div className="relative flex flex-row justify-between items-center gap-3 py-2 min-w-0 overflow-hidden">
+            <div className="flex flex-row items-center gap-3 min-w-0 flex-1">
+              <motion.span
+                className={`inline-flex items-baseline gap-1 shrink-0 whitespace-nowrap font-bold font-mono tabular-nums text-sm ${isEmergency || isUnderOneMinute ? 'text-red-400' : 'text-yellow-400'}`}
+                animate={isUnderOneMinute ? { scale: [1, 1.04, 1] } : {}}
+                transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                aria-label="남은 시간"
               >
-                {extendingHourglass ? '연장 중…' : '⏳ 모래시계 채우기 (+30분)'}
-              </motion.button>
+                {timerMounted ? timerLabel : '\u00A0'}
+                <span className="text-white/90 font-normal ml-0.5">남음</span>
+              </motion.span>
+              {useSupabaseWithUuid && (
+                <motion.button
+                  type="button"
+                  onClick={handleHourglassExtend}
+                  disabled={hourglasses <= 0 || extendingHourglass}
+                  className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.03 } : {}}
+                  whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.98 } : {}}
+                >
+                  {extendingHourglass ? '연장 중…' : '⏳ +30분'}
+                </motion.button>
+              )}
+            </div>
+            {useSupabaseWithUuid && topContributors.length > 0 && (
+              <div className="flex flex-row items-center gap-x-2 shrink-0 min-w-0">
+                <span className="text-xs text-gray-400 shrink-0" aria-hidden>👑</span>
+                <ul className="flex flex-row items-center gap-x-2 sm:gap-x-3 flex-wrap justify-end">
+                  {topContributors.map((c) => {
+                    const medal = c.rank === 1 ? '🥇' : c.rank === 2 ? '🥈' : '🥉'
+                    const nameColor = c.rank === 1 ? 'text-amber-200' : c.rank === 2 ? 'text-gray-300' : 'text-amber-600/90'
+                    return (
+                      <li
+                        key={`${c.rank}-${c.user_display_name}`}
+                        className="flex items-center gap-1 shrink-0"
+                      >
+                        <span className="text-sm leading-none" aria-hidden>{medal}</span>
+                        <span className={`text-sm font-medium truncate max-w-[80px] sm:max-w-[100px] ${nameColor}`} title={c.user_display_name ?? ''}>
+                          {c.user_display_name ?? '—'}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
             )}
             {showLifespanExtended && (
               <motion.div
-                className="absolute -top-8 left-1/2 transform -translate-x-1/2 glass-strong px-4 py-2 rounded-full text-neon-orange font-bold"
-                initial={{ opacity: 0, y: 10 }}
+                className="absolute left-1/2 -translate-x-1/2 -top-6 glass-strong px-3 py-1.5 rounded-full text-neon-orange font-bold text-xs"
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
+                exit={{ opacity: 0, y: -4 }}
               >
                 ⚡ 수명 연장!
               </motion.div>
             )}
           </div>
-          {useSupabaseWithUuid && topContributors.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-white/10">
-              <p className="text-center text-sm font-semibold text-white/90 mb-3 tracking-wide">
-                명예의 전당
-              </p>
-              <ul className="space-y-3">
-                {topContributors.map((c) => {
-                  const medal = c.rank === 1 ? '🥇' : c.rank === 2 ? '🥈' : '🥉'
-                  const nameColor =
-                    c.rank === 1
-                      ? 'text-amber-200'
-                      : c.rank === 2
-                        ? 'text-gray-300'
-                        : 'text-amber-600/90'
-                  return (
-                    <li
-                      key={`${c.rank}-${c.user_display_name}`}
-                      className="flex items-center justify-center gap-3"
-                    >
-                      <span className="flex-shrink-0 text-lg leading-none" aria-hidden>
-                        {medal}
-                      </span>
-                      <span
-                        className={`font-medium text-base truncate max-w-[140px] ${nameColor}`}
-                        title={c.user_display_name ?? ''}
-                      >
-                        {c.user_display_name ?? '—'}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          )}
         </div>
       </div>
 
@@ -2202,7 +2182,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       </div>
       )}
 
-      {/* FAB: fixed 우측 하단 고정(fixed·right-6 명시), 부모 레이아웃 영향 없도록 body 포탈 */}
+      {/* FAB: 모래시계 좌측 하단, 글쓰기 우측 하단 — fixed·z-50·여백으로 채팅창 가리지 않고 대칭 배치 */}
       {typeof document !== 'undefined' &&
         createPortal(
           <>
@@ -2211,8 +2191,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 type="button"
                 onClick={handleHourglassExtend}
                 disabled={hourglasses <= 0 || extendingHourglass}
-                className="fab-hourglass fixed bottom-24 right-6 z-50 flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed relative shadow-lg"
-                style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
+                className="fab-hourglass fixed z-50 w-12 h-12 rounded-xl flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed relative shadow-lg bg-gray-900/90 border border-amber-400/40"
+                style={{
+                  left: '24px',
+                  bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))',
+                }}
                 aria-label={`모래시계 충전 (보유 ${hourglasses}개)`}
                 title={extendingHourglass ? '연장 중…' : `⏳ 보유 ${hourglasses}개 · 채우기 (+30분)`}
                 whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.08 } : {}}
@@ -2220,7 +2203,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               >
                 <span className="text-xl leading-none" aria-hidden>⏳</span>
                 <span
-                  className="absolute top-0 right-0 min-w-[1.25rem] h-5 px-1 rounded-full bg-gray-900 border-2 border-amber-400/80 text-amber-300 text-xs font-bold tabular-nums flex items-center justify-center shadow-lg -translate-y-1/2 translate-x-1/2"
+                  className="absolute -top-0.5 -right-0.5 min-w-[1.25rem] h-5 px-1 rounded-full bg-gray-900 border-2 border-amber-400/80 text-amber-300 text-xs font-bold tabular-nums flex items-center justify-center shadow-lg"
                   aria-hidden
                 >
                   {hourglasses}
@@ -2230,8 +2213,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             <motion.button
               type="button"
               onClick={() => setShowWriteModal(true)}
-              className="fab-write fixed bottom-6 right-6 z-50 flex items-center justify-center shadow-lg"
-              style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
+              className="fab-write fixed z-50 w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-neon-orange/90 border border-neon-orange"
+              style={{
+                right: '24px',
+                bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))',
+              }}
               aria-label="글쓰기"
               whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.95 }}
