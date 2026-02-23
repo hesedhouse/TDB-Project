@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import SessionProvider from '@/components/SessionProvider'
+import KakaoInAppRedirect from '@/components/KakaoInAppRedirect'
 
 export const metadata: Metadata = {
   title: 'POPPIN',
@@ -23,6 +24,7 @@ export default function RootLayout({
       <body className="bg-midnight-black min-h-screen">
         <ErrorBoundary>
           <SessionProvider>
+            <KakaoInAppRedirect />
             <div className="app-shell min-h-screen px-3 sm:px-6">{children}</div>
           </SessionProvider>
         </ErrorBoundary>

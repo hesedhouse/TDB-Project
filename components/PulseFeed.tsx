@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LogOut } from 'lucide-react'
 import DotCharacter from './DotCharacter'
@@ -54,6 +54,7 @@ export interface Comment {
 
 export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFromUrl, userCharacter: rawUserCharacter, userNickname: rawUserNickname, userId, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
   const router = useRouter()
+  const pathname = usePathname()
   /** 방/유저 정보가 아직 준비되지 않았을 때를 대비한 안전한 기본값 (클라이언트 에러 방지) */
   const boardId = typeof rawBoardId === 'string' && rawBoardId.trim() !== '' ? rawBoardId.trim() : ''
   const userNickname = (rawUserNickname ?? '').trim()
@@ -130,6 +131,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
 
   useEffect(() => {
     setHourglassesState(getHourglasses())
+  }, [])
+
+  /** 스토어에서 복귀 시 등 탭이 다시 보일 때 모래시계 잔액 동기화 (FAB·헤더 동일한 hourglasses 사용) */
+  useEffect(() => {
+    const sync = () => setHourglassesState(getHourglasses())
+    if (typeof document === 'undefined') return
+    document.addEventListener('visibilitychange', sync)
+    return () => document.removeEventListener('visibilitychange', sync)
   }, [])
 
   /** Supabase Presence: 방 접속자 실시간 동기화. track에 nickname·user_id 포함, sync에서 presenceState 키 개수 반영 */
@@ -1225,6 +1234,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 <span className="font-medium text-amber-400/90 text-xs sm:text-sm" aria-hidden>×</span>
                 <span className="font-bold tabular-nums text-white text-xs sm:text-sm">{hourglasses}</span>
               </div>
+              <motion.button
+                type="button"
+                onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
+                className="flex-shrink-0 px-2 py-1 sm:px-2.5 sm:py-1 rounded-lg border border-amber-400/50 text-amber-300 hover:bg-amber-500/20 hover:border-amber-400/70 text-xs font-semibold transition-colors"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.98 }}
+                title="모래시계 충전소"
+                aria-label="모래시계 충전하기"
+              >
+                충전하기
+              </motion.button>
               <button
                 type="button"
                 onClick={() => setShowNicknameModal(true)}
@@ -1821,20 +1841,26 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       </div>
       )}
 
-      {/* FAB 모래시계 충전 (황금색 원형, 헤더 '모래시계 채우기'와 동일 기능) */}
+      {/* FAB 모래시계 충전 (황금색 원형 + 잔액 배지, hourglasses 상태와 동기화) */}
       {useSupabaseWithUuid && (
         <motion.button
           type="button"
           onClick={handleHourglassExtend}
           disabled={hourglasses <= 0 || extendingHourglass}
-          className="fab-hourglass fixed right-4 sm:right-6 bottom-36 sm:bottom-40 safe-bottom flex items-center justify-center z-40 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="fab-hourglass fixed right-4 sm:right-6 bottom-36 sm:bottom-40 safe-bottom flex items-center justify-center z-40 disabled:opacity-60 disabled:cursor-not-allowed relative"
           style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
-          aria-label="모래시계 충전"
-          title={extendingHourglass ? '연장 중…' : '⏳ 모래시계 채우기 (+30분)'}
+          aria-label={`모래시계 충전 (보유 ${hourglasses}개)`}
+          title={extendingHourglass ? '연장 중…' : `⏳ 보유 ${hourglasses}개 · 채우기 (+30분)`}
           whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.08 } : {}}
           whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.95 } : {}}
         >
           <span className="text-xl leading-none" aria-hidden>⏳</span>
+          <span
+            className="absolute -top-0.5 -right-0.5 min-w-[1.25rem] h-5 px-1 rounded-full bg-gray-900 border border-amber-400/60 text-amber-300 text-xs font-bold tabular-nums flex items-center justify-center shadow-md"
+            aria-hidden
+          >
+            {hourglasses}
+          </span>
         </motion.button>
       )}
       {/* FAB 글쓰기 버튼 (오렌지 원형 + 글로우) */}
