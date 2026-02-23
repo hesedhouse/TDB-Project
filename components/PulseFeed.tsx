@@ -17,6 +17,7 @@ import { recordContribution, getTopContributors, subscribeToContributions, type 
 import { subscribeBoardPresence, type PresenceUser } from '@/lib/supabase/presence'
 import { joinRoom, leaveRoom, getActiveParticipants, getExistingParticipantForUser, subscribeToRoomParticipants, type RoomParticipant } from '@/lib/supabase/roomParticipants'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
+import { getPinnedContent, subscribePinnedContent, getYouTubeVideoId, type PinnedState } from '@/lib/supabase/pinnedContent'
 import { shareBoard } from '@/lib/shareBoard'
 import { addOrUpdateSession, findSession } from '@/lib/activeSessions'
 import { getRandomNickname } from '@/lib/randomNicknames'
@@ -117,6 +118,15 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
   const [deleteConfirmMessageId, setDeleteConfirmMessageId] = useState<string | null>(null)
+  /** 5분 고정 전광판 (실시간 구독) */
+  const [pinnedState, setPinnedState] = useState<PinnedState>(null)
+  const [showPinModal, setShowPinModal] = useState(false)
+  const [pinType, setPinType] = useState<'youtube' | 'image'>('youtube')
+  const [pinInputUrl, setPinInputUrl] = useState('')
+  const [pinImageFile, setPinImageFile] = useState<File | null>(null)
+  const [pinPreviewUrl, setPinPreviewUrl] = useState<string | null>(null)
+  const [pinSubmitting, setPinSubmitting] = useState(false)
+  const [pinError, setPinError] = useState<string | null>(null)
   /** 실시간 접속자 (Supabase Presence). DB 참여자와 병합해 참여자 목록 표시 */
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
   /** Presence 기준 실시간 접속자 수 (presenceState 키 개수). 0이면 DB 참여자 수 사용 */
@@ -160,6 +170,23 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     refetch()
     const unsub = subscribeToRoomParticipants(boardId, () => refetch())
     return () => unsub()
+  }, [useSupabaseWithUuid, boardId])
+
+  /** 5분 고정 전광판: 초기 조회 + Realtime 구독 + 만료 시 자동 해제 */
+  useEffect(() => {
+    if (!useSupabaseWithUuid || !boardId) return
+    getPinnedContent(boardId).then(setPinnedState)
+    const unsub = subscribePinnedContent(boardId, setPinnedState)
+    const interval = setInterval(() => {
+      setPinnedState((prev) => {
+        if (!prev || prev.pinnedUntil.getTime() > Date.now()) return prev
+        return null
+      })
+    }, 5000)
+    return () => {
+      unsub()
+      clearInterval(interval)
+    }
   }, [useSupabaseWithUuid, boardId])
 
   /** 닉네임 모달: ESC 키로 닫기 */
@@ -215,6 +242,20 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     setWritePreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [writeImageFile])
+
+  /** 고정하기 모달: 이미지 선택 시 미리보기 URL */
+  useEffect(() => {
+    if (!pinImageFile) {
+      setPinPreviewUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+      return
+    }
+    const url = URL.createObjectURL(pinImageFile)
+    setPinPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [pinImageFile])
 
   /** 닉네임 모달이 열릴 때 해당 방 참여자 명단 조회 및 에러/상태 초기화 */
   useEffect(() => {
@@ -551,6 +592,66 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setExtendingHourglass(false)
     }
   }, [extendingHourglass, useSupabaseWithUuid, boardId, userId])
+
+  /** 고정하기 전광판: 모래시계 1개 차감 후 5분간 상단 고정 */
+  const handlePinSubmit = useCallback(async () => {
+    if (pinSubmitting || !useSupabaseWithUuid || !boardId) return
+    const current = getHourglasses()
+    if (current < 1) {
+      setPinError('모래시계가 부족합니다.')
+      return
+    }
+    let url = ''
+    if (pinType === 'youtube') {
+      const u = pinInputUrl.trim()
+      if (!getYouTubeVideoId(u)) {
+        setPinError('유효한 유튜브 링크를 입력해 주세요.')
+        return
+      }
+      url = u
+    } else {
+      if (pinImageFile) {
+        setPinSubmitting(true)
+        setPinError(null)
+        const uploaded = await uploadChatImage(pinImageFile, boardId)
+        if (!uploaded) {
+          setPinError('이미지 업로드에 실패했습니다.')
+          setPinSubmitting(false)
+          return
+        }
+        url = uploaded
+      } else if (pinInputUrl.trim()) {
+        url = pinInputUrl.trim()
+      } else {
+        setPinError('사진을 선택하거나 이미지 주소를 입력해 주세요.')
+        return
+      }
+    }
+    setPinSubmitting(true)
+    setPinError(null)
+    try {
+      const res = await fetch(`/api/boards/${boardId}/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: pinType, url }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setPinError(data?.error ?? '고정에 실패했습니다.')
+        return
+      }
+      const next = Math.max(0, current - 1)
+      persistHourglasses(next)
+      setHourglassesState(next)
+      setShowPinModal(false)
+      setPinInputUrl('')
+      setPinImageFile(null)
+      setPinError(null)
+      getPinnedContent(boardId).then(setPinnedState)
+    } finally {
+      setPinSubmitting(false)
+    }
+  }, [pinSubmitting, useSupabaseWithUuid, boardId, pinType, pinInputUrl, pinImageFile])
 
   // 메시지 리스트 자동 스크롤: 새 메시지 추가 시·처음 방 진입 시 맨 아래로 부드럽게 스크롤
   useEffect(() => {
@@ -1473,23 +1574,23 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                         </>
                       )}
                     </div>
-                    {/* 액션: 수정/삭제(본인), 댓글/하트 (순서: 댓글 → 하트) */}
-                    <div className={`flex items-center gap-1 mt-0.5 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
-                      {isOwnMessage && (
-                        <>
-                          <motion.button type="button" onClick={(e) => { e.stopPropagation(); setEditingMessageId(msg.id); setEditingContent(msg.content ?? '') }} className="p-1 rounded text-neon-orange hover:bg-neon-orange/10 text-xs" title="수정">✏️</motion.button>
-                          <motion.button type="button" onClick={(e) => { e.stopPropagation(); setDeleteConfirmMessageId(msg.id) }} className="p-1 rounded text-gray-400 hover:text-red-400 hover:bg-red-500/10 text-xs" title="삭제">🗑️</motion.button>
-                        </>
-                      )}
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id); return n }); }} className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-neon-orange">
-                        💬 {(commentsByTargetId[msg.id]?.length ?? 0)}
-                      </button>
+                    {/* 액션: 하트 → 댓글 → 수정(본인) → 삭제(본인) */}
+                    <div className="flex items-center gap-1 mt-0.5">
                       <motion.button type="button" onClick={() => handleMessageHeart(msg.id)} className={`flex items-center gap-0.5 ${heartedIds.has(msg.id) ? 'text-neon-orange' : 'text-gray-500 hover:text-gray-400'}`} whileTap={{ scale: 0.9 }}>
                         <motion.span className="text-sm" animate={heartAnimations.has(msg.id) ? { scale: [1, 1.2, 1] } : {}} transition={{ duration: 0.25 }}>
                           {heartedIds.has(msg.id) ? '❤️' : '🤍'}
                         </motion.span>
                         <span className="text-xs font-bold">{msg.heartCount}</span>
                       </motion.button>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id); return n }); }} className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-neon-orange">
+                        💬 {(commentsByTargetId[msg.id]?.length ?? 0)}
+                      </button>
+                      {isOwnMessage && (
+                        <>
+                          <motion.button type="button" onClick={(e) => { e.stopPropagation(); setEditingMessageId(msg.id); setEditingContent(msg.content ?? '') }} className="p-1 rounded text-neon-orange hover:bg-neon-orange/10 text-xs" title="수정">✏️</motion.button>
+                          <motion.button type="button" onClick={(e) => { e.stopPropagation(); setDeleteConfirmMessageId(msg.id) }} className="p-1 rounded text-gray-400 hover:text-red-400 hover:bg-red-500/10 text-xs" title="삭제">🗑️</motion.button>
+                        </>
+                      )}
                     </div>
                   </div>
                   </div>
@@ -1707,23 +1808,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
 
               <div className="flex items-center justify-between pt-2 border-t border-white/10 relative flex-wrap gap-y-2">
                 <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(post.id)) n.delete(post.id); else n.add(post.id); return n }); }}
-                    className="flex items-center gap-1 text-gray-400 hover:text-neon-orange transition-colors"
-                  >
-                    <span>💬</span>
-                    <span>댓글 {(commentsByTargetId[post.id]?.length ?? 0)}개</span>
-                  </button>
-                </div>
-                <div className="relative z-10 flex items-center gap-2 text-xs text-gray-500">
-                  <span>클릭하여 하트 보내기</span>
                   <motion.button
                     onClick={(e) => {
                       e.stopPropagation()
                       handleHeart(post.id)
                     }}
-                    className={`flex items-center gap-2 ${postHeartedIds.has(post.id) ? 'text-[#FF6B00]' : 'text-gray-500 hover:text-gray-400'}`}
+                    className={`flex items-center gap-2 relative z-10 ${postHeartedIds.has(post.id) ? 'text-[#FF6B00]' : 'text-gray-500 hover:text-gray-400'}`}
                     whileHover={{ scale: 1.08 }}
                     whileTap={{ scale: 0.92 }}
                   >
@@ -1749,7 +1839,16 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                       </motion.div>
                     )}
                   </AnimatePresence>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(post.id)) n.delete(post.id); else n.add(post.id); return n }); }}
+                    className="flex items-center gap-1 text-gray-400 hover:text-neon-orange transition-colors"
+                  >
+                    <span>💬</span>
+                    <span>댓글 {(commentsByTargetId[post.id]?.length ?? 0)}개</span>
+                  </button>
                 </div>
+                <span className="text-xs text-gray-500">클릭하여 하트 보내기</span>
               </div>
               {expandedComments.has(post.id) && (
                 <div className="mt-3 pt-3 border-t border-white/10 space-y-2" onClick={(e) => e.stopPropagation()}>
