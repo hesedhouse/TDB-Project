@@ -20,6 +20,7 @@ import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hour
 import { getPinnedContent, subscribePinnedContent, getYouTubeVideoId, getPinTier, type PinnedState } from '@/lib/supabase/pinnedContent'
 import { shareBoard } from '@/lib/shareBoard'
 import { addOrUpdateSession, findSession } from '@/lib/activeSessions'
+import { upsertWarpZone } from '@/lib/supabase/warpZones'
 import { getRandomNickname } from '@/lib/randomNicknames'
 import type { Message } from '@/lib/supabase/types'
 
@@ -41,8 +42,6 @@ interface PulseFeedProps {
   /** 방 표시명 (예: #키워드) */
   initialBoardName?: string | null
 }
-
-type SortType = 'latest' | 'popular'
 
 /** 포스트/메시지별 댓글 (로컬 상태, image_c91edc 스타일) */
 export interface Comment {
@@ -66,7 +65,6 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   /** Supabase 사용 시 반드시 UUID인 경우만 API 호출 (400 에러 방지) */
   const useSupabaseWithUuid = useSupabase && isValidUuid(boardId)
 
-  const [sortType, setSortType] = useState<SortType>('latest')
   const [posts, setPosts] = useState<Post[]>(mockPosts.filter(p => p.boardId === boardId))
   const [progress, setProgress] = useState(100)
   const [lastClickTime, setLastClickTime] = useState<{ [key: string]: number }>({})
@@ -882,12 +880,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [posts, board])
 
-  const sortedPosts = [...(posts ?? [])].sort((a, b) => {
-    if (sortType === 'popular') {
-      return (b?.heartCount ?? 0) - (a?.heartCount ?? 0)
-    }
-    return (b?.createdAt ? new Date(b.createdAt).getTime() : 0) - (a?.createdAt ? new Date(a.createdAt).getTime() : 0)
-  })
+  const sortedPosts = [...(posts ?? [])].sort((a, b) =>
+    (b?.createdAt ? new Date(b.createdAt).getTime() : 0) - (a?.createdAt ? new Date(a.createdAt).getTime() : 0)
+  )
 
   /** 목업 포스트: 하트 토글 (+1 / -1), 로컬에 선택 저장 */
   const handleHeart = (postId: string) => {
@@ -1048,13 +1043,15 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         window.sessionStorage.setItem(`${ROOM_NICKNAME_KEY_PREFIX}${boardId}`, name)
         window.sessionStorage.setItem(`${ROOM_CHARACTER_KEY_PREFIX}${boardId}`, String(selectedCharacterInModal))
       } catch {}
-      addOrUpdateSession({
+      const sessionPayload = {
         boardId,
         boardName: (initialBoardName ?? '').trim() || `#${boardId}`,
         nickname: name,
         keyword: (roomIdFromUrl ?? boardId).toString().trim(),
         expiresAt: initialExpiresAt != null ? new Date(initialExpiresAt).getTime() : undefined,
-      })
+      }
+      addOrUpdateSession(sessionPayload)
+      if (userId) void upsertWarpZone(userId, sessionPayload)
     }
     setEffectiveCharacter(selectedCharacterInModal)
     setEffectiveNickname(name)
@@ -1062,7 +1059,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId, selectedCharacterInModal])
 
   return (
-    <div className="min-h-screen h-full flex flex-col bg-midnight-black text-white safe-bottom pt-6">
+    <div className="min-h-screen h-full flex flex-col overflow-hidden bg-midnight-black text-white safe-bottom pt-6">
       <AnimatePresence>
         {nicknameModalMounted && showNicknameModal && (
           <motion.div
@@ -1307,8 +1304,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         )}
       </AnimatePresence>
 
-      {/* Top Bar with Progress */}
-      <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top pt-4 sm:pt-5 pb-3 md:pb-2">
+      {/* 상단 파티션: 헤더 + 전광판 (스크롤 없음) */}
+      <div className="flex-none shrink-0">
+      <div className="z-10 glass-strong border-b border-neon-orange/20 safe-top pt-4 sm:pt-5 pb-3 md:pb-2">
         <div className="px-2 py-2 sm:px-4 sm:py-3">
           <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-0.5 sm:gap-x-2 mb-4">
             {/* 왼쪽 그룹: 모바일은 화살표만, 데스크톱은 ← 뒤로 */}
@@ -1551,34 +1549,6 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="flex gap-2 px-3 py-3 sm:p-4 border-b border-gray-800">
-        <motion.button
-          onClick={() => setSortType('latest')}
-          className={`flex-1 py-2 rounded-xl font-semibold transition-all ${
-            sortType === 'latest'
-              ? 'bg-neon-orange text-white neon-glow'
-              : 'glass text-gray-400'
-          }`}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <span className="text-sm sm:text-base">최신순</span>
-        </motion.button>
-        <motion.button
-          onClick={() => setSortType('popular')}
-          className={`flex-1 py-2 rounded-xl font-semibold transition-all ${
-            sortType === 'popular'
-              ? 'bg-neon-orange text-white neon-glow'
-              : 'glass text-gray-400'
-          }`}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <span className="text-sm sm:text-base">인기순</span>
-        </motion.button>
-      </div>
-
       {/* 5분 전광판: 고정된 영상/사진 + 신고(🚨) + 접기/펼치기 */}
       {useSupabaseWithUuid && pinnedState && pinnedState.pinnedUntil.getTime() > Date.now() && (
         <div className="relative mx-2 mt-2 sm:mx-3 sm:mt-3 rounded-xl overflow-hidden border border-neon-orange/30 bg-black/40">
@@ -1606,7 +1576,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 >
                   <span>펼치기</span>
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                    <path d="M18 15l-6-6-6 6" />
+                    <path d="M6 9l6 6 6-6" />
                   </svg>
                 </motion.button>
               </div>
@@ -1725,7 +1695,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   aria-label="전광판 접기"
                 >
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                    <path d="M6 9l6 6 6-6" />
+                    <path d="M18 15l-6-6-6 6" />
                   </svg>
                   접기
                 </motion.button>
@@ -1734,20 +1704,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
           )}
         </div>
       )}
+      </div>
 
-      {/* 포스트/메시지 리스트 (Supabase 연동 시 포스트 스타일 카드로 통일) */}
+      {/* 중간 파티션: 채팅 메시지 리스트 (이 영역만 스크롤) + 하단 입력 */}
       {useSupabaseWithUuid && (
-        <div className="flex flex-col flex-1 min-h-0 h-full">
-          <div
-            ref={listRef}
-            className="flex-1 min-h-0 overflow-y-auto flex flex-col px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-32 sm:pb-28 scrollbar-hide"
-          >
+        <>
+        <div
+          ref={listRef}
+          className="flex-1 min-h-0 overflow-y-auto flex flex-col px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-2 scrollbar-hide"
+        >
             {[...messages]
-              .sort((a, b) =>
-                sortType === 'popular'
-                  ? b.heartCount - a.heartCount
-                  : a.createdAt.getTime() - b.createdAt.getTime()
-              )
+              .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
               .map((msg) => {
                 const isOwnMessage = userId != null && msg.userId != null && userId === msg.userId
                 return (
@@ -1912,10 +1879,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               </div>
             )}
             <div ref={feedEndRef} />
-          </div>
+        </div>
 
-          {/* 하단 간단 댓글 입력 */}
-          <div className="fixed bottom-0 left-0 right-0 glass-strong border-t border-neon-orange/20 safe-bottom px-3 py-2.5 sm:px-4 sm:py-3">
+        {/* 하단 파티션: 채팅 입력 (스크롤 없음) */}
+        <div className="flex-none shrink-0 glass-strong border-t border-neon-orange/20 safe-bottom px-3 py-2.5 sm:px-4 sm:py-3">
             <div className="app-shell mx-auto flex gap-2 items-center">
               <motion.button
                 type="button"
@@ -1952,8 +1919,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 {sending ? <span className="text-sm animate-pulse">⏳</span> : <span>➤</span>}
               </motion.button>
             </div>
-          </div>
         </div>
+        </>
       )}
 
       {/* Feed - 포스트 리스트 (Supabase 미사용 시 목업, image_c91edc 스타일) */}

@@ -17,6 +17,7 @@ import { searchBoards, type BoardRow } from '@/lib/supabase/boards'
 import { getActiveParticipants, getExistingParticipantForUser, subscribeToRoomParticipants } from '@/lib/supabase/roomParticipants'
 import { useTick } from '@/lib/TickContext'
 import { getActiveSessions, removeExpiredSessions, removeSessionByBoardId, type ActiveSession } from '@/lib/activeSessions'
+import { getWarpZones, deleteWarpZoneByBoardId } from '@/lib/supabase/warpZones'
 import type { Board } from '@/lib/mockData'
 
 /** 남은 시간 라벨. 하이드레이션 방지: 마운트된 후에만 시간 표시(서버/클라이언트 동일 초기값) */
@@ -153,19 +154,36 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     setHourglasses(getHourglasses())
   }, [])
 
+  /** 워프존 초기 로딩: 로그인 시 Supabase DB에서 fetch, 비로그인 시 localStorage */
   useEffect(() => {
-    removeExpiredSessions()
-    setActiveSessions(getActiveSessions())
-  }, [])
-
-  /** 만료된 방 자동 제거: 1초마다 갱신 */
-  useEffect(() => {
-    const id = setInterval(() => {
+    if (useSupabase && user?.id) {
+      getWarpZones(user.id).then((sessions) => {
+        const now = Date.now()
+        const valid = sessions.filter((s) => s.expiresAt == null || s.expiresAt > now)
+        setActiveSessions(valid)
+      })
+    } else {
       removeExpiredSessions()
       setActiveSessions(getActiveSessions())
+    }
+  }, [useSupabase, user?.id])
+
+  /** 만료된 방 자동 제거: 1초마다 갱신 (로그인 시 DB에서 다시 fetch) */
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (useSupabase && user?.id) {
+        getWarpZones(user.id).then((sessions) => {
+          const now = Date.now()
+          const valid = sessions.filter((s) => s.expiresAt == null || s.expiresAt > now)
+          setActiveSessions(valid)
+        })
+      } else {
+        removeExpiredSessions()
+        setActiveSessions(getActiveSessions())
+      }
     }, 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [useSupabase, user?.id])
 
   // 초기 플로팅 태그: boards + trending_keywords 혼합 (Supabase 사용 시)
   useEffect(() => {
@@ -507,12 +525,19 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     }, 400)
   }, [router])
 
-  /** 워프존에서 방 제거 */
-  const handleRemoveSession = useCallback((e: React.MouseEvent, session: ActiveSession) => {
-    e.stopPropagation()
-    removeSessionByBoardId(session.boardId)
-    setActiveSessions((prev) => prev.filter((s) => s.boardId !== session.boardId))
-  }, [])
+  /** 워프존에서 방 제거: 로그인 시 Supabase DB 삭제, 항상 로컬 state 갱신 */
+  const handleRemoveSession = useCallback(
+    async (e: React.MouseEvent, session: ActiveSession) => {
+      e.stopPropagation()
+      if (useSupabase && user?.id) {
+        await deleteWarpZoneByBoardId(user.id, session.boardId)
+      } else {
+        removeSessionByBoardId(session.boardId)
+      }
+      setActiveSessions((prev) => prev.filter((s) => s.boardId !== session.boardId))
+    },
+    [useSupabase, user?.id]
+  )
 
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom pt-14 md:pt-6 px-6 max-w-7xl mx-auto">
