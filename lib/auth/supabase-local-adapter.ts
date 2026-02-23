@@ -41,13 +41,17 @@ export function SupabaseLocalAdapter(options: SupabaseLocalAdapterOptions): Adap
 
   return {
     async createUser(user: Omit<AdapterUser, 'id'>) {
-      // id는 넣지 않음 → DB가 UUID 생성. 네이버/구글 등 소셜 ID가 절대 들어가지 않도록 함.
+      // id 제외, 이메일 기준 upsert → signIn에서 먼저 insert해도 중복 없음. DB가 UUID 생성.
       const { id: _id, ...rest } = user as AdapterUser
-      const insert: Record<string, unknown> = {
+      const payload: Record<string, unknown> = {
         ...rest,
         emailVerified: user.emailVerified?.toISOString?.() ?? null,
       }
-      const { data, error } = await supabase.from('users').insert(insert).select().single()
+      const { data, error } = await supabase
+        .from('users')
+        .upsert(payload, { onConflict: 'email' })
+        .select()
+        .single()
       if (error) throw error
       return format<AdapterUser>(data as Record<string, unknown>)
     },

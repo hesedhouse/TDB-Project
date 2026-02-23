@@ -88,6 +88,22 @@ export async function sendMessage(params: {
   const supabase = createClient()
   if (!supabase) return null
 
+  // user_id는 반드시 session.user.id(public.users의 UUID). null 또는 이메일 형식이면 전송 중단.
+  const rawUid = params.userId != null && params.userId !== '' ? String(params.userId).trim() : null
+  if (rawUid !== null && rawUid !== '') {
+    if (!isValidUuid(rawUid)) {
+      console.error('[sendMessage] user_id가 UUID가 아닙니다. session.user.id(DB UUID)를 사용하세요.', { userId: rawUid })
+      return null
+    }
+    if (rawUid.includes('@')) {
+      console.error('[sendMessage] user_id에 이메일이 들어갈 수 없습니다. session.user.id(UUID)를 사용하세요.', { userId: rawUid })
+      return null
+    }
+  } else {
+    console.error('[sendMessage] user_id가 null 또는 빈 값입니다. 로그인 세션의 session.user.id를 전달하세요.')
+    return null
+  }
+
   const content = params.content.trim()
   const { data: bannedRows } = await supabase.from('banned_words').select('word')
   const bannedWords = (bannedRows ?? [])
@@ -110,11 +126,7 @@ export async function sendMessage(params: {
     content,
     heart_count: 0,
     image_url: params.imageUrl ?? null,
-  }
-  // user_id는 public.users(id) FK → 유효한 UUID일 때만 포함 (이메일/소셜 ID 넣지 않음, null 요청 방지)
-  const uid = params.userId != null && params.userId !== '' ? String(params.userId).trim() : null
-  if (uid && isValidUuid(uid)) {
-    row.user_id = uid
+    user_id: rawUid,
   }
 
   console.log('전송 데이터:', row)

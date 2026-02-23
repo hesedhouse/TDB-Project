@@ -47,39 +47,52 @@ export const authOptions = {
         session.user.email = session.user.email ?? token?.email ?? null
         session.user.name = session.user.name ?? token?.name ?? null
         session.user.image = session.user.image ?? token?.picture ?? token?.image ?? null
-        // 세션 ID는 반드시 public.users.id(UUID). token.sub = 어댑터 user.id(첫 로그인 시 DB insert 후 반환된 UUID)
-        let dbUserId: string | undefined = (token?.sub ?? token?.id) as string | undefined
-        if (typeof dbUserId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbUserId)) {
-          // token.sub가 UUID가 아니면(이메일/소셜 ID 등) 이메일로 public.users 조회해 UUID로 교정
+        // session.user.id는 반드시 public.users.id(UUID). token.sub와 동일한 UUID가 되도록 보장 (이메일/구글 ID 금지).
+        const tokenSub = token?.sub != null && token.sub !== '' ? String(token.sub).trim() : undefined
+        const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+        if (tokenSub && isUuid(tokenSub)) {
+          session.user.id = tokenSub
+        } else {
           const email = session.user.email ?? token?.email ?? null
           if (email && typeof email === 'string') {
             const supabase = createServerClient()
             if (supabase) {
               const { data: row } = await supabase.from('users').select('id').eq('email', email).maybeSingle()
               const id = (row as { id?: string } | null)?.id
-              if (id && typeof id === 'string') dbUserId = id
+              if (id && typeof id === 'string') session.user.id = id
+              else session.user.id = tokenSub ?? session.user.id
+            } else {
+              session.user.id = tokenSub ?? session.user.id
             }
+          } else {
+            session.user.id = tokenSub ?? session.user.id
           }
         }
-        session.user.id = dbUserId ?? session.user.id
       }
       return session
     },
     async signIn({ user, account }: { user: AdapterUser; account: { provider?: string } | null }) {
-      // 네이버/구글 첫 로그인 시 어댑터가 이미 public.users에 insert 후 user.id = DB UUID로 반환함
       const email = user?.email?.trim()
       if (email) {
         const supabase = createServerClient()
         if (supabase) {
-          const { data } = await supabase
-            .from('users')
-            .select('is_banned')
-            .eq('email', email)
-            .maybeSingle()
-          const row = data as { is_banned?: boolean } | null
+          const { data: existing } = await supabase.from('users').select('id, is_banned').eq('email', email).maybeSingle()
+          const row = existing as { id?: string; is_banned?: boolean } | null
           if (row?.is_banned === true) {
             const base = process.env.NEXTAUTH_URL ?? ''
             return `${base}/auth/error?error=Banned`
+          }
+          // 구글/네이버 등 첫 로그인 시 public.users에 없으면 insert → 로그인 완료 시점에 반드시 행 존재 (23503 방지)
+          if (!row?.id) {
+            await supabase.from('users').upsert(
+              {
+                email,
+                name: user?.name ?? null,
+                image: user?.image ?? null,
+                emailVerified: user?.emailVerified?.toISOString?.() ?? null,
+              },
+              { onConflict: 'email' }
+            )
           }
         }
       }

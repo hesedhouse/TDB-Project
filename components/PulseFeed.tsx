@@ -642,7 +642,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     })
   }, [presenceCount, onlineUsers, activeParticipants])
 
-  /** 닉네임 → 왕관(1~3위) 매핑. 방에 남아있는 참여자(is_active) 중에서만 적용 */
+  /** 닉네임 → 1~3위 매핑. 명예의 전당과 동일하게 🥇🥈🥉 표시 (참여자 리스트 포함) */
   const crownByDisplayName = useMemo(() => {
     const activeSet = new Set(activeParticipants.map((p) => (p.user_display_name ?? '').trim()).filter(Boolean))
     const map = new Map<string, { rank: 1 | 2 | 3; color: string }>()
@@ -1097,9 +1097,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       {/* Top Bar with Progress */}
       <div className="sticky top-0 z-10 glass-strong border-b border-neon-orange/20 safe-top pt-4 sm:pt-5 pb-3 md:pb-2">
         <div className="px-2 py-2 sm:px-4 sm:py-3">
-          <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-1 sm:gap-x-2 mb-4">
-            {/* 왼쪽 그룹: 뒤로(모바일은 화살표만) + 방 제목 + No. 배지 */}
-            <div className="flex items-center gap-1 sm:gap-3 min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-0.5 sm:gap-x-2 mb-4">
+            {/* 왼쪽 그룹: 모바일은 화살표만, 데스크톱은 ← 뒤로 */}
+            <div className="flex items-center gap-0.5 sm:gap-3 min-w-0 flex-1">
               <button
                 onClick={onBack}
                 className="text-gray-400 hover:text-white text-base flex-shrink-0 p-0.5 -m-0.5 sm:p-0 sm:m-0"
@@ -1136,8 +1136,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 )}
               </button>
             </div>
-            {/* 오른쪽 그룹: 공유 + 참여자 + 모래시계 + 닉네임(모바일 아이콘만) + 나가기 */}
-            <div className="flex items-center gap-1 flex-shrink-0 min-w-0">
+            {/* 오른쪽 그룹: 공유 + 참여자 + 모래시계 + 닉네임(모바일 👤만) + 나가기 */}
+            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 min-w-0">
               <motion.button
                 type="button"
                 onClick={handleShare}
