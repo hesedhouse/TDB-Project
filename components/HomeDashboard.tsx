@@ -544,9 +544,9 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
               <motion.button
                 type="button"
                 onClick={async () => {
-                  if (isNextAuthUser) await nextAuthSignOut({ callbackUrl: '/login' })
+                  if (isNextAuthUser) await nextAuthSignOut({ callbackUrl: '/' })
                   else await signOutSupabase()
-                  router.replace('/login')
+                  router.replace('/')
                 }}
                 className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-medium border-2 border-[#FF6B00] text-gray-200 bg-transparent hover:bg-[#FF6B00] hover:text-white transition-colors whitespace-nowrap"
                 style={{ boxShadow: 'none' }}

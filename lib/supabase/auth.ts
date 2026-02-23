@@ -58,7 +58,7 @@ export function useAuth() {
   const signIn = useCallback(async (provider: AuthProvider, returnUrl?: string) => {
     const supabase = createClient()
     if (!supabase) return
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://poppinapps.vercel.app').trim().replace(/\/$/, '')
+    const baseUrl = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || '')).trim().replace(/\/$/, '') || '/'
     const redirectTo = returnUrl ? `${baseUrl}${returnUrl.startsWith('/') ? returnUrl : `/${returnUrl}`}` : `${baseUrl}/`
     await supabase.auth.signInWithOAuth({
       provider,
