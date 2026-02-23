@@ -58,8 +58,16 @@ export async function POST(
       .eq('id', boardId)
 
     if (updateErr) {
-      console.error('[api/boards/pin]', updateErr)
-      return NextResponse.json({ error: 'Failed to set pinned content' }, { status: 500 })
+      console.error('[api/boards/pin] Supabase error:', {
+        message: updateErr.message,
+        details: updateErr.details,
+        code: updateErr.code,
+        hint: updateErr.hint,
+      })
+      return NextResponse.json(
+        { error: 'Failed to set pinned content', supabase_error: updateErr.message },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({
