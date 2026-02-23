@@ -17,7 +17,7 @@ import { recordContribution, getTopContributors, subscribeToContributions, type 
 import { subscribeBoardPresence, type PresenceUser } from '@/lib/supabase/presence'
 import { joinRoom, leaveRoom, getActiveParticipants, getExistingParticipantForUser, subscribeToRoomParticipants, type RoomParticipant } from '@/lib/supabase/roomParticipants'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
-import { getPinnedContent, subscribePinnedContent, getYouTubeVideoId, type PinnedState } from '@/lib/supabase/pinnedContent'
+import { getPinnedContent, subscribePinnedContent, getYouTubeVideoId, getPinTier, type PinnedState } from '@/lib/supabase/pinnedContent'
 import { shareBoard } from '@/lib/shareBoard'
 import { addOrUpdateSession, findSession } from '@/lib/activeSessions'
 import { getRandomNickname } from '@/lib/randomNicknames'
@@ -127,6 +127,18 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [pinPreviewUrl, setPinPreviewUrl] = useState<string | null>(null)
   const [pinSubmitting, setPinSubmitting] = useState(false)
   const [pinError, setPinError] = useState<string | null>(null)
+  /** 전광판 신고: 팝업 표시, 선택 사유, 제출 중 */
+  const [showReportPopover, setShowReportPopover] = useState(false)
+  const [reportReason, setReportReason] = useState<string>('')
+  const [reportSubmitting, setReportSubmitting] = useState(false)
+  /** 전광판 접기 상태. 한 번 접으면 사용자가 펼치기 전까지 유지 */
+  const [pinnedCollapsed, setPinnedCollapsed] = useState(false)
+  /** 새 고정 콘텐츠 시 자동 펼치기용: 마지막으로 본 pinned_until */
+  const lastPinnedUntilRef = useRef<string | null>(null)
+  /** 전광판 남은 시간 실시간 표시용 (1초마다 갱신) */
+  const [pinnedTimerTick, setPinnedTimerTick] = useState(0)
+  /** 전광판 연장 로딩 */
+  const [extendPinnedLoading, setExtendPinnedLoading] = useState(false)
   /** 실시간 접속자 (Supabase Presence). DB 참여자와 병합해 참여자 목록 표시 */
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
   /** Presence 기준 실시간 접속자 수 (presenceState 키 개수). 0이면 DB 참여자 수 사용 */
@@ -188,6 +200,50 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       clearInterval(interval)
     }
   }, [useSupabaseWithUuid, boardId])
+
+  /** 새 콘텐츠가 고정되면(pinned_until 갱신) 접혀 있던 전광판 자동 펼침 */
+  useEffect(() => {
+    if (!pinnedState || pinnedState.pinnedUntil.getTime() <= Date.now()) {
+      lastPinnedUntilRef.current = null
+      return
+    }
+    const key = pinnedState.pinnedUntil.toISOString()
+    if (lastPinnedUntilRef.current !== key) {
+      lastPinnedUntilRef.current = key
+      setPinnedCollapsed(false)
+    }
+  }, [pinnedState])
+
+  /** 전광판 남은 시간 실시간 갱신 (1초마다) */
+  useEffect(() => {
+    if (!pinnedState || pinnedState.pinnedUntil.getTime() <= Date.now()) return
+    const interval = setInterval(() => setPinnedTimerTick((t) => t + 1), 1000)
+    return () => clearInterval(interval)
+  }, [pinnedState])
+
+  /** 전광판 이어달리기: 타입 A 1개/1분, 타입 B 3개/5분. 성공 시에만 차감. 방에 있는 누구나 가능 */
+  const handleExtendPinned = useCallback(async () => {
+    if (extendPinnedLoading || !useSupabaseWithUuid || !boardId || !pinnedState) return
+    if (pinnedState.pinnedUntil.getTime() <= Date.now()) return
+    const tier = getPinTier(pinnedState.content.type, pinnedState.content.url)
+    if (!tier) return
+    const current = getHourglasses()
+    if (current < tier.hourglasses) {
+      router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')
+      return
+    }
+    setExtendPinnedLoading(true)
+    try {
+      const res = await fetch(`/api/boards/${boardId}/pin/extend`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) return
+      persistHourglasses(Math.max(0, current - tier.hourglasses))
+      setHourglassesState(getHourglasses())
+      getPinnedContent(boardId).then(setPinnedState)
+    } finally {
+      setExtendPinnedLoading(false)
+    }
+  }, [extendPinnedLoading, useSupabaseWithUuid, boardId, pinnedState, pathname, router])
 
   /** 닉네임 모달: ESC 키로 닫기 */
   useEffect(() => {
@@ -593,14 +649,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [extendingHourglass, useSupabaseWithUuid, boardId, userId])
 
-  /** 고정하기 전광판: 모래시계 1개 차감 후 5분간 상단 고정 */
+  /** 고정하기 전광판: 타입별 모래시계 차감 후 해당 시간 상단 고정 (API 성공 시에만 차감) */
   const handlePinSubmit = useCallback(async () => {
     if (pinSubmitting || !useSupabaseWithUuid || !boardId) return
-    const current = getHourglasses()
-    if (current < 1) {
-      setPinError('모래시계가 부족합니다.')
-      return
-    }
     let url = ''
     if (pinType === 'youtube') {
       const u = pinInputUrl.trim()
@@ -627,20 +678,30 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         return
       }
     }
+    const tier = getPinTier(pinType, url)
+    if (!tier) {
+      setPinError('콘텐츠를 인식할 수 없습니다.')
+      return
+    }
+    const current = getHourglasses()
+    if (current < tier.hourglasses) {
+      setPinError('모래시계가 부족합니다.')
+      return
+    }
     setPinSubmitting(true)
     setPinError(null)
     try {
       const res = await fetch(`/api/boards/${boardId}/pin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: pinType, url }),
+        body: JSON.stringify({ type: pinType, url, duration_minutes: tier.durationMinutes }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setPinError(data?.error ?? '고정에 실패했습니다.')
         return
       }
-      const next = Math.max(0, current - 1)
+      const next = Math.max(0, current - tier.hourglasses)
       persistHourglasses(next)
       setHourglassesState(next)
       setShowPinModal(false)
@@ -652,6 +713,43 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setPinSubmitting(false)
     }
   }, [pinSubmitting, useSupabaseWithUuid, boardId, pinType, pinInputUrl, pinImageFile])
+
+  /** 전광판 신고 제출 (사유 선택 후). 30명 이상 시 자동 해제는 API에서 처리 */
+  const handleReportPinned = useCallback(async () => {
+    if (reportSubmitting || !reportReason.trim() || !useSupabaseWithUuid || !boardId || !pinnedState) return
+    let fingerprint: string | null = null
+    if (typeof window !== 'undefined') {
+      try {
+        const key = 'tdb-report-fp'
+        let fp = sessionStorage.getItem(key)
+        if (!fp) {
+          fp = crypto.randomUUID?.() ?? `anon-${Date.now()}-${Math.random().toString(36).slice(2)}`
+          sessionStorage.setItem(key, fp)
+        }
+        fingerprint = fp
+      } catch {}
+    }
+    setReportSubmitting(true)
+    try {
+      const res = await fetch(`/api/boards/${boardId}/pin/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: reportReason.trim(),
+          user_id: userId ?? null,
+          reporter_fingerprint: fingerprint,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setShowReportPopover(false)
+        setReportReason('')
+        if (data?.unpinned) getPinnedContent(boardId).then(setPinnedState)
+      }
+    } finally {
+      setReportSubmitting(false)
+    }
+  }, [reportSubmitting, reportReason, useSupabaseWithUuid, boardId, pinnedState, userId])
 
   // 메시지 리스트 자동 스크롤: 새 메시지 추가 시·처음 방 진입 시 맨 아래로 부드럽게 스크롤
   useEffect(() => {
@@ -1328,6 +1426,19 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 </AnimatePresence>
               </div>
               <span className="text-amber-400 text-sm sm:text-base flex-shrink-0" aria-hidden>⏳</span>
+              {useSupabaseWithUuid && (
+                <motion.button
+                  type="button"
+                  onClick={() => setShowPinModal(true)}
+                  className="flex-shrink-0 px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-lg border border-neon-orange/50 text-neon-orange hover:bg-neon-orange/20 text-xs font-semibold transition-colors"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.98 }}
+                  title="전광판 고정"
+                  aria-label="전광판 고정"
+                >
+                  전광판 고정
+                </motion.button>
+              )}
               <motion.button
                 type="button"
                 onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
@@ -1483,6 +1594,162 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
           <span className="text-sm sm:text-base">인기순</span>
         </motion.button>
       </div>
+
+      {/* 5분 전광판: 고정된 영상/사진 + 신고(🚨) + 접기/펼치기 */}
+      {useSupabaseWithUuid && pinnedState && pinnedState.pinnedUntil.getTime() > Date.now() && (
+        <div className="relative mx-2 mt-2 sm:mx-3 sm:mt-3 rounded-xl overflow-hidden border border-neon-orange/30 bg-black/40">
+          {pinnedCollapsed ? (
+            /* 접힌 상태: 최소화 바 */
+            <div className="flex items-center justify-between gap-2 px-3 py-2 flex-wrap">
+              <span className="text-xs text-gray-400">현재 고정된 콘텐츠가 있습니다</span>
+              <div className="flex items-center gap-1.5">
+                <motion.button
+                  type="button"
+                  onClick={handleExtendPinned}
+                  disabled={extendPinnedLoading || hourglasses < 1}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-amber-500/20 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50"
+                  aria-label="전광판 +1분 연장 (모래시계 1개)"
+                >
+                  {extendPinnedLoading ? '연장 중…' : '⏳ +1분 연장 (모래시계 1개)'}
+                </motion.button>
+                <motion.button
+                  type="button"
+                  onClick={() => setPinnedCollapsed(false)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-neon-orange/20 text-neon-orange border border-neon-orange/40 hover:bg-neon-orange/30"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  aria-label="전광판 펼치기"
+                >
+                  <span>펼치기</span>
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <path d="M18 15l-6-6-6 6" />
+                  </svg>
+                </motion.button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="absolute top-2 right-2 z-10">
+                <motion.button
+                  type="button"
+                  onClick={() => setShowReportPopover((v) => !v)}
+                  className="px-2 py-1 rounded-lg text-xs font-medium bg-red-500/20 text-red-400 border border-red-400/40 hover:bg-red-500/30"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  aria-label="전광판 신고"
+                >
+                  신고 🚨
+                </motion.button>
+                {showReportPopover && (
+                  <div className="absolute right-0 top-full mt-1 w-56 rounded-xl glass-strong border border-white/20 p-3 shadow-xl z-20">
+                    <p className="text-xs font-semibold text-white/90 mb-2">신고 사유를 선택해 주세요</p>
+                    <div className="space-y-1">
+                      {[
+                        { value: 'spam', label: '스팸 / 광고' },
+                        { value: 'inappropriate', label: '부적절한 콘텐츠' },
+                        { value: 'harassment', label: '혐오·괴롭힘' },
+                        { value: 'copyright', label: '저작권 침해' },
+                        { value: 'other', label: '기타' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setReportReason(opt.value)}
+                          className={`block w-full text-left px-2 py-1.5 rounded-lg text-sm ${reportReason === opt.value ? 'bg-neon-orange/30 text-white' : 'text-gray-300 hover:bg-white/10'}`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setShowReportPopover(false); setReportReason('') }}
+                        className="flex-1 py-1.5 rounded-lg text-xs border border-white/30 text-gray-300"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleReportPinned}
+                        disabled={!reportReason || reportSubmitting}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium bg-red-500 text-white disabled:opacity-50"
+                      >
+                        {reportSubmitting ? '제출 중…' : '신고하기'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {pinnedState.content.type === 'youtube' ? (
+                (() => {
+                  const videoId = getYouTubeVideoId(pinnedState.content.url)
+                  return videoId ? (
+                    <div className="aspect-video w-full">
+                      <iframe
+                        title="고정 영상"
+                        src={`https://www.youtube.com/embed/${videoId}`}
+                        className="w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : null
+                })()
+              ) : (
+                <img
+                  src={pinnedState.content.url}
+                  alt="고정 사진"
+                  className="w-full max-h-[280px] object-cover"
+                />
+              )}
+              <div className="flex items-center justify-between gap-2 px-2 py-1.5 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {(() => {
+                    const rem = Math.max(0, pinnedState.pinnedUntil.getTime() - Date.now())
+                    const m = Math.floor(rem / 60000)
+                    const s = Math.floor((rem % 60000) / 1000)
+                    const isUrgent = rem <= 20 * 1000
+                    return (
+                      <span
+                        className={`text-[10px] font-mono tabular-nums ${isUrgent ? 'text-red-400 animate-pulse' : 'text-gray-500'}`}
+                        aria-live="polite"
+                      >
+                        ⏳ 남은 시간: {String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
+                      </span>
+                    )
+                  })()}
+                  <motion.button
+                    type="button"
+                    onClick={handleExtendPinned}
+                    disabled={extendPinnedLoading || hourglasses < 1}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-amber-500/20 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    whileHover={hourglasses >= 1 && !extendPinnedLoading ? { scale: 1.02 } : {}}
+                    whileTap={hourglasses >= 1 && !extendPinnedLoading ? { scale: 0.98 } : {}}
+                    aria-label="전광판 +1분 연장 (모래시계 1개)"
+                    title="모래시계 1개 · +1분"
+                  >
+                    {extendPinnedLoading ? '연장 중…' : '⏳ +1분 연장 (모래시계 1개)'}
+                  </motion.button>
+                </div>
+                <motion.button
+                  type="button"
+                  onClick={() => setPinnedCollapsed(true)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-gray-400 border border-white/20 hover:bg-white/10 hover:text-gray-300"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  aria-label="전광판 접기"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                  접기
+                </motion.button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 포스트/메시지 리스트 (Supabase 연동 시 포스트 스타일 카드로 통일) */}
       {useSupabaseWithUuid && (
@@ -2056,6 +2323,135 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               >
                 {uploadingImage ? '업로드 중...' : '작성하기'}
               </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 전광판 고정 모달: 타입별 요금·시간 안내 + 충전 유도 */}
+      <AnimatePresence>
+        {showPinModal && (
+          <motion.div
+            className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => { setShowPinModal(false); setPinError(null) }}
+          >
+            <motion.div
+              className="w-full sm:max-w-lg glass-strong rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 max-h-[85vh] overflow-y-auto safe-bottom"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-black text-white">전광판 고정</h2>
+                <button
+                  type="button"
+                  onClick={() => { setShowPinModal(false); setPinError(null) }}
+                  className="text-gray-400 hover:text-white p-1"
+                  aria-label="닫기"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex gap-2 mb-3">
+                <motion.button
+                  type="button"
+                  onClick={() => { setPinType('youtube'); setPinError(null) }}
+                  className={`flex-1 py-2 rounded-xl text-sm font-semibold ${pinType === 'youtube' ? 'bg-neon-orange text-white' : 'glass text-gray-400 border border-white/20'}`}
+                >
+                  유튜브 링크
+                </motion.button>
+                <motion.button
+                  type="button"
+                  onClick={() => { setPinType('image'); setPinError(null) }}
+                  className={`flex-1 py-2 rounded-xl text-sm font-semibold ${pinType === 'image' ? 'bg-neon-orange text-white' : 'glass text-gray-400 border border-white/20'}`}
+                >
+                  사진
+                </motion.button>
+              </div>
+              {pinType === 'youtube' ? (
+                <input
+                  type="url"
+                  value={pinInputUrl}
+                  onChange={(e) => { setPinInputUrl(e.target.value); setPinError(null) }}
+                  placeholder="유튜브 링크 붙여넣기"
+                  className="w-full px-4 py-3 rounded-xl glass border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm"
+                />
+              ) : (
+                <>
+                  <input
+                    ref={writeModalFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { setPinImageFile(e.target.files?.[0] ?? null); setPinError(null) }}
+                  />
+                  <motion.button
+                    type="button"
+                    onClick={() => writeModalFileRef.current?.click()}
+                    className={`w-full px-4 py-3 rounded-xl border text-sm font-medium ${pinImageFile ? 'border-neon-orange bg-neon-orange/20 text-neon-orange' : 'glass border-neon-orange/30 text-neon-orange'}`}
+                  >
+                    {pinImageFile ? '📷 사진 변경' : '📷 사진 선택'}
+                  </motion.button>
+                  <input
+                    type="url"
+                    value={pinInputUrl}
+                    onChange={(e) => { setPinInputUrl(e.target.value); setPinError(null) }}
+                    placeholder="또는 이미지 주소 입력"
+                    className="w-full mt-2 px-4 py-2 rounded-xl glass border border-white/20 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-xs"
+                  />
+                  {pinPreviewUrl && (
+                    <div className="mt-2 rounded-xl overflow-hidden border border-neon-orange/30 inline-block">
+                      <img src={pinPreviewUrl} alt="미리보기" className="max-h-32 w-auto object-contain" />
+                    </div>
+                  )}
+                </>
+              )}
+              {(() => {
+                const hasContent = pinType === 'youtube' ? !!getYouTubeVideoId(pinInputUrl.trim()) : !!(pinImageFile || pinInputUrl.trim())
+                if (!hasContent) return null
+                const urlForTier = pinType === 'youtube' ? pinInputUrl : pinInputUrl.trim() || ' '
+                const tier = getPinTier(pinType, urlForTier)
+                if (!tier) return null
+                const insufficient = hourglasses < tier.hourglasses
+                return (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-sm text-white/90">
+                      이 콘텐츠를 고정하려면 모래시계 <strong className="text-neon-orange">{tier.hourglasses}개</strong>가 필요하며, <strong className="text-neon-orange">{tier.durationMinutes}분</strong> 동안 유지됩니다.
+                    </p>
+                    {insufficient ? (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm text-amber-400">모래시계가 부족합니다.</p>
+                        <motion.button
+                          type="button"
+                          onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
+                          className="w-full py-2.5 rounded-xl font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/50 hover:bg-amber-500/30"
+                        >
+                          충전하러 가기
+                        </motion.button>
+                      </div>
+                    ) : (
+                      <motion.button
+                        type="button"
+                        onClick={handlePinSubmit}
+                        disabled={pinSubmitting}
+                        className="w-full py-3 rounded-xl font-semibold bg-neon-orange text-white disabled:opacity-50"
+                      >
+                        {pinSubmitting ? '고정 중…' : '고정하기'}
+                      </motion.button>
+                    )}
+                  </div>
+                )
+              })()}
+              {pinError && (
+                <p className="mt-2 text-sm text-red-400" role="alert">
+                  {pinError}
+                </p>
+              )}
             </motion.div>
           </motion.div>
         )}

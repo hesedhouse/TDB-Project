@@ -112,10 +112,25 @@ export function getYouTubeVideoId(url: string): string | null {
     /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
     /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
     /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
   ]
   for (const p of patterns) {
     const m = u.match(p)
     if (m?.[1]) return m[1]
   }
   return null
+}
+
+/** 1분 릴레이 전광판: 모든 콘텐츠 동일 규칙 — 모래시계 1개 / 1분 고정·연장 */
+export type PinTier = { hourglasses: 1; durationMinutes: 1 }
+
+export function getPinTier(
+  pinType: 'youtube' | 'image',
+  urlOrEmpty: string
+): PinTier | null {
+  if (pinType === 'image') return { hourglasses: 1, durationMinutes: 1 }
+  const u = (urlOrEmpty ?? '').trim()
+  if (!u) return null
+  if (!getYouTubeVideoId(u)) return null
+  return { hourglasses: 1, durationMinutes: 1 }
 }

@@ -2,9 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/client'
 import { isValidUuid } from '@/lib/supabase/client'
 
-const PIN_DURATION_MS = 5 * 60 * 1000
-
-type PinBody = { type: 'youtube' | 'image'; url: string }
+type PinBody = { type: 'youtube' | 'image'; url: string; duration_minutes?: number }
 
 export async function POST(
   request: Request,
@@ -31,6 +29,7 @@ export async function POST(
     if (!url) {
       return NextResponse.json({ error: 'url required' }, { status: 400 })
     }
+    const pinDurationMs = 60 * 1000
 
     const supabase = createClient()
     if (!supabase) {
@@ -49,7 +48,7 @@ export async function POST(
     }
     const boardId = String((row as { id: string }).id)
 
-    const pinnedUntil = new Date(Date.now() + PIN_DURATION_MS)
+    const pinnedUntil = new Date(Date.now() + pinDurationMs)
     const { error: updateErr } = await supabase
       .from('boards')
       .update({
