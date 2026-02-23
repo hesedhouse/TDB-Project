@@ -76,7 +76,7 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
         videoId,
         playerVars: { rel: 0, start: 0 },
         events: {
-          onReady(async (e: { target: YTPlayerInstance }) => {
+          onReady: async (e: { target: YTPlayerInstance }) => {
             const target = e.target
             playerRef.current = target
             if (pinnedAtMs != null) {
@@ -103,7 +103,7 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
               }
             }, SYNC_CHECK_INTERVAL_MS)
           },
-          onStateChange(e: { data: number; target: YTPlayerInstance }) {
+          onStateChange: (e: { data: number; target: YTPlayerInstance }) => {
             const target = e.target
             if (e.data === YT_PLAYER_STATE_ENDED) {
               onEndedRef.current?.()
