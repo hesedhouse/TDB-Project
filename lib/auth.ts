@@ -49,27 +49,20 @@ export const authOptions = {
         session.user.email = session.user.email ?? token?.email ?? null
         session.user.name = session.user.name ?? token?.name ?? null
         session.user.image = session.user.image ?? token?.picture ?? token?.image ?? null
-        // session.user.id는 반드시 public.users.id(UUID)만 허용. token.sub가 UUID일 때만 사용, 이메일 절대 할당 금지.
-        const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
-        const tokenSub = token?.sub != null && token.sub !== '' ? String(token.sub).trim() : undefined
-        const looksLikeEmail = (s: string) => typeof s === 'string' && s.includes('@')
-        if (tokenSub && isUuid(tokenSub) && !looksLikeEmail(tokenSub)) {
-          session.user.id = tokenSub
-        } else {
-          // token.sub가 UUID가 아니거나 이메일 형태면 DB에서 이메일로 조회한 UUID만 사용
+        // session.user.id는 반드시 DB 고유 번호(user.id UUID). user.email이 아닌 token.sub(= adapter의 user.id)로 고정.
+        session.user.id = token?.sub != null && String(token.sub).trim() !== '' && !String(token.sub).includes('@')
+          ? String(token.sub).trim()
+          : undefined
+        if (session.user.id == null) {
           const email = session.user.email ?? token?.email ?? null
           if (email && typeof email === 'string') {
             const supabase = createServerClient()
             if (supabase) {
               const { data: row } = await supabase.from('users').select('id').eq('email', email).maybeSingle()
               const id = (row as { id?: string } | null)?.id
+              const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
               if (id && typeof id === 'string' && isUuid(id)) session.user.id = id
-              else (session.user as { id?: string }).id = undefined
-            } else {
-              (session.user as { id?: string }).id = undefined
             }
-          } else {
-            (session.user as { id?: string }).id = undefined
           }
         }
       }

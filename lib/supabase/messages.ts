@@ -119,6 +119,8 @@ export async function sendMessage(params: {
   }**/
 
   // id는 넣지 않음 → Supabase가 자동 UUID 생성 (409 Conflict 방지). upsert 사용 안 함.
+  // user_id에는 session.user.id(DB UUID)가 전달된 params.userId가 사용됨.
+  console.log('최종 전송 UUID:', rawUid)
   const row: Record<string, unknown> = {
     board_id: params.boardId,
     author_character: params.authorCharacter,
