@@ -51,13 +51,13 @@ export async function GET(
       row = data as Record<string, unknown>
       has_password = Boolean(row?.password_hash)
     } else if (resWith.error) {
-      console.warn('[api/board] boards.password_hash/room_no 컬럼 없음 또는 오류. fallback 사용.', resWith.error?.message ?? resWith.error)
+      console.warn('[api/boards] boards.password_hash/room_no 컬럼 없음 또는 오류. fallback 사용.', resWith.error?.message ?? resWith.error)
       let resFallback = await buildQuery(selectColsWithoutPassword).maybeSingle()
       if (resFallback.error) {
         resFallback = await buildQuery(selectColsMinimal).maybeSingle()
       }
       if (resFallback.error) {
-        console.error('[api/board/[identifier]]', resFallback.error)
+        console.error('[api/boards/[identifier]]', resFallback.error)
         return NextResponse.json({ error: 'Failed to fetch board' }, { status: 500 })
       }
       row = resFallback.data == null ? null : (resFallback.data as unknown as Record<string, unknown>)
@@ -83,7 +83,7 @@ export async function GET(
     }
     return NextResponse.json(response)
   } catch (e) {
-    console.error('[api/board/[identifier]]', e)
+    console.error('[api/boards/[identifier]]', e)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

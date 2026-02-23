@@ -90,10 +90,10 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     }
     let cancelled = false
     const run = async () => {
-      const res = await fetch(`/api/board/${encodeURIComponent(decodedKeyword)}`)
+      const res = await fetch(`/api/boards/${encodeURIComponent(decodedKeyword)}`)
       if (cancelled) return
       if (res.status === 404) {
-        const createRes = await fetch('/api/board/create', {
+        const createRes = await fetch('/api/boards/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ keyword: decodedKeyword }),
@@ -133,7 +133,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     setVerifying(true)
     setPasswordError(false)
     try {
-      const res = await fetch('/api/board/verify-password', {
+      const res = await fetch('/api/boards/verify-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

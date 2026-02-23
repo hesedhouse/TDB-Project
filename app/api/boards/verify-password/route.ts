@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     } else {
       const res2 = await queryHashOnly.maybeSingle()
       if (res2.error) {
-        console.error('[api/board/verify-password]', res2.error)
+        console.error('[api/boards/verify-password]', res2.error)
         return NextResponse.json({ ok: false, error: 'Failed to verify' }, { status: 500 })
       }
       row = res2.data as { password_hash?: string | null } | null
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     const match = await bcrypt.compare(password, hash)
     return NextResponse.json({ ok: match })
   } catch (e) {
-    console.error('[api/board/verify-password]', e)
+    console.error('[api/boards/verify-password]', e)
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
   }
 }

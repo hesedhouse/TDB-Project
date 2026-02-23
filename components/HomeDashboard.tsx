@@ -377,7 +377,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     setCreatingRoom(true)
     try {
       if (isNumericOnly) {
-        const res = await fetch(`/api/board/${encodeURIComponent(keyword)}`)
+        const res = await fetch(`/api/boards/${encodeURIComponent(keyword)}`)
         if (res.ok) {
           router.push(`/board/${keyword}`)
           return
@@ -395,7 +395,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       }
 
       const password = (passwordOverride !== undefined ? String(passwordOverride).trim() : '').trim() || undefined
-      const res = await fetch('/api/board/create', {
+      const res = await fetch('/api/boards/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

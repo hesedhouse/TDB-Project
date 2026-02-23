@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_URL &&
         String(process.env.NEXT_PUBLIC_SUPABASE_URL).trim().length > 0
     )
-    console.log('[api/board/create] Supabase URL 연결 여부:', supabaseUrlSet ? '설정됨' : '미설정')
+    console.log('[api/boards/create] Supabase URL 연결 여부:', supabaseUrlSet ? '설정됨' : '미설정')
 
     const body = await request.json()
     const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : ''
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     const supabase = createClient()
     if (!supabase) {
-      console.error('[api/board/create] Supabase not configured (env 누락 또는 createClient null)')
+      console.error('[api/boards/create] Supabase not configured (env 누락 또는 createClient null)')
       return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 })
     }
 
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     if (!selectErrWith && existingWith) {
       existing = existingWith as Record<string, unknown>
     } else if (selectErrWith) {
-      console.warn('[api/board/create] boards.password_hash 컬럼 없음 또는 오류. Supabase에서 boards_migration_password.sql 실행 여부 확인.', selectErrWith?.message ?? selectErrWith)
+      console.warn('[api/boards/create] boards.password_hash 컬럼 없음 또는 오류. Supabase에서 boards_migration_password.sql 실행 여부 확인.', selectErrWith?.message ?? selectErrWith)
       const { data: existingWithout, error: selectErrWithout } = await supabase
         .from('boards')
         .select(selectColsWithoutPassword)
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         .maybeSingle()
       if (selectErrWithout) {
         const selErr = selectErrWithout
-        console.error('[api/board/create] select error (상세):', {
+        console.error('[api/boards/create] select error (상세):', {
           message: selErr?.message,
           code: selErr?.code,
           details: selErr?.details,
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       ...(password_hash ? { password_hash } : {}),
     }
-    console.log('[api/board/create] insert payload 확인 (room_no 미포함):', {
+    console.log('[api/boards/create] insert payload 확인 (room_no 미포함):', {
       keys: Object.keys(insertPayload),
       keyword,
       name: insertPayload.name,
@@ -110,14 +110,14 @@ export async function POST(request: Request) {
       inserted = insertWithRes.data as Record<string, unknown>
     } else if (insertWithRes.error && password_hash) {
       const err = insertWithRes.error
-      console.error('[api/board/create] insert 실패 (상세):', {
+      console.error('[api/boards/create] insert 실패 (상세):', {
         message: err?.message,
         code: err?.code,
         details: err?.details,
         hint: err?.hint,
         full: err,
       })
-      console.warn('[api/board/create] password_hash 제외하고 재시도.')
+      console.warn('[api/boards/create] password_hash 제외하고 재시도.')
       const { password_hash: _, ...payloadWithoutPassword } = insertPayload
       const insertWithoutRes = await supabase
         .from('boards')
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
         .single()
       if (insertWithoutRes.error) {
         const err2 = insertWithoutRes.error
-        console.error('[api/board/create] insert 재시도 실패 (상세):', {
+        console.error('[api/boards/create] insert 재시도 실패 (상세):', {
           message: err2?.message,
           code: err2?.code,
           details: err2?.details,
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
       inserted = insertWithoutRes.data as Record<string, unknown>
     } else if (insertWithRes.error) {
       const err = insertWithRes.error
-      console.error('[api/board/create] insert 실패 (상세):', {
+      console.error('[api/boards/create] insert 실패 (상세):', {
         message: err?.message,
         code: err?.code,
         details: err?.details,
@@ -166,7 +166,7 @@ export async function POST(request: Request) {
     return NextResponse.json(toBoardResponse(inserted))
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e))
-    console.error('[api/board/create] 예외 (상세):', {
+    console.error('[api/boards/create] 예외 (상세):', {
       message: err.message,
       name: err.name,
       stack: err.stack,
