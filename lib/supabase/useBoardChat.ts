@@ -55,6 +55,7 @@ export function useBoardChat(
       const text = content.trim()
       if (!text && !imageUrl) return null
       if (sending) return null
+      console.log('전송되는 UUID:', userId)
       setSending(true)
       try {
         const sent = await sendMessage({

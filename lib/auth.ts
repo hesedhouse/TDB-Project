@@ -17,10 +17,12 @@ export const authOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+      allowDangerousEmailAccountLinking: true,
     }),
     NaverProvider({
       clientId: process.env.NAVER_CLIENT_ID ?? '',
       clientSecret: process.env.NAVER_CLIENT_SECRET ?? '',
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   adapter:
@@ -47,25 +49,27 @@ export const authOptions = {
         session.user.email = session.user.email ?? token?.email ?? null
         session.user.name = session.user.name ?? token?.name ?? null
         session.user.image = session.user.image ?? token?.picture ?? token?.image ?? null
-        // session.user.id는 반드시 public.users.id(UUID). token.sub와 동일한 UUID가 되도록 보장 (이메일/구글 ID 금지).
-        const tokenSub = token?.sub != null && token.sub !== '' ? String(token.sub).trim() : undefined
+        // session.user.id는 반드시 public.users.id(UUID)만 허용. token.sub가 UUID일 때만 사용, 이메일 절대 할당 금지.
         const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
-        if (tokenSub && isUuid(tokenSub)) {
+        const tokenSub = token?.sub != null && token.sub !== '' ? String(token.sub).trim() : undefined
+        const looksLikeEmail = (s: string) => typeof s === 'string' && s.includes('@')
+        if (tokenSub && isUuid(tokenSub) && !looksLikeEmail(tokenSub)) {
           session.user.id = tokenSub
         } else {
+          // token.sub가 UUID가 아니거나 이메일 형태면 DB에서 이메일로 조회한 UUID만 사용
           const email = session.user.email ?? token?.email ?? null
           if (email && typeof email === 'string') {
             const supabase = createServerClient()
             if (supabase) {
               const { data: row } = await supabase.from('users').select('id').eq('email', email).maybeSingle()
               const id = (row as { id?: string } | null)?.id
-              if (id && typeof id === 'string') session.user.id = id
-              else session.user.id = tokenSub ?? session.user.id
+              if (id && typeof id === 'string' && isUuid(id)) session.user.id = id
+              else (session.user as { id?: string }).id = undefined
             } else {
-              session.user.id = tokenSub ?? session.user.id
+              (session.user as { id?: string }).id = undefined
             }
           } else {
-            session.user.id = tokenSub ?? session.user.id
+            (session.user as { id?: string }).id = undefined
           }
         }
       }
@@ -82,7 +86,8 @@ export const authOptions = {
             const base = process.env.NEXTAUTH_URL ?? ''
             return `${base}/auth/error?error=Banned`
           }
-          // 구글/네이버 등 첫 로그인 시 public.users에 없으면 insert → 로그인 완료 시점에 반드시 행 존재 (23503 방지)
+          // 구글/네이버 등 첫 로그인(또는 해당 이메일 행 삭제 후 재로그인) 시 public.users에 없으면 insert.
+          // id는 미포함 → DB 기본값(gen_random_uuid())으로 생성. 로그인 완료 시점에 행 존재 보장 (23503 방지).
           if (!row?.id) {
             await supabase.from('users').upsert(
               {
