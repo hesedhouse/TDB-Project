@@ -323,16 +323,25 @@ export async function extendBoardExpiry(boardId: string): Promise<Date | null> {
 /**
  * 방 폭파(종료) 처리: is_active = false, exploded_at = now().
  * PulseFeed에서 만료 감지 시 한 번 호출.
+ * board_id는 반드시 boards.id(UUID)여야 함 (400 방지).
  */
 export async function markBoardExploded(boardId: string): Promise<boolean> {
-  if (!isValidUuid(boardId)) return false
+  const id = typeof boardId === 'string' ? boardId.trim() : ''
+  if (!id || !isValidUuid(id)) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('markBoardExploded: board_id가 유효한 UUID가 아님', { boardId: id || boardId })
+    }
+    return false
+  }
   const supabase = createClient()
   if (!supabase) return false
   const now = new Date().toISOString()
+  const payload = { is_active: false, exploded_at: now }
+  console.log('전송 데이터:', { board_id: id, update: payload })
   const { error } = await supabase
     .from('boards')
-    .update({ is_active: false, exploded_at: now } as Record<string, unknown>)
-    .eq('id', boardId)
+    .update(payload as Record<string, unknown>)
+    .eq('id', id)
   if (error) {
     if (error.code === '42703') return false
     console.error('markBoardExploded error:', error)

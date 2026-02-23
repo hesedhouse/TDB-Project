@@ -1,4 +1,4 @@
-import { createClient } from './client'
+import { createClient, isValidUuid } from './client'
 import { dbMessageToMessage, type DbMessage, type Message } from './types'
 
 export async function fetchMessages(boardId: string): Promise<Message[]> {
@@ -102,6 +102,7 @@ export async function sendMessage(params: {
     }
   }**/
 
+  // id는 넣지 않음 → Supabase가 자동 UUID 생성 (409 Conflict 방지). upsert 사용 안 함.
   const row: Record<string, unknown> = {
     board_id: params.boardId,
     author_character: params.authorCharacter,
@@ -110,15 +111,18 @@ export async function sendMessage(params: {
     heart_count: 0,
     image_url: params.imageUrl ?? null,
   }
-  // user_id는 public.users(id) FK이므로 반드시 DB UUID만 전달 (이메일/다른 값 사용 시 23503)
-  if (params.userId != null && params.userId !== '') {
-    row.user_id = params.userId
+  // user_id는 public.users(id) FK → 유효한 UUID일 때만 포함 (이메일/소셜 ID 넣지 않음, null 요청 방지)
+  const uid = params.userId != null && params.userId !== '' ? String(params.userId).trim() : null
+  if (uid && isValidUuid(uid)) {
+    row.user_id = uid
   }
 
+  console.log('전송 데이터:', row)
   let result = await supabase.from('messages').insert(row).select().single()
 
   if (result.error?.code === 'PGRST204' && row.user_id != null) {
     delete row.user_id
+    console.log('전송 데이터(user_id 제외 재시도):', row)
     result = await supabase.from('messages').insert(row).select().single()
   }
 
