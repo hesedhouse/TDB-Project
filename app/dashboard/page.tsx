@@ -23,7 +23,8 @@ export default function DashboardPage() {
   const isNextAuthLoading = status === 'loading'
   const isNextAuthAuthenticated = status === 'authenticated'
   const hasSession = !!user || isNextAuthAuthenticated
-  const effectiveUserId = user?.id ?? (nextSession?.user as { id?: string } | undefined)?.id ?? undefined
+  // messages.user_id는 public.users(id) FK 참조 → NextAuth 세션의 id만 사용 (Supabase Auth user.id는 23503 방지)
+  const effectiveUserId = (nextSession?.user as { id?: string } | undefined)?.id ?? undefined
 
   useEffect(() => {
     if (loading || isNextAuthLoading) return

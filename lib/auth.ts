@@ -43,6 +43,7 @@ export const authOptions = {
     },
     async session({ session, token }: { session: Session; token: JwtToken }) {
       if (session?.user) {
+        // 세션에 DB(public.users) UUID를 넣어 messages.user_id FK(23503) 방지. token.sub에 유저 UUID가 들어있음.
         session.user.id = token?.sub ?? token?.id ?? session.user.id
         session.user.email = session.user.email ?? token?.email ?? null
         session.user.name = session.user.name ?? token?.name ?? null

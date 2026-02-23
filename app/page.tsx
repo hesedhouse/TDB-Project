@@ -18,7 +18,8 @@ export default function Home() {
   const isNextAuthLoading = status === 'loading'
   const isNextAuthAuthenticated = status === 'authenticated'
   const hasSession = !!user || isNextAuthAuthenticated
-  const effectiveUserId = user?.id ?? (nextSession?.user as { id?: string } | undefined)?.id ?? undefined
+  // messages.user_id는 public.users(id) FK 참조 → NextAuth 세션의 id만 사용 (Supabase Auth user.id는 auth.users라 23503 발생)
+  const effectiveUserId = (nextSession?.user as { id?: string } | undefined)?.id ?? undefined
   const [oauthProcessing, setOauthProcessing] = useState(false)
   const hashHandledRef = useRef(false)
 

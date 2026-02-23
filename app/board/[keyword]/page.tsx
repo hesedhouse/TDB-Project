@@ -55,7 +55,8 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   const isNextAuthLoading = nextAuthStatus === 'loading'
   const isNextAuthAuthenticated = nextAuthStatus === 'authenticated'
   const hasSession = !!authUser || isNextAuthAuthenticated
-  const effectiveUserId = authUser?.id ?? (nextSession?.user as { id?: string } | undefined)?.id ?? null
+  // messages.user_id는 public.users(id) FK 참조 → NextAuth 세션의 id만 사용 (23503 방지)
+  const effectiveUserId = (nextSession?.user as { id?: string } | undefined)?.id ?? null
 
   const matchedBoard = useMemo(() => {
     const keyword = (decodedKeyword ?? '').toString().trim()
