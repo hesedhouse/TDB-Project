@@ -13,6 +13,16 @@ type JwtToken = { sub?: string; id?: string; email?: string | null; name?: strin
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
 const supabaseSecret = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
 
+/** 카카오 OAuth: Vercel 환경 변수 KAKAO_CLIENT_ID, KAKAO_CLIENT_SECRET 사용 */
+const kakaoClientId = (process.env.KAKAO_CLIENT_ID ?? '').trim()
+const kakaoClientSecret = (process.env.KAKAO_CLIENT_SECRET ?? '').trim()
+if (!kakaoClientId) {
+  console.error('[auth] KAKAO_CLIENT_ID is empty. Set KAKAO_CLIENT_ID (and KAKAO_CLIENT_SECRET) in Vercel Environment Variables for Kakao login.')
+}
+if (kakaoClientId && !kakaoClientSecret) {
+  console.warn('[auth] KAKAO_CLIENT_SECRET is empty. Kakao login may fail without a client secret.')
+}
+
 /** public.users.id(UUID) 형식 여부 */
 function isUuid(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
@@ -31,8 +41,8 @@ export const authOptions = {
       allowDangerousEmailAccountLinking: true,
     }),
     KakaoProvider({
-      clientId: process.env.KAKAO_CLIENT_ID ?? '',
-      clientSecret: process.env.KAKAO_CLIENT_SECRET ?? '',
+      clientId: kakaoClientId,
+      clientSecret: kakaoClientSecret,
       allowDangerousEmailAccountLinking: true,
       authorization: {
         params: {
