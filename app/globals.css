@@ -159,6 +159,25 @@
       0 0 36px rgba(255, 107, 0, 0.3);
   }
 
+  /* FAB 모래시계 충전: 황금색 원형 (글쓰기 버튼과 동일 크기/그림자) */
+  .fab-hourglass {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #facc15, #eab308);
+    color: #1a1a1a;
+    border: none;
+    box-shadow:
+      0 0 14px rgba(234, 179, 8, 0.5),
+      0 0 28px rgba(234, 179, 8, 0.25),
+      0 0 42px rgba(234, 179, 8, 0.12);
+  }
+  .fab-hourglass:hover {
+    box-shadow:
+      0 0 18px rgba(234, 179, 8, 0.6),
+      0 0 36px rgba(234, 179, 8, 0.3);
+  }
+
   /* 긴급 타이머: 진행 바 1시간 미만 시 opacity 점멸 */
   @keyframes emergency-blink {
     0%, 100% { opacity: 1; }

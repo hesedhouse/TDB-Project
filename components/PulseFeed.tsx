@@ -1821,6 +1821,22 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       </div>
       )}
 
+      {/* FAB 모래시계 충전 (황금색 원형, 헤더 '모래시계 채우기'와 동일 기능) */}
+      {useSupabaseWithUuid && (
+        <motion.button
+          type="button"
+          onClick={handleHourglassExtend}
+          disabled={hourglasses <= 0 || extendingHourglass}
+          className="fab-hourglass fixed right-4 sm:right-6 bottom-36 sm:bottom-40 safe-bottom flex items-center justify-center z-40 disabled:opacity-60 disabled:cursor-not-allowed"
+          style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
+          aria-label="모래시계 충전"
+          title={extendingHourglass ? '연장 중…' : '⏳ 모래시계 채우기 (+30분)'}
+          whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.08 } : {}}
+          whileTap={hourglasses > 0 && !extendingHourglass ? { scale: 0.95 } : {}}
+        >
+          <span className="text-xl leading-none" aria-hidden>⏳</span>
+        </motion.button>
+      )}
       {/* FAB 글쓰기 버튼 (오렌지 원형 + 글로우) */}
       <motion.button
         type="button"
