@@ -34,9 +34,14 @@ export async function getServerTimeMs(): Promise<number> {
  * pinned_at(고정 시작 시각, ms)과 현재 서버 시각을 비교해 영상 기준 재생 위치(초) 계산.
  * @param pinnedAtMs 고정 시작 시각 (Unix ms)
  * @param serverTimeMs 현재 서버 시각 (Unix ms)
- * @returns 초 단위 재생 위치 (0 이상)
+ * @returns 초 단위 재생 위치 (0 이상). 서버 시각이 pinned_at 이전이면 0.
  */
 export function getCurrentVideoTimeSeconds(pinnedAtMs: number, serverTimeMs: number): number {
   const elapsedMs = serverTimeMs - pinnedAtMs
   return Math.max(0, elapsedMs / 1000)
+}
+
+/** 서버 시각이 아직 고정 시작 시각 이전인지 (미래 pinned_at). 이 경우 seekTo(0) 반복 시 0초 무한 루프 방지용. */
+export function isServerBeforePinStart(pinnedAtMs: number, serverTimeMs: number): boolean {
+  return serverTimeMs < pinnedAtMs
 }

@@ -1,8 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useId } from 'react'
-import { getServerTimeMs } from '@/lib/serverTime'
-import { getCurrentVideoTimeSeconds } from '@/lib/serverTime'
+import { getServerTimeMs, getCurrentVideoTimeSeconds, isServerBeforePinStart } from '@/lib/serverTime'
 
 declare global {
   interface Window {
@@ -19,7 +18,7 @@ declare global {
           }
         }
       ) => YTPlayerInstance
-      PlayerState?: { ENDED: number; PLAYING: number }
+      PlayerState?: { ENDED: number; PLAYING: number; BUFFERING: number }
     }
     onYouTubeIframeAPIReady?: () => void
   }
@@ -29,13 +28,16 @@ export interface YTPlayerInstance {
   seekTo: (seconds: number, allowSeekAhead: boolean) => void
   getCurrentTime: () => number
   getDuration: () => number
+  playVideo?: () => void
   destroy: () => void
 }
 
 const YT_PLAYER_STATE_ENDED = 0
 const YT_PLAYER_STATE_PLAYING = 1
-const DRIFT_THRESHOLD_SEC = 2
-const SYNC_CHECK_INTERVAL_MS = 15000 // 15초마다 드리프트 보정
+/** 오차가 이 값(초) 이내면 seekTo 하지 않음. 너무 자주 seek 시 버퍼링·무한 루프 방지. */
+const LOOSE_SYNC_THRESHOLD_SEC = 3
+/** 주기적 드리프트 보정 간격. 초기 진입 후 30초마다 한 번만 미세 보정. */
+const SYNC_CHECK_INTERVAL_MS = 30000
 
 export interface PinnedYouTubePlayerProps {
   videoId: string
@@ -47,7 +49,9 @@ export interface PinnedYouTubePlayerProps {
 
 /**
  * 전광판용 유튜브 플레이어. 서버 시간 기준 동시 시청(Watch Together):
- * - PLAYING 시 강제 워프(seekTo), 주기적 드리프트 보정, 영상 종료 시 대기 UI.
+ * - 초기 진입 시 딱 한 번만 seekTo, 이후 30초마다 미세 보정(오차 3초 초과 시에만 seek).
+ * - 전광판 고정 시 자동 재생(playVideo). BUFFERING → PLAYING 시 서버 시간에 맞춰 워프(느슨한 3초 기준).
+ * - pinned_at 미래/미입력 시 seekTo(0) 무한 반복 방지.
  */
 const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedYouTubePlayer({
   videoId,
@@ -79,26 +83,34 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
           onReady: async (e: { target: YTPlayerInstance }) => {
             const target = e.target
             playerRef.current = target
-            if (pinnedAtMs != null) {
-              const serverMs = await getServerTimeMs()
+
+            if (!pinnedAtMs) {
+              target.playVideo?.()
+              return
+            }
+
+            const serverMs = await getServerTimeMs()
+            if (!isServerBeforePinStart(pinnedAtMs, serverMs)) {
               const sec = getCurrentVideoTimeSeconds(pinnedAtMs, serverMs)
               target.seekTo(sec, true)
             }
+            target.playVideo?.()
 
-            // 주기적 드리프트 보정
             driftIntervalId = setInterval(async () => {
               const p = playerRef.current
-              if (!p || pinnedAtMs == null) return
+              if (!p || !pinnedAtMs) return
               const duration = p.getDuration()
               if (Number.isNaN(duration) || duration <= 0) return
               const serverMs = await getServerTimeMs()
+              if (isServerBeforePinStart(pinnedAtMs, serverMs)) return
               const expectedSec = getCurrentVideoTimeSeconds(pinnedAtMs, serverMs)
               if (expectedSec >= duration) {
                 onEndedRef.current?.()
                 return
               }
+              if (expectedSec <= 0) return
               const currentSec = p.getCurrentTime()
-              if (Math.abs(currentSec - expectedSec) > DRIFT_THRESHOLD_SEC) {
+              if (Math.abs(currentSec - expectedSec) > LOOSE_SYNC_THRESHOLD_SEC) {
                 p.seekTo(expectedSec, true)
               }
             }, SYNC_CHECK_INTERVAL_MS)
@@ -109,18 +121,21 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
               onEndedRef.current?.()
               return
             }
-            if (e.data === YT_PLAYER_STATE_PLAYING && pinnedAtMs != null) {
-              // 광고 종료·중도 입장 등 PLAYING 되는 순간 서버 시간으로 강제 워프
+            if (e.data !== YT_PLAYER_STATE_PLAYING || !pinnedAtMs) return
+
+            getServerTimeMs().then((serverMs) => {
+              if (isServerBeforePinStart(pinnedAtMs, serverMs)) return
+              const expectedSec = getCurrentVideoTimeSeconds(pinnedAtMs, serverMs)
               const duration = target.getDuration()
-              getServerTimeMs().then((serverMs) => {
-                const currentVideoTime = getCurrentVideoTimeSeconds(pinnedAtMs, serverMs)
-                if (duration > 0 && currentVideoTime >= duration) {
-                  onEndedRef.current?.()
-                  return
-                }
-                target.seekTo(Math.max(0, currentVideoTime), true)
-              })
-            }
+              if (Number.isFinite(duration) && duration > 0 && expectedSec >= duration) {
+                onEndedRef.current?.()
+                return
+              }
+              if (expectedSec <= 0) return
+              const currentSec = target.getCurrentTime()
+              if (Math.abs(currentSec - expectedSec) <= LOOSE_SYNC_THRESHOLD_SEC) return
+              target.seekTo(Math.max(0, expectedSec), true)
+            })
           },
         },
       })

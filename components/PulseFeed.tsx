@@ -1574,33 +1574,35 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         </div>
       </div>
 
-      {/* 5분 전광판: 영상/사진 (z-0, 채팅 오버레이 배경) */}
+      {/* 5분 전광판: 영상/사진 (z-50으로 채팅보다 위에 두어 하단 버튼 클릭 가능) */}
       {useSupabaseWithUuid && pinnedState && pinnedState.pinnedUntil.getTime() > Date.now() && (
-        <div className="relative z-0 mx-1 mt-1 sm:mx-2 sm:mt-2 rounded-lg sm:rounded-xl overflow-hidden border border-neon-orange/30 bg-black/40">
+        <div className="relative z-50 mx-1 mt-1 sm:mx-2 sm:mt-2 rounded-lg sm:rounded-xl overflow-hidden border border-neon-orange/30 bg-black/40">
           {pinnedCollapsed ? (
-            /* 접힌 상태: 최소화 바 */
-            <div className="flex items-center justify-between gap-2 px-3 py-2 flex-wrap">
+            /* 접힌 상태: 최소화 바 + 펼치기 버튼 하단 중앙 */
+            <div className="relative flex items-center justify-between gap-2 px-3 py-3 pb-14 flex-wrap">
               <span className="text-xs text-gray-400">현재 고정된 콘텐츠가 있습니다</span>
               <div className="flex items-center gap-1.5">
                 <motion.button
                   type="button"
                   onClick={handleExtendPinned}
                   disabled={extendPinnedLoading || hourglasses < 1}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-amber-500/20 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50"
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-amber-500/30 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 shadow-lg"
                   aria-label="전광판 +1분 연장 (모래시계 1개)"
                 >
                   {extendPinnedLoading ? '연장 중…' : '⏳ +1분 연장 (모래시계 1개)'}
                 </motion.button>
+              </div>
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 py-2 z-10 pointer-events-none">
                 <motion.button
                   type="button"
                   onClick={() => setPinnedCollapsed(false)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-neon-orange/20 text-neon-orange border border-neon-orange/40 hover:bg-neon-orange/30"
+                  className="pointer-events-auto flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-medium bg-black/50 text-neon-orange border border-neon-orange/40 hover:bg-neon-orange/20 shadow-xl"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   aria-label="전광판 펼치기"
                 >
                   <span>펼치기</span>
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                     <path d="M6 9l6 6 6-6" />
                   </svg>
                 </motion.button>
@@ -1691,7 +1693,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   className="w-full max-h-[280px] object-cover aspect-video"
                 />
               )}
-              <div className="flex items-center justify-between gap-2 px-2 py-1.5 flex-wrap">
+              <div className="relative flex items-center gap-2 px-2 py-1.5 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
                   {(() => {
                     const rem = Math.max(0, pinnedState.pinnedUntil.getTime() - Date.now())
@@ -1711,7 +1713,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                     type="button"
                     onClick={handleExtendPinned}
                     disabled={extendPinnedLoading || hourglasses < 1}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-amber-500/20 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-amber-500/30 text-amber-300 border border-amber-400/40 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                     whileHover={hourglasses >= 1 && !extendPinnedLoading ? { scale: 1.02 } : {}}
                     whileTap={hourglasses >= 1 && !extendPinnedLoading ? { scale: 0.98 } : {}}
                     aria-label="전광판 +1분 연장 (모래시계 1개)"
@@ -1720,19 +1722,21 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                     {extendPinnedLoading ? '연장 중…' : '⏳ +1분 연장 (모래시계 1개)'}
                   </motion.button>
                 </div>
-                <motion.button
-                  type="button"
-                  onClick={() => setPinnedCollapsed(true)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-gray-400 border border-white/20 hover:bg-white/10 hover:text-gray-300"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  aria-label="전광판 접기"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                    <path d="M18 15l-6-6-6 6" />
-                  </svg>
-                  접기
-                </motion.button>
+                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 py-2 z-10 pointer-events-none">
+                  <motion.button
+                    type="button"
+                    onClick={() => setPinnedCollapsed(true)}
+                    className="pointer-events-auto flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl text-[10px] font-medium bg-black/50 text-gray-300 border border-white/20 hover:bg-white/10 hover:text-gray-100 shadow-xl"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    aria-label="전광판 접기"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <path d="M18 15l-6-6-6 6" />
+                    </svg>
+                    접기
+                  </motion.button>
+                </div>
               </div>
             </>
           )}
@@ -1745,7 +1749,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         <>
         <div
           ref={listRef}
-          className="relative z-10 flex-1 min-h-0 overflow-y-auto flex flex-col -mt-6 sm:-mt-8 pt-4 sm:pt-6 px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-2 scrollbar-hide bg-black/10"
+          className="relative z-10 flex-1 min-h-0 overflow-y-auto flex flex-col -mt-6 sm:-mt-8 pt-4 sm:pt-6 px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-2 scrollbar-hide bg-black/10 pointer-events-none"
           style={{ minHeight: 0 }}
         >
             {[...messages]
@@ -1755,7 +1759,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 return (
                 <motion.div
                   key={msg.id}
-                  className="flex flex-col"
+                  className="flex flex-col pointer-events-auto"
                   initial={{ opacity: 0, y: 2 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.15 }}
