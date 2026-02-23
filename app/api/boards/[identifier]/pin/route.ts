@@ -82,6 +82,7 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       pinned_until: pinnedUntil.toISOString(),
+      pinned_at: now.toISOString(),
     })
   } catch (e) {
     console.error('[api/boards/pin]', e)
