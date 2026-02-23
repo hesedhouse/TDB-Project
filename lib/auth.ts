@@ -89,7 +89,7 @@ export const authOptions = {
                 email,
                 name: user?.name ?? null,
                 image: user?.image ?? null,
-                emailVerified: user?.emailVerified?.toISOString?.() ?? null,
+                emailVerified: (user as { emailVerified?: Date | null })?.emailVerified?.toISOString?.() ?? null,
               },
               { onConflict: 'email' }
             )
