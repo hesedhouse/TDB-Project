@@ -1226,6 +1226,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   )}
                 </AnimatePresence>
               </div>
+              <span className="text-amber-400 text-sm sm:text-base flex-shrink-0" aria-hidden>⏳</span>
               <motion.button
                 type="button"
                 onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
@@ -1472,7 +1473,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                         </>
                       )}
                     </div>
-                    {/* 액션: 수정/삭제(본인), 하트/댓글 */}
+                    {/* 액션: 수정/삭제(본인), 댓글/하트 (순서: 댓글 → 하트) */}
                     <div className={`flex items-center gap-1 mt-0.5 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
                       {isOwnMessage && (
                         <>
@@ -1480,15 +1481,15 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                           <motion.button type="button" onClick={(e) => { e.stopPropagation(); setDeleteConfirmMessageId(msg.id) }} className="p-1 rounded text-gray-400 hover:text-red-400 hover:bg-red-500/10 text-xs" title="삭제">🗑️</motion.button>
                         </>
                       )}
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id); return n }); }} className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-neon-orange">
+                        💬 {(commentsByTargetId[msg.id]?.length ?? 0)}
+                      </button>
                       <motion.button type="button" onClick={() => handleMessageHeart(msg.id)} className={`flex items-center gap-0.5 ${heartedIds.has(msg.id) ? 'text-neon-orange' : 'text-gray-500 hover:text-gray-400'}`} whileTap={{ scale: 0.9 }}>
                         <motion.span className="text-sm" animate={heartAnimations.has(msg.id) ? { scale: [1, 1.2, 1] } : {}} transition={{ duration: 0.25 }}>
                           {heartedIds.has(msg.id) ? '❤️' : '🤍'}
                         </motion.span>
                         <span className="text-xs font-bold">{msg.heartCount}</span>
                       </motion.button>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id); return n }); }} className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-neon-orange">
-                        💬 {(commentsByTargetId[msg.id]?.length ?? 0)}
-                      </button>
                     </div>
                   </div>
                   </div>
@@ -1705,39 +1706,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               )}
 
               <div className="flex items-center justify-between pt-2 border-t border-white/10 relative flex-wrap gap-y-2">
-                <motion.button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleHeart(post.id)
-                  }}
-                  className={`flex items-center gap-2 relative z-10 ${postHeartedIds.has(post.id) ? 'text-[#FF6B00]' : 'text-gray-500 hover:text-gray-400'}`}
-                  whileHover={{ scale: 1.08 }}
-                  whileTap={{ scale: 0.92 }}
-                >
-                  <motion.span
-                    className={`text-xl ${postHeartedIds.has(post.id) ? 'drop-shadow-[0_0_6px_rgba(255,107,0,0.6)]' : ''}`}
-                    animate={heartAnimations.has(post.id) ? { scale: [1, 1.4, 1] } : {}}
-                    transition={{ duration: 0.4 }}
-                  >
-                    {postHeartedIds.has(post.id) ? '❤️' : '🤍'}
-                  </motion.span>
-                  <span className="font-bold">{post.heartCount}</span>
-                </motion.button>
-                <AnimatePresence>
-                  {heartAnimations.has(post.id) && (
-                    <motion.div
-                      className="absolute left-0 top-0 pointer-events-none"
-                      initial={{ opacity: 0, scale: 0 }}
-                      animate={{ opacity: [0, 1, 0], scale: [0, 1.5, 2], y: -24 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.5 }}
-                    >
-                      <span className="text-3xl">❤️</span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <span>클릭하여 하트 보내기</span>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setExpandedComments((prev) => { const n = new Set(prev); if (n.has(post.id)) n.delete(post.id); else n.add(post.id); return n }); }}
@@ -1746,6 +1715,40 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                     <span>💬</span>
                     <span>댓글 {(commentsByTargetId[post.id]?.length ?? 0)}개</span>
                   </button>
+                </div>
+                <div className="relative z-10 flex items-center gap-2 text-xs text-gray-500">
+                  <span>클릭하여 하트 보내기</span>
+                  <motion.button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleHeart(post.id)
+                    }}
+                    className={`flex items-center gap-2 ${postHeartedIds.has(post.id) ? 'text-[#FF6B00]' : 'text-gray-500 hover:text-gray-400'}`}
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
+                  >
+                    <motion.span
+                      className={`text-xl ${postHeartedIds.has(post.id) ? 'drop-shadow-[0_0_6px_rgba(255,107,0,0.6)]' : ''}`}
+                      animate={heartAnimations.has(post.id) ? { scale: [1, 1.4, 1] } : {}}
+                      transition={{ duration: 0.4 }}
+                    >
+                      {postHeartedIds.has(post.id) ? '❤️' : '🤍'}
+                    </motion.span>
+                    <span className="font-bold">{post.heartCount}</span>
+                  </motion.button>
+                  <AnimatePresence>
+                    {heartAnimations.has(post.id) && (
+                      <motion.div
+                        className="absolute left-0 top-0 pointer-events-none"
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={{ opacity: [0, 1, 0], scale: [0, 1.5, 2], y: -24 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.5 }}
+                      >
+                        <span className="text-3xl">❤️</span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
               {expandedComments.has(post.id) && (
@@ -1833,7 +1836,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       </div>
       )}
 
-      {/* FAB: body에 포탈하여 부모 레이아웃 영향 없이 우측 하단 고정 (bottom-6 right-6 / bottom-24 right-6) */}
+      {/* FAB: fixed 우측 하단 고정(fixed·right-6 명시), 부모 레이아웃 영향 없도록 body 포탈 */}
       {typeof document !== 'undefined' &&
         createPortal(
           <>
@@ -1842,14 +1845,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 type="button"
                 onClick={handleHourglassExtend}
                 disabled={hourglasses <= 0 || extendingHourglass}
-                className="fab-hourglass flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed relative shadow-lg"
-                style={{
-                  position: 'fixed',
-                  bottom: '6rem',
-                  right: '1.5rem',
-                  zIndex: 50,
-                  marginBottom: 'env(safe-area-inset-bottom, 0)',
-                }}
+                className="fab-hourglass fixed bottom-24 right-6 z-50 flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed relative shadow-lg"
+                style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
                 aria-label={`모래시계 충전 (보유 ${hourglasses}개)`}
                 title={extendingHourglass ? '연장 중…' : `⏳ 보유 ${hourglasses}개 · 채우기 (+30분)`}
                 whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.08 } : {}}
@@ -1857,7 +1854,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               >
                 <span className="text-xl leading-none" aria-hidden>⏳</span>
                 <span
-                  className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-gray-900 border-2 border-amber-400/80 text-amber-300 text-xs font-bold tabular-nums flex items-center justify-center shadow-lg"
+                  className="absolute top-0 right-0 min-w-[1.25rem] h-5 px-1 rounded-full bg-gray-900 border-2 border-amber-400/80 text-amber-300 text-xs font-bold tabular-nums flex items-center justify-center shadow-lg -translate-y-1/2 translate-x-1/2"
                   aria-hidden
                 >
                   {hourglasses}
@@ -1867,14 +1864,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             <motion.button
               type="button"
               onClick={() => setShowWriteModal(true)}
-              className="fab-write flex items-center justify-center shadow-lg"
-              style={{
-                position: 'fixed',
-                bottom: '1.5rem',
-                right: '1.5rem',
-                zIndex: 50,
-                marginBottom: 'env(safe-area-inset-bottom, 0)',
-              }}
+              className="fab-write fixed bottom-6 right-6 z-50 flex items-center justify-center shadow-lg"
+              style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
               aria-label="글쓰기"
               whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.95 }}

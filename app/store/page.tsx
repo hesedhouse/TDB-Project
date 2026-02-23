@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getHourglasses, setHourglasses } from '@/lib/hourglass'
 import { requestPayment } from '@portone/browser-sdk/v2'
@@ -19,6 +19,7 @@ const CHANNEL_KEY =
   process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY ?? 'channel-key-5d85fadf-b4c1-4ead-a5b9-aae3f2fe1a6f'
 
 export default function StorePage() {
+  const router = useRouter()
   const [hourglasses, setHourglassesState] = useState(0)
   const [customQty, setCustomQty] = useState<string>('')
   const [toast, setToast] = useState<string | null>(null)
@@ -81,12 +82,13 @@ export default function StorePage() {
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom">
       <header className="sticky top-0 z-10 glass-strong border-b border-amber-500/20 safe-top">
         <div className="flex items-center justify-between px-4 py-4">
-          <Link
-            href="/"
+          <button
+            type="button"
+            onClick={() => router.back()}
             className="text-gray-400 hover:text-white text-sm sm:text-base flex-shrink-0"
           >
-            ← 홈으로
-          </Link>
+            ← 뒤로
+          </button>
           <h1 className="text-lg sm:text-xl font-bold text-amber-400">모래시계 충전소</h1>
           <div
             className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.06] border border-amber-500/20"
