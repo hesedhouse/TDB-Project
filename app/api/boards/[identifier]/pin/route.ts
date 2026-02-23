@@ -49,21 +49,28 @@ export async function POST(
     const boardId = String((row as { id: string }).id)
 
     const pinnedUntil = new Date(Date.now() + pinDurationMs)
-    const { error: updateErr } = await supabase
-      .from('boards')
-      .update({
-        pinned_content: { type, url },
-        pinned_until: pinnedUntil.toISOString(),
-      })
-      .eq('id', boardId)
+    const payload = {
+      pinned_content: { type, url },
+      pinned_until: pinnedUntil.toISOString(),
+    }
+    let updateErr: { message: string; details?: unknown; code?: string; hint?: string } | null = null
+    try {
+      const result = await supabase
+        .from('boards')
+        .update(payload)
+        .eq('id', boardId)
+      updateErr = result.error
+    } catch (e) {
+      console.error('[api/boards/pin] Supabase Error:', e)
+      return NextResponse.json(
+        { error: 'Failed to set pinned content', supabase_error: String((e as Error)?.message ?? e) },
+        { status: 500 }
+      )
+    }
 
     if (updateErr) {
-      console.error('[api/boards/pin] Supabase error:', {
-        message: updateErr.message,
-        details: updateErr.details,
-        code: updateErr.code,
-        hint: updateErr.hint,
-      })
+      console.error('Supabase Error:', updateErr)
+      console.error('[api/boards/pin] Rejected payload:', JSON.stringify(payload), 'boardId:', boardId)
       return NextResponse.json(
         { error: 'Failed to set pinned content', supabase_error: updateErr.message },
         { status: 500 }

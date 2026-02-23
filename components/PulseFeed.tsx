@@ -751,14 +751,18 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [reportSubmitting, reportReason, useSupabaseWithUuid, boardId, pinnedState, userId])
 
-  // 메시지 리스트 자동 스크롤: 새 메시지 추가 시·처음 방 진입 시 맨 아래로 부드럽게 스크롤
+  // 메시지 리스트 자동 스크롤: 맨 아래로 강제 이동 (렌더 타이밍 이슈 방지를 위해 두 번 스케줄)
   useEffect(() => {
     if (!useSupabaseWithUuid) return
     const scrollToBottom = () => {
       feedEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
-    const t = setTimeout(scrollToBottom, 50)
-    return () => clearTimeout(t)
+    const t1 = setTimeout(scrollToBottom, 50)
+    const t2 = setTimeout(scrollToBottom, 150)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+    }
   }, [useSupabaseWithUuid, messages.length, boardId])
 
   // 24시간 기준 진행률: T_rem / T_max * 100 (최대 100%). 1초마다 갱신.
@@ -1058,7 +1062,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId, selectedCharacterInModal])
 
   return (
-    <div className="min-h-screen bg-midnight-black text-white safe-bottom pt-6">
+    <div className="min-h-screen h-full flex flex-col bg-midnight-black text-white safe-bottom pt-6">
       <AnimatePresence>
         {nicknameModalMounted && showNicknameModal && (
           <motion.div
@@ -1513,7 +1517,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             </div>
             {useSupabaseWithUuid && topContributors.length > 0 && (
               <div className="flex flex-row items-center gap-x-2 shrink-0 min-w-0">
-                <span className="text-xs text-gray-400 shrink-0" aria-hidden>👑</span>
+                <span className="text-xs text-gray-400 shrink-0">명예의 전당</span>
                 <ul className="flex flex-row items-center gap-x-2 sm:gap-x-3 flex-wrap justify-end">
                   {topContributors.map((c) => {
                     const medal = c.rank === 1 ? '🥇' : c.rank === 2 ? '🥈' : '🥉'
@@ -1733,10 +1737,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
 
       {/* 포스트/메시지 리스트 (Supabase 연동 시 포스트 스타일 카드로 통일) */}
       {useSupabaseWithUuid && (
-        <>
+        <div className="flex flex-col flex-1 min-h-0 h-full">
           <div
             ref={listRef}
-            className="px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-32 sm:pb-28 overflow-y-auto max-h-[calc(100vh-220px)] scrollbar-hide"
+            className="flex-1 min-h-0 overflow-y-auto flex flex-col px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-32 sm:pb-28 scrollbar-hide"
           >
             {[...messages]
               .sort((a, b) =>
@@ -1949,7 +1953,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               </motion.button>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* Feed - 포스트 리스트 (Supabase 미사용 시 목업, image_c91edc 스타일) */}
@@ -2191,11 +2195,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 type="button"
                 onClick={handleHourglassExtend}
                 disabled={hourglasses <= 0 || extendingHourglass}
-                className="fab-hourglass fixed z-50 w-12 h-12 rounded-xl flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed relative shadow-lg bg-gray-900/90 border border-amber-400/40"
-                style={{
-                  left: '24px',
-                  bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))',
-                }}
+                className="fab-hourglass fixed left-8 bottom-24 z-50 w-12 h-12 rounded-xl flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed relative shadow-lg bg-gray-900/90 border border-amber-400/40"
+                style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
                 aria-label={`모래시계 충전 (보유 ${hourglasses}개)`}
                 title={extendingHourglass ? '연장 중…' : `⏳ 보유 ${hourglasses}개 · 채우기 (+30분)`}
                 whileHover={hourglasses > 0 && !extendingHourglass ? { scale: 1.08 } : {}}
