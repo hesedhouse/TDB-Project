@@ -18,8 +18,9 @@ export default function Home() {
   const isNextAuthLoading = status === 'loading'
   const isNextAuthAuthenticated = status === 'authenticated'
   const hasSession = !!user || isNextAuthAuthenticated
-  // messages.user_id는 public.users(id) FK 참조 → NextAuth 세션의 id만 사용 (Supabase Auth user.id는 auth.users라 23503 발생)
-  const effectiveUserId = (nextSession?.user as { id?: string } | undefined)?.id ?? undefined
+  // Supabase 이메일 가입 시 NextAuth 세션 없음 → user.id 사용. NextAuth(OAuth) 시 nextSession.user.id 사용.
+  const effectiveUserId =
+    (user?.id != null && String(user.id).trim() !== '' ? user.id : (nextSession?.user as { id?: string } | undefined)?.id) ?? undefined
   const [oauthProcessing, setOauthProcessing] = useState(false)
   const hashHandledRef = useRef(false)
 
@@ -43,6 +44,7 @@ export default function Home() {
       .catch(() => setOauthProcessing(false))
   }, [router])
 
+  // 보호 라우트: 비로그인 시 로그인 페이지로. 150ms 유예로 가입/로그인 직후 세션 반영 지연 시 쫓아내지 않음
   useEffect(() => {
     if (loading || isNextAuthLoading || oauthProcessing) return
     if (user || status === 'authenticated') return
@@ -50,9 +52,9 @@ export default function Home() {
       const h = window.location.hash?.trim()
       if (h && (h.includes('access_token') || h.includes('refresh_token'))) return
     }
-    if (status === 'unauthenticated') {
-      router.replace('/login?returnUrl=/')
-    }
+    if (status !== 'unauthenticated') return
+    const t = setTimeout(() => router.replace('/login?returnUrl=/'), 150)
+    return () => clearTimeout(t)
   }, [loading, isNextAuthLoading, user, status, router, oauthProcessing])
 
   const handleEnterBoard = useCallback((boardId: string) => {

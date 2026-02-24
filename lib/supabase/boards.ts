@@ -343,7 +343,12 @@ export async function markBoardExploded(boardId: string): Promise<boolean> {
     .update(payload as Record<string, unknown>)
     .eq('id', id)
   if (error) {
-    if (error.code === '42703') return false
+    if (error.code === '42703' || error.code === '42P01') {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[boards] markBoardExploded 스키마 오류(컬럼/테이블 없음). exploded_at 컬럼 추가 후 재시도.', error.code, error.message)
+      }
+      return false
+    }
     console.error('markBoardExploded error:', error)
     return false
   }

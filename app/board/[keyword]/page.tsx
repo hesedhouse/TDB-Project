@@ -55,8 +55,11 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
   const isNextAuthLoading = nextAuthStatus === 'loading'
   const isNextAuthAuthenticated = nextAuthStatus === 'authenticated'
   const hasSession = !!authUser || isNextAuthAuthenticated
-  // messages.user_id는 public.users(id) FK 참조 → NextAuth 세션의 id만 사용 (23503 방지)
-  const effectiveUserId = (nextSession?.user as { id?: string } | undefined)?.id ?? null
+  // Supabase 이메일 가입 시 NextAuth 세션 없음 → authUser.id 사용. NextAuth(OAuth) 시 nextSession.user.id 사용. public.users(id) FK용.
+  const effectiveUserId =
+    (authUser?.id != null && String(authUser.id).trim() !== ''
+      ? authUser.id
+      : (nextSession?.user as { id?: string } | undefined)?.id) ?? null
 
   const matchedBoard = useMemo(() => {
     const keyword = (decodedKeyword ?? '').toString().trim()
@@ -68,11 +71,13 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
     )
   }, [decodedKeyword])
 
+  // 보호 라우트: 로그인 필요 시 로그인 페이지로. 150ms 유예로 가입/로그인 직후 세션 반영 지연 시 쫓아내지 않음
   useEffect(() => {
     if (authLoading || isNextAuthLoading) return
     if (hasSession) return
     const path = `/board/${encodeURIComponent(decodedKeyword)}`
-    router.replace(`/login?returnUrl=${encodeURIComponent(path)}`)
+    const t = setTimeout(() => router.replace(`/login?returnUrl=${encodeURIComponent(path)}`), 150)
+    return () => clearTimeout(t)
   }, [authLoading, isNextAuthLoading, hasSession, router, decodedKeyword])
 
   useEffect(() => {

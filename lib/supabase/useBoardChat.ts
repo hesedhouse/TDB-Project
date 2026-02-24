@@ -72,6 +72,7 @@ export function useBoardChat(
           userId: userId ?? undefined,
         })
         setSending(false)
+        if (sent && 'error' in sent) return sent
         if (sent) {
           setMessages((prev) => {
             if (prev.some((m) => m.id === sent.id)) return prev
@@ -79,7 +80,7 @@ export function useBoardChat(
           })
           return sent
         }
-        return null
+        return { error: '메시지 전송에 실패했습니다. 네트워크를 확인하거나 잠시 후 다시 시도해 주세요.' }
       } catch (err) {
         setSending(false)
         const message = err instanceof Error ? err.message : '메시지 전송에 실패했습니다.'

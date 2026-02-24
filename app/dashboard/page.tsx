@@ -23,16 +23,17 @@ export default function DashboardPage() {
   const isNextAuthLoading = status === 'loading'
   const isNextAuthAuthenticated = status === 'authenticated'
   const hasSession = !!user || isNextAuthAuthenticated
-  // messages.user_id는 public.users(id) FK 참조 → NextAuth 세션의 id만 사용 (Supabase Auth user.id는 23503 방지)
-  const effectiveUserId = (nextSession?.user as { id?: string } | undefined)?.id ?? undefined
+  // Supabase 이메일 가입 시 NextAuth 세션 없음 → user.id 사용. NextAuth(OAuth) 시 nextSession.user.id 사용.
+  const effectiveUserId =
+    (user?.id != null && String(user.id).trim() !== '' ? user.id : (nextSession?.user as { id?: string } | undefined)?.id) ?? undefined
 
+  // 보호 라우트: 비로그인 시 로그인 페이지로. 150ms 유예로 가입/로그인 직후 세션 반영 지연 시 쫓아내지 않음
   useEffect(() => {
     if (loading || isNextAuthLoading) return
-    if (user) return
-    if (status === 'authenticated') return
-    if (status === 'unauthenticated') {
-      router.replace('/login?returnUrl=/dashboard')
-    }
+    if (user || status === 'authenticated') return
+    if (status !== 'unauthenticated') return
+    const t = setTimeout(() => router.replace('/login?returnUrl=/dashboard'), 150)
+    return () => clearTimeout(t)
   }, [loading, isNextAuthLoading, user, status, router])
 
   const handleEnterBoard = useCallback((boardId: string) => {

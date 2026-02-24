@@ -82,7 +82,9 @@ export function useAuth() {
   }, [])
 
   /**
-   * 이메일 회원가입. 이메일 인증 비활성화 시 가입 즉시 세션이 생성될 수 있음.
+   * 이메일 회원가입. 이메일 인증 비활성화 시 가입 즉시 세션이 생성됨.
+   * - 세션이 있으면 그대로 반환(onAuthStateChange가 곧바로 세션을 반영).
+   * - 세션이 없으면(이메일 인증 대기 등) signInWithPassword로 즉시 로그인해 세션 확정.
    * 이미 가입된 이메일이면 { error: 'already_registered' } 반환.
    */
   const signUpWithEmail = useCallback(async (email: string, password: string) => {
@@ -99,7 +101,6 @@ export function useAuth() {
         return { error: 'already_registered' }
       return { error: error.message }
     }
-    // 인증 비활성화 시 세션이 올 수 있음. 없으면 로그인 시도로 즉시 로그인 처리
     if (data.session) return { data, error: null }
     const signInRes = await supabase.auth.signInWithPassword({ email, password })
     if (signInRes.data.session) return { data: signInRes.data, error: null }

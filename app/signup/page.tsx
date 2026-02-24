@@ -42,6 +42,8 @@ function SignupForm() {
     }
     alert('환영합니다! 가입이 완료되었습니다.')
     const path = returnUrl.startsWith('/') ? returnUrl : '/'
+    // 세션 저장 및 onAuthStateChange 반영을 위해 한 틱 대기 후 이동 (다음 페이지에서 getSession()이 세션을 받을 수 있도록)
+    await new Promise((r) => setTimeout(r, 0))
     router.replace(path)
   }
 

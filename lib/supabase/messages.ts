@@ -76,6 +76,26 @@ export async function getNicknamesInBoard(boardId: string): Promise<string[]> {
   return [...names].sort((a, b) => a.localeCompare(b))
 }
 
+/** DB/네트워크 오류 시 사용자에게 보여줄 메시지로 변환. 세션 만료와 스키마 오류 구분. */
+function toSendMessageErrorMessage(err: { code?: string; message?: string } | null): string {
+  if (!err) return '메시지 전송에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+  const code = err.code ?? ''
+  const msg = (err.message ?? '').toLowerCase()
+  if (code === '42703' || msg.includes('column') && msg.includes('does not exist')) {
+    return '서비스 설정이 반영 중일 수 있습니다. 잠시 후 다시 시도해 주세요.'
+  }
+  if (code === '42P01' || msg.includes('relation') && msg.includes('does not exist')) {
+    return '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'
+  }
+  if (code === 'PGRST301' || msg.includes('jwt') || msg.includes('session') || msg.includes('expired')) {
+    return '로그인 세션이 만료되었을 수 있습니다. 다시 로그인해 주세요.'
+  }
+  if (code === '23503' || msg.includes('foreign key')) {
+    return '일시적인 오류가 발생했습니다. 다시 로그인하거나 잠시 후 시도해 주세요.'
+  }
+  return '메시지 전송에 실패했습니다. 네트워크를 확인하거나 잠시 후 다시 시도해 주세요.'
+}
+
 export async function sendMessage(params: {
   boardId: string
   authorCharacter: number
@@ -84,24 +104,23 @@ export async function sendMessage(params: {
   imageUrl?: string | null
   /** 로그인 유저 ID. public.users(id) FK 참조 → NextAuth session.user.id(DB UUID)만 사용해야 함 (23503 방지) */
   userId?: string | null
-}): Promise<Message | null> {
+}): Promise<Message | { error: string } | null> {
   const supabase = createClient()
-  if (!supabase) return null
+  if (!supabase) return { error: '연결할 수 없습니다. 잠시 후 다시 시도해 주세요.' }
 
-  // user_id는 반드시 session.user.id(public.users의 UUID). null 또는 이메일 형식이면 전송 중단.
   const rawUid = params.userId != null && params.userId !== '' ? String(params.userId).trim() : null
   if (rawUid !== null && rawUid !== '') {
     if (!isValidUuid(rawUid)) {
-      console.error('[sendMessage] user_id가 UUID가 아닙니다. session.user.id(DB UUID)를 사용하세요.', { userId: rawUid })
-      return null
+      console.error('[sendMessage] user_id가 UUID가 아닙니다.', { userId: rawUid })
+      return { error: '로그인 세션이 올바르지 않습니다. 다시 로그인해 주세요.' }
     }
     if (rawUid.includes('@')) {
-      console.error('[sendMessage] user_id에 이메일이 들어갈 수 없습니다. session.user.id(UUID)를 사용하세요.', { userId: rawUid })
-      return null
+      console.error('[sendMessage] user_id에 이메일이 들어갈 수 없습니다.', { userId: rawUid })
+      return { error: '로그인 세션이 올바르지 않습니다. 다시 로그인해 주세요.' }
     }
   } else {
-    console.error('[sendMessage] user_id가 null 또는 빈 값입니다. 로그인 세션의 session.user.id를 전달하세요.')
-    return null
+    console.error('[sendMessage] user_id가 null 또는 빈 값입니다.')
+    return { error: '로그인이 필요합니다.' }
   }
 
   const content = params.content.trim()
@@ -142,7 +161,7 @@ export async function sendMessage(params: {
 
   if (result.error) {
     console.error('sendMessage error:', result.error)
-    return null
+    return { error: toSendMessageErrorMessage(result.error) }
   }
   return dbMessageToMessage(result.data as DbMessage)
 }
