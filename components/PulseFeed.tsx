@@ -1074,7 +1074,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     setEffectiveCharacter(selectedCharacterInModal)
     setEffectiveNickname(name)
     setShowNicknameModal(false)
-  }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId, selectedCharacterInModal])
+  }
+  , [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId, selectedCharacterInModal]);
 
   return (
     <div className="h-screen max-h-[100dvh] min-h-0 flex flex-col overflow-hidden bg-midnight-black text-white pt-2 pb-2 safe-top safe-bottom">
