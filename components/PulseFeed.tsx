@@ -1335,29 +1335,28 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         )}
       </AnimatePresence>
 
-      {/* 상단 파티션: 헤더 + 전광판 (스크롤 없음). 모바일: 2행(네비+액션), sm 이상: 1행. 상하 여백 축소로 채팅 공간 확보 */}
+      {/* 상단 파티션: 헤더 2단(모바일) / 1행(sm+). 노치 대응 pt-2, 겹침 방지 gap·relative */}
       <div className="flex-none shrink-0">
-      <div className="z-10 glass-strong border-b border-neon-orange/20 safe-top pt-1.5 sm:pt-2.5 pb-1 sm:pb-1.5 md:pb-1">
+      <div className="relative z-10 glass-strong border-b border-neon-orange/20 safe-top pt-2 sm:pt-2.5 pb-1 sm:pb-1.5 md:pb-1">
         <div className="px-2 py-0.5 sm:px-3 sm:py-1.5">
-          {/* 모바일: 1행(네비) + 2행(액션). sm 이상: 한 줄로 통합 */}
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-y-1 sm:gap-x-3 sm:mb-1.5">
-            {/* 1행 Navigation: 뒤로 | 방 제목(전체 표시) | 방 번호 | 나가기 */}
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-y-1 sm:gap-x-3 sm:mb-1.5">
+            {/* 1행: 뒤로 | 방 제목 | No.배지 | 나가기 (모바일) */}
+            <div className="relative flex justify-between items-center gap-2 min-w-0">
               <button
                 onClick={onBack}
-                className="text-gray-400 hover:text-white text-base flex-shrink-0 p-0.5 -m-0.5 sm:p-0 sm:m-0"
+                className="relative flex-shrink-0 text-gray-400 hover:text-white text-base p-1 sm:p-0"
                 aria-label="뒤로"
               >
                 <span aria-hidden>←</span>
                 <span className="hidden sm:inline ml-0.5">뒤로</span>
               </button>
-              <h1 className="text-sm sm:text-xl font-black min-w-0 flex-1 text-white break-words line-clamp-2 sm:truncate sm:line-clamp-none" title={headerTitle}>
+              <h1 className="relative flex-1 min-w-0 text-sm sm:text-xl font-black text-white truncate sm:line-clamp-none text-center sm:text-left" title={headerTitle}>
                 {headerTitle}
               </h1>
               <button
                 type="button"
                 onClick={handleCopyRoomLink}
-                className="inline-flex items-center shrink-0 text-[10px] sm:text-sm font-bold select-none transition-all hover:brightness-110 rounded px-1.5 py-0.5 sm:px-2 sm:py-0.5 cursor-pointer border-0"
+                className="relative flex-shrink-0 text-[10px] sm:text-sm font-bold select-none hover:brightness-110 rounded px-1.5 py-0.5 sm:px-2 sm:py-0.5 cursor-pointer border-0 ml-1 sm:ml-0"
                 style={{
                   background: '#FF6B00',
                   color: '#fff',
@@ -1383,7 +1382,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   type="button"
                   onClick={handleLeaveRoom}
                   disabled={leaving}
-                  className="sm:hidden flex items-center justify-center p-1.5 rounded-lg border border-red-500/40 text-red-500 hover:bg-red-500/10 transition-colors flex-shrink-0 disabled:opacity-50 text-xs font-medium"
+                  className="relative sm:hidden flex-shrink-0 flex items-center justify-center p-1.5 rounded-lg border border-red-500/40 text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50 text-xs font-medium"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   title="방 나가기"
@@ -1393,78 +1392,71 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 </motion.button>
               )}
             </div>
-            {/* 2행 Actions: 모바일=좌(모래시계) | 중앙(📌 전광판 고정 강조) | 우(공유/인원/프로필). sm이상=기존 한 줄 */}
-            <div className="flex items-center justify-between gap-2 w-full sm:w-auto sm:flex-shrink-0 sm:min-w-0 sm:justify-end sm:gap-3">
-              {/* 왼쪽: 모래시계(충전소) — 모바일에서 아이콘만 */}
+
+            {/* 2행: 모래시계 | 📌 전광판 | 공유 | 인원 | 프로필 (모바일: justify-around, 배경). sm 이상: 한 줄 */}
+            <div className="relative flex justify-around sm:justify-end items-center gap-1 sm:gap-2 w-full sm:w-auto sm:flex-shrink-0 bg-black/20 sm:bg-transparent p-1.5 sm:p-0 rounded-lg">
               {useSupabaseWithUuid && (
-                <div className="flex items-center justify-start flex-1 min-w-0 sm:flex-initial sm:flex-none">
-                  <motion.button
-                    type="button"
-                    onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
-                    className="flex-shrink-0 relative w-9 h-9 rounded-full flex items-center justify-center bg-gray-900/90 border-2 border-amber-400/40 shadow-md hover:bg-amber-500/10 transition-colors"
-                    aria-label={`모래시계 ${hourglasses}개 · 충전소 열기`}
-                    title="모래시계 충전소"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <span className="text-base sm:text-lg leading-none" aria-hidden>⏳</span>
-                    <span className="absolute -top-0.5 -right-0.5 min-w-[1rem] h-4 px-0.5 rounded-full bg-gray-900 border border-amber-400/80 text-amber-300 text-[10px] font-bold tabular-nums flex items-center justify-center">
-                      {hourglasses}
-                    </span>
-                  </motion.button>
-                </div>
-              )}
-              {/* 중앙: 📌 전광판 고정 — 모바일에서 중앙 배치·텍스트+아이콘·강조 */}
-              {useSupabaseWithUuid && (
-                <div className="flex items-center justify-center flex-shrink-0">
-                  <motion.button
-                    type="button"
-                    onClick={() => setShowPinModal(true)}
-                    className="flex-shrink-0 px-3 py-2 rounded-xl border-2 border-neon-orange/60 bg-neon-orange/15 text-neon-orange hover:bg-neon-orange/25 hover:border-neon-orange/80 text-xs font-bold transition-colors flex items-center gap-1.5 shadow-[0_0_12px_rgba(255,107,0,0.2)]"
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.98 }}
-                    title="전광판 고정"
-                    aria-label="전광판 고정"
-                  >
-                    <span aria-hidden>📌</span>
-                    <span className="sm:hidden">전광판 고정</span>
-                    <Pin className="hidden sm:block w-3.5 h-3.5 flex-shrink-0" aria-hidden />
-                    <span className="hidden sm:inline">전광판 고정</span>
-                  </motion.button>
-                </div>
-              )}
-              {/* 오른쪽: 공유 | 접속 인원 | 프로필 — 모바일에서 아이콘 위주 */}
-              <div className="flex items-center justify-end gap-2 flex-1 min-w-0 sm:flex-initial sm:flex-none sm:gap-3">
                 <motion.button
                   type="button"
-                  onClick={handleShare}
-                  className="flex-shrink-0 p-2 rounded-lg sm:rounded-xl glass border border-neon-orange/30 text-neon-orange hover:bg-neon-orange/10 transition-colors"
+                  onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
+                  className="relative flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center bg-gray-900/90 border-2 border-amber-400/40 hover:bg-amber-500/10 transition-colors"
+                  aria-label={`모래시계 ${hourglasses}개 · 충전소`}
+                  title="모래시계 충전소"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <span className="text-base sm:text-lg leading-none" aria-hidden>⏳</span>
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[1rem] h-4 px-0.5 rounded-full bg-gray-900 border border-amber-400/80 text-amber-300 text-[10px] font-bold tabular-nums flex items-center justify-center pointer-events-none">
+                    {hourglasses}
+                  </span>
+                </motion.button>
+              )}
+              {useSupabaseWithUuid && (
+                <motion.button
+                  type="button"
+                  onClick={() => setShowPinModal(true)}
+                  className="relative flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border-2 border-neon-orange/60 bg-neon-orange/15 text-neon-orange hover:bg-neon-orange/25 hover:border-neon-orange/80 text-xs font-bold transition-colors flex items-center gap-1 sm:gap-1.5"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.98 }}
+                  title="전광판 고정"
+                  aria-label="전광판 고정"
+                >
+                  <span aria-hidden>📌</span>
+                  <span className="sm:hidden">전광판</span>
+                  <Pin className="hidden sm:block w-3.5 h-3.5 flex-shrink-0" aria-hidden />
+                  <span className="hidden sm:inline">전광판 고정</span>
+                </motion.button>
+              )}
+              <motion.button
+                type="button"
+                onClick={handleShare}
+                className="relative flex-shrink-0 p-2 rounded-lg sm:rounded-xl glass border border-neon-orange/30 text-neon-orange hover:bg-neon-orange/10 transition-colors"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                title="공유하기"
+                aria-label="공유하기"
+              >
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                </svg>
+              </motion.button>
+              <div className="relative flex-shrink-0" ref={presencePopoverRef}>
+                <motion.button
+                  type="button"
+                  onClick={() => setShowPresencePopover((v) => !v)}
+                  className="flex items-center gap-1 px-1.5 py-1.5 sm:py-1 rounded-lg glass border border-neon-orange/30 text-neon-orange hover:bg-neon-orange/10 transition-colors min-w-0"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  title="공유하기"
-                  aria-label="공유하기"
+                  title="참여 중인 사람"
+                  aria-label={`참여 중 ${displayParticipantCount}명`}
                 >
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <circle cx="18" cy="5" r="3" />
-                    <circle cx="6" cy="12" r="3" />
-                    <circle cx="18" cy="19" r="3" />
-                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                  </svg>
+                  <span className="text-sm sm:text-base leading-none" aria-hidden>👥</span>
+                  <span className="font-bold tabular-nums text-white text-xs sm:text-sm">{displayParticipantCount}</span>
                 </motion.button>
-                <div className="relative flex-shrink-0" ref={presencePopoverRef}>
-                  <motion.button
-                    type="button"
-                    onClick={() => setShowPresencePopover((v) => !v)}
-                    className="flex items-center gap-1 px-1.5 py-1.5 sm:px-1.5 sm:py-1 rounded-lg glass border border-neon-orange/30 text-neon-orange hover:bg-neon-orange/10 transition-colors min-w-0"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    title="참여 중인 사람"
-                    aria-label={`참여 중 ${displayParticipantCount}명. 클릭하면 목록을 볼 수 있습니다.`}
-                  >
-                    <span className="text-sm sm:text-base leading-none" aria-hidden>👥</span>
-                    <span className="font-bold tabular-nums text-white text-xs sm:text-sm">{displayParticipantCount}</span>
-                  </motion.button>
                 <AnimatePresence>
                   {showPresencePopover && (
                     <motion.div
@@ -1515,19 +1507,19 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               <button
                 type="button"
                 onClick={() => setShowNicknameModal(true)}
-                className="flex-shrink-0 min-w-0 flex items-center gap-1 text-xs sm:text-sm text-neon-orange hover:brightness-110 py-1.5 sm:py-0"
+                className="relative flex-shrink-0 min-w-0 flex items-center gap-1 text-xs sm:text-sm text-neon-orange hover:brightness-110 py-1 sm:py-0"
                 title="닉네임 변경"
-                aria-label={`활동명: ${authorNickname}. 클릭하면 닉네임을 변경할 수 있습니다.`}
+                aria-label={`활동명: ${authorNickname}`}
               >
                 <span className="flex-shrink-0" aria-hidden>👤</span>
-                <span className="truncate max-w-[80px] sm:max-w-[100px]">{authorNickname || '이름 없음'}</span>
+                <span className="truncate max-w-[72px] sm:max-w-[100px]">{authorNickname || '이름 없음'}</span>
               </button>
               {useSupabaseWithUuid && (
                 <motion.button
                   type="button"
                   onClick={handleLeaveRoom}
                   disabled={leaving}
-                  className="hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-lg border border-red-500/40 text-red-500 hover:bg-red-500/10 transition-colors flex-shrink-0 disabled:opacity-50"
+                  className="hidden sm:flex flex-shrink-0 items-center gap-1 px-2 py-1.5 rounded-lg border border-red-500/40 text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   title="방 나가기"
@@ -1537,7 +1529,6 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   <span className="text-xs font-medium">나가기</span>
                 </motion.button>
               )}
-              {/* 데스크톱 전용: 충전하기 버튼 (모바일은 모래시계로 충전소 진입) */}
               <motion.button
                 type="button"
                 onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
@@ -1791,7 +1782,6 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
           )}
         </div>
       )}
-      </div>
 
       {/* The Scroll Zone: 상단 전광판·하단 입력창 사이 남는 공간만 차지, 이 안에서만 스크롤 */}
       {useSupabaseWithUuid && (
