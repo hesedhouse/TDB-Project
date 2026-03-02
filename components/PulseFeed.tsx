@@ -1074,8 +1074,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     setEffectiveCharacter(selectedCharacterInModal)
     setEffectiveNickname(name)
     setShowNicknameModal(false)
-  }
-  , [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId, selectedCharacterInModal]);
+  }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId, selectedCharacterInModal])
 
   return (
     <div className="h-screen max-h-[100dvh] min-h-0 flex flex-col overflow-hidden bg-midnight-black text-white pt-2 pb-2 safe-top safe-bottom">
@@ -1621,6 +1620,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             )}
           </div>
         </div>
+      </div>
       </div>
 
       {/* 5분 전광판: 영상/사진 (z-50으로 채팅보다 위에 두어 하단 버튼 클릭 가능) */}
