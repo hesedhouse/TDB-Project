@@ -427,7 +427,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return () => { cancelled = true }
   }, [nicknameModalMounted, boardId, userNickname, roomIdFromUrl, userId, useSupabaseWithUuid])
 
-  /** 모달이 열릴 때: 저장된 아이콘 선택 반영, 닉네임 비어 있으면 랜덤으로 한 번 채움 */
+  /** 모달이 열릴 때: 저장된 아이콘 선택 반영 */
   useEffect(() => {
     if (!showNicknameModal || !boardId) return
     if (typeof window === 'undefined') return
@@ -436,10 +436,18 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     const charNum = savedChar !== null ? parseInt(savedChar, 10) : NaN
     setSelectedCharacterInModal(Number.isNaN(charNum) || charNum < 0 || charNum > 9 ? 0 : charNum)
   }, [showNicknameModal, boardId])
+
+  /** 최초 모달 진입 시에만 랜덤 닉네임을 기본값으로 한 번 설정 (비울 때마다 채우지 않음) */
+  const nicknameInitializedForOpenRef = useRef(false)
   useEffect(() => {
-    if (!showNicknameModal || nicknameInput.trim() !== '') return
+    if (!showNicknameModal) {
+      nicknameInitializedForOpenRef.current = false
+      return
+    }
+    if (nicknameInitializedForOpenRef.current) return
+    nicknameInitializedForOpenRef.current = true
     setNicknameInput(getRandomNickname())
-  }, [showNicknameModal, nicknameInput])
+  }, [showNicknameModal])
 
   useEffect(() => {
     if (!noCopyToast) return
@@ -1031,7 +1039,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
 
   const handleNicknameSubmit = useCallback(async () => {
     const name = nicknameInput.trim()
-    if (!name) return
+    if (!name) {
+      setNicknameError('닉네임을 입력해주세요.')
+      return
+    }
     setNicknameError(null)
 
     if (useSupabaseWithUuid) {
@@ -1128,29 +1139,42 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 </p>
               )}
               <div className="flex gap-2 mb-2">
-                <input
-                  type="text"
-                  value={nicknameInput}
-                  onChange={(e) => { setNicknameInput(e.target.value); setNicknameError(null) }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setShowNicknameModal(false)
-                    else if (e.key === 'Enter' && !nicknameSubmitLoading && nicknameInput.trim()) handleNicknameSubmit()
-                  }}
-                  placeholder="닉네임 입력"
-                  maxLength={20}
-                  className="flex-1 min-w-0 px-4 py-3 rounded-xl bg-black/60 border-2 border-[#FF6B00]/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base"
-                  style={{ boxShadow: '0 0 12px rgba(255,107,0,0.15)' }}
-                />
+                <div className="flex-1 min-w-0 relative flex items-center">
+                  <input
+                    type="text"
+                    value={nicknameInput}
+                    onChange={(e) => { setNicknameInput(e.target.value); setNicknameError(null) }}
+                    onFocus={(e) => e.target.select()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setShowNicknameModal(false)
+                      else if (e.key === 'Enter' && !nicknameSubmitLoading) handleNicknameSubmit()
+                    }}
+                    placeholder="닉네임 입력"
+                    maxLength={20}
+                    className="w-full min-w-0 pl-4 pr-9 py-3 rounded-xl bg-black/60 border-2 border-[#FF6B00]/50 focus:border-[#FF6B00] focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 text-white placeholder-gray-500 text-sm sm:text-base"
+                    style={{ boxShadow: '0 0 12px rgba(255,107,0,0.15)' }}
+                  />
+                  {nicknameInput.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setNicknameInput(''); setNicknameError(null) }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors text-sm"
+                      aria-label="닉네임 지우기"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
                 <motion.button
                   type="button"
                   onClick={() => { setNicknameInput(getRandomNickname()); setNicknameError(null) }}
                   className="flex-shrink-0 p-3 rounded-xl border-2 border-[#FF6B00]/50 bg-black/60 text-[#FF6B00] hover:bg-[#FF6B00]/20 transition-colors"
-                  title="랜덤 닉네임"
-                  aria-label="랜덤 닉네임 뽑기"
+                  title="랜덤 닉네임 새로고침"
+                  aria-label="랜덤 닉네임 새로고침"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <span className="text-xl leading-none" aria-hidden>🎲</span>
+                  <span className="text-lg leading-none font-bold" aria-hidden>↺</span>
                 </motion.button>
               </div>
               {useSupabaseWithUuid && nicknameInput.trim() && (
@@ -1178,7 +1202,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 <motion.button
                   type="button"
                   onClick={() => handleNicknameSubmit()}
-                  disabled={!nicknameInput.trim() || nicknameSubmitLoading}
+                  disabled={nicknameSubmitLoading}
                   className="flex-1 py-3 rounded-xl font-bold text-sm sm:text-base text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{
                     background: nicknameInput.trim() && !nicknameSubmitLoading ? '#FF6B00' : '#555',
