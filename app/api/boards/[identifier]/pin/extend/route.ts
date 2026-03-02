@@ -59,6 +59,16 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to extend' }, { status: 500 })
     }
 
+    // 명예의 전당 화력: 전광판 연장(billboard) 사용 로그
+    await supabase
+      .from('hourglass_transactions')
+      .insert({ board_id: boardId, type: 'billboard', amount: 1 })
+      .then((r) => {
+        if (r.error && process.env.NODE_ENV === 'development') {
+          console.warn('[api/boards/pin/extend] hourglass_transactions insert skipped', r.error.code)
+        }
+      })
+
     return NextResponse.json({
       ok: true,
       pinned_until: newUntil.toISOString(),

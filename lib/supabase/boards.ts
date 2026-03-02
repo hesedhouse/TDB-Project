@@ -17,6 +17,8 @@ export type BoardRow = {
   is_active?: boolean
   /** 폭파된 시각(ISO). null/없으면 미폭파 */
   exploded_at?: string | null
+  /** 누적 모래시계 연장 횟수. 명예의 전당 폴백용 */
+  total_recharged?: number | null
 }
 
 /** BoardRow 별칭 (Board | null 리턴 타입용) */
@@ -31,6 +33,7 @@ type BoardRowSelected = {
   public_id?: unknown
   is_active?: unknown
   exploded_at?: unknown
+  total_recharged?: unknown
 }
 
 function normalizeBoardRow(row: BoardRowSelected): BoardRow {
@@ -50,6 +53,10 @@ function normalizeBoardRow(row: BoardRowSelected): BoardRow {
       : typeof row.exploded_at === 'string'
         ? row.exploded_at
         : undefined
+  const totalRecharged =
+    row.total_recharged !== undefined && row.total_recharged != null
+      ? Number(row.total_recharged)
+      : undefined
   return {
     id: String(row.id),
     keyword: row.keyword,
@@ -59,6 +66,7 @@ function normalizeBoardRow(row: BoardRowSelected): BoardRow {
     ...(rawPublic !== undefined ? { public_id: publicIdNum } : {}),
     ...(row.is_active !== undefined ? { is_active: isActive } : {}),
     ...(row.exploded_at !== undefined ? { exploded_at: explodedAt ?? null } : {}),
+    ...(totalRecharged !== undefined && Number.isFinite(totalRecharged) ? { total_recharged: totalRecharged } : {}),
   }
 }
 
@@ -278,6 +286,107 @@ export async function getBoardByPublicId(rawId: string): Promise<BoardRow | null
   return normalizeBoardRow(data)
 }
 
+const HALL_SELECT = 'id, keyword, name, expires_at, created_at, public_id, is_active, exploded_at, total_recharged' as const
+const HALL_SELECT_LEGACY = 'id, keyword, name, expires_at, created_at, public_id' as const
+
+/**
+ * 명예의 전당 [불멸의 방]: expires_at이 가장 많이 남은 상위 5개 방.
+ */
+export async function getImmortalBoards(limit = 5): Promise<BoardRow[]> {
+  const supabase = createClient()
+  if (!supabase) return []
+  const cols = HALL_SELECT
+  const { data, error } = await supabase
+    .from('boards')
+    .select(cols)
+    .order('expires_at', { ascending: false })
+    .limit(limit)
+  if (error) {
+    if (error.code === '42703') {
+      const { data: legacy, error: legacyErr } = await supabase
+        .from('boards')
+        .select(HALL_SELECT_LEGACY)
+        .order('expires_at', { ascending: false })
+        .limit(limit)
+      if (legacyErr || !legacy) return []
+      return (legacy as BoardRowSelected[]).map(normalizeBoardRow)
+    }
+    console.error('getImmortalBoards error:', error)
+    return []
+  }
+  return (data as BoardRowSelected[]).map(normalizeBoardRow)
+}
+
+export type HotPlaceEntry = { board: BoardRow; heatScoreP: number }
+
+/**
+ * 명예의 전당 [핫플레이스]: 최근 24시간 화력 점수 상위 5개 방.
+ * 화력 = 연장(extension) 1P/개 + 전광판(billboard) 2P/개.
+ * RPC get_hot_places_24h_heat 사용, 없으면 get_hot_places_24h → total_recharged 폴백.
+ */
+export async function getHotPlacesBoards(limit = 5): Promise<HotPlaceEntry[]> {
+  const supabase = createClient()
+  if (!supabase) return []
+
+  // 1) 화력 RPC (extension + billboard*2) 우선
+  const { data: heatData, error: heatErr } = await supabase.rpc('get_hot_places_24h_heat', { lim: limit })
+  if (!heatErr && heatData && Array.isArray(heatData) && heatData.length > 0) {
+    const entries = heatData as { board_id: string; heat_score: number }[]
+    const ids = entries.map((e) => e.board_id)
+    const cols = HALL_SELECT
+    const { data: rows, error: selErr } = await supabase.from('boards').select(cols).in('id', ids)
+    if (selErr) {
+      const { data: legacy } = await supabase.from('boards').select(HALL_SELECT_LEGACY).in('id', ids)
+      if (!legacy) return []
+      const byId = new Map((legacy as BoardRowSelected[]).map((r) => [String(r.id), normalizeBoardRow(r)]))
+      return entries
+        .map((e) => {
+          const board = byId.get(e.board_id)
+          return board ? { board, heatScoreP: Number(e.heat_score) || 0 } : null
+        })
+        .filter((x): x is HotPlaceEntry => x != null)
+    }
+    const byId = new Map((rows as BoardRowSelected[]).map((r) => [String(r.id), normalizeBoardRow(r)]))
+    return entries
+      .map((e) => {
+        const board = byId.get(e.board_id)
+        return board ? { board, heatScoreP: Number(e.heat_score) || 0 } : null
+      })
+      .filter((x): x is HotPlaceEntry => x != null)
+  }
+
+  // 2) 폴백: 구 RPC (연장만 집계)
+  const { data: rpcData, error: rpcErr } = await supabase.rpc('get_hot_places_24h', { lim: limit })
+  if (!rpcErr && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
+    const entries = rpcData as { board_id: string; recharge_count: number }[]
+    const ids = entries.map((e) => e.board_id)
+    const { data: rows } = await supabase.from('boards').select(HALL_SELECT).in('id', ids)
+    const byIdMap = new Map(((rows ?? []) as BoardRowSelected[]).map((r) => [String(r.id), normalizeBoardRow(r)] as const))
+    return entries
+      .map((e) => {
+        const board = byIdMap.get(e.board_id)
+        return board ? { board, heatScoreP: Number(e.recharge_count) || 0 } : null
+      })
+      .filter((x): x is HotPlaceEntry => x != null)
+  }
+
+  // 3) 폴백: total_recharged 기준
+  const { data: fallback, error: fallbackErr } = await supabase
+    .from('boards')
+    .select(HALL_SELECT)
+    .order('total_recharged', { ascending: false })
+    .limit(limit)
+  if (fallbackErr) {
+    const { data: leg } = await supabase.from('boards').select(HALL_SELECT_LEGACY).order('expires_at', { ascending: false }).limit(limit)
+    if (!leg) return []
+    return (leg as BoardRowSelected[]).map((r) => ({ board: normalizeBoardRow(r), heatScoreP: 0 }))
+  }
+  return (fallback as BoardRowSelected[]).map((r) => ({
+    board: normalizeBoardRow(r),
+    heatScoreP: typeof (r as { total_recharged?: number }).total_recharged === 'number' ? (r as { total_recharged: number }).total_recharged : 0,
+  }))
+}
+
 /**
  * 해당 방의 expires_at을 현재 저장된 값에서 모래시계 1개당 30분 연장합니다.
  * boardId는 boards.id (UUID)를 넣어야 합니다.
@@ -316,6 +425,20 @@ export async function extendBoardExpiry(boardId: string): Promise<Date | null> {
     console.error('extendBoardExpiry update error:', updateErr)
     return null
   }
+
+  // 명예의 전당: 충전 로그 기록 (트리거가 boards.total_recharged 자동 증가)
+  await supabase.from('board_recharge_log').insert({ board_id: boardId }).then((r) => {
+    if (r.error && process.env.NODE_ENV === 'development') {
+      console.warn('extendBoardExpiry: board_recharge_log insert skipped', r.error.code)
+    }
+  })
+
+  // 화력 점수: hourglass_transactions에 extension 기록
+  await supabase.from('hourglass_transactions').insert({ board_id: boardId, type: 'extension', amount: 1 }).then((r) => {
+    if (r.error && process.env.NODE_ENV === 'development') {
+      console.warn('extendBoardExpiry: hourglass_transactions insert skipped', r.error.code)
+    }
+  })
 
   return newExpiresAt
 }

@@ -79,6 +79,17 @@ export async function POST(
       )
     }
 
+    // 명예의 전당 화력: 전광판(billboard) 사용 로그 (가중치 2배 적용용)
+    const hourglassesUsed = Math.max(1, body.duration_minutes ?? 1)
+    await supabase
+      .from('hourglass_transactions')
+      .insert({ board_id: boardId, type: 'billboard', amount: hourglassesUsed })
+      .then((r) => {
+        if (r.error && process.env.NODE_ENV === 'development') {
+          console.warn('[api/boards/pin] hourglass_transactions insert skipped', r.error.code)
+        }
+      })
+
     return NextResponse.json({
       ok: true,
       pinned_until: pinnedUntil.toISOString(),
