@@ -1080,7 +1080,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   }, [nicknameInput, boardId, initialBoardName, roomIdFromUrl, initialExpiresAt, useSupabaseWithUuid, userId, selectedCharacterInModal])
 
   return (
-    <div className="h-screen max-h-[100dvh] min-h-0 flex flex-col overflow-hidden bg-midnight-black text-white pt-2 pb-2 safe-top safe-bottom">
+    <div className="flex flex-col h-screen max-h-[100dvh] min-h-0 overflow-hidden bg-midnight-black text-white pt-2 pb-2 safe-top safe-bottom">
       <AnimatePresence>
         {nicknameModalMounted && showNicknameModal && (
           <motion.div
@@ -1338,13 +1338,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         )}
       </AnimatePresence>
 
-      {/* 상단 파티션: 헤더 2단(모바일) / 1행(sm+). 노치 대응 pt-2, 겹침 방지 gap·relative */}
-      <div className="flex-none shrink-0">
-      <div className="relative z-10 glass-strong border-b border-neon-orange/20 safe-top pt-2 sm:pt-2.5 pb-1 sm:pb-1.5 md:pb-1">
+      {/* 헤더: 항상 최상단(z-50), 불투명 배경으로 채팅이 비치지 않음, flex-shrink-0으로 높이 고정 */}
+      <header className="relative z-50 flex-shrink-0 bg-midnight-black border-b border-neon-orange/20 safe-top">
         <div className="px-2 py-0.5 sm:px-3 sm:py-1.5">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-y-1 sm:gap-x-3 sm:mb-1.5">
-            {/* 1행: 뒤로 | 방 제목 | No.배지 | 나가기 (모바일) */}
-            <div className="relative flex justify-between items-center gap-2 min-w-0">
+            {/* 1행: 뒤로 | 방 제목 | No.배지 | 나가기. 모바일 2줄 가독성 min-h-[40px] gap-2 */}
+            <div className="relative flex justify-between items-center gap-2 min-w-0 min-h-[40px] sm:min-h-0">
               <button
                 onClick={onBack}
                 className="relative flex-shrink-0 text-gray-400 hover:text-white text-base p-1 sm:p-0"
@@ -1396,8 +1395,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               )}
             </div>
 
-            {/* 2행: 모래시계 | 📌 전광판 | 공유 | 인원 | 프로필 (모바일: justify-around, 배경). sm 이상: 한 줄 */}
-            <div className="relative flex justify-around sm:justify-end items-center gap-1 sm:gap-2 w-full sm:w-auto sm:flex-shrink-0 bg-black/20 sm:bg-transparent p-1.5 sm:p-0 rounded-lg">
+            {/* 2행: 모래시계 | 📌 전광판 | 공유 | 인원 | 프로필. 모바일 min-h-[40px] gap-2 */}
+            <div className="relative flex justify-around sm:justify-end items-center gap-2 w-full sm:w-auto sm:flex-shrink-0 min-h-[40px] sm:min-h-0 bg-black/20 sm:bg-transparent p-1.5 sm:p-0 rounded-lg">
               {useSupabaseWithUuid && (
                 <motion.button
                   type="button"
@@ -1614,12 +1613,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             )}
           </div>
         </div>
-      </div>
-      </div>
+      </header>
 
-      {/* 5분 전광판: 영상/사진 (z-50으로 채팅보다 위에 두어 하단 버튼 클릭 가능) */}
+      {/* 5분 전광판: 영상/사진. flex-shrink-0으로 높이 고정, 헤더 아래 순서 유지 */}
       {useSupabaseWithUuid && pinnedState && pinnedState.pinnedUntil.getTime() > Date.now() && (
-        <div className="relative z-50 mx-1 mt-1 sm:mx-2 sm:mt-2 rounded-lg sm:rounded-xl overflow-hidden border border-neon-orange/30 bg-black/40">
+        <div className="relative z-40 flex-shrink-0 mx-1 mt-1 sm:mx-2 sm:mt-2 rounded-lg sm:rounded-xl overflow-hidden border border-neon-orange/30 bg-black/40">
           {pinnedCollapsed ? (
             /* 접힌 상태: 최소화 바 + 펼치기 버튼 하단 중앙 */
             <div className="relative flex items-center justify-between gap-2 px-3 py-3 pb-14 flex-wrap">
@@ -1786,12 +1784,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         </div>
       )}
 
-      {/* The Scroll Zone: 상단 전광판·하단 입력창 사이 남는 공간만 차지, 이 안에서만 스크롤 (카카오톡 스타일 연한 하늘색 배경) */}
+      {/* 채팅 영역: 헤더·전광판 바로 아래부터 시작, flex-1로 남은 공간만 차지, 겹침 없음 */}
       {useSupabaseWithUuid && (
         <>
         <div
           ref={listRef}
-          className="relative z-10 flex-1 min-h-0 overflow-y-auto flex flex-col -mt-6 sm:-mt-8 pt-4 sm:pt-6 px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-2 scrollbar-hide bg-[#BACEE0] pointer-events-none"
+          className="relative z-0 flex-1 min-h-0 overflow-y-auto flex flex-col pt-3 sm:pt-4 px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-2 scrollbar-hide bg-[#BACEE0] pointer-events-none"
           style={{ minHeight: 0 }}
         >
             {[...messages]
