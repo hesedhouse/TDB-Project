@@ -131,6 +131,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [reportSubmitting, setReportSubmitting] = useState(false)
   /** 전광판 접기 상태. 한 번 접으면 사용자가 펼치기 전까지 유지 */
   const [pinnedCollapsed, setPinnedCollapsed] = useState(false)
+  /** 이 클라이언트에서 전광판을 고정한 유저 여부 (카톡 스타일 강조용) */
+  const [pinnedByCurrentUser, setPinnedByCurrentUser] = useState(false)
   /** 새 고정 콘텐츠 시 자동 펼치기용: 마지막으로 본 pinned_until */
   const lastPinnedUntilRef = useRef<string | null>(null)
   /** 전광판 남은 시간 실시간 표시용 (1초마다 갱신) */
@@ -721,6 +723,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setPinInputUrl('')
       setPinImageFile(null)
       setPinError(null)
+      setPinnedByCurrentUser(true)
       getPinnedContent(boardId).then(setPinnedState)
     } finally {
       setPinSubmitting(false)
@@ -1783,18 +1786,35 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         </div>
       )}
 
-      {/* The Scroll Zone: 상단 전광판·하단 입력창 사이 남는 공간만 차지, 이 안에서만 스크롤 */}
+      {/* The Scroll Zone: 상단 전광판·하단 입력창 사이 남는 공간만 차지, 이 안에서만 스크롤 (카카오톡 스타일 연한 하늘색 배경) */}
       {useSupabaseWithUuid && (
         <>
         <div
           ref={listRef}
-          className="relative z-10 flex-1 min-h-0 overflow-y-auto flex flex-col -mt-6 sm:-mt-8 pt-4 sm:pt-6 px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-2 scrollbar-hide bg-black/10 pointer-events-none"
+          className="relative z-10 flex-1 min-h-0 overflow-y-auto flex flex-col -mt-6 sm:-mt-8 pt-4 sm:pt-6 px-2 py-1 sm:px-3 sm:py-2 space-y-1 pb-2 scrollbar-hide bg-[#BACEE0] pointer-events-none"
           style={{ minHeight: 0 }}
         >
             {[...messages]
               .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
               .map((msg) => {
                 const isOwnMessage = userId != null && msg.userId != null && userId === msg.userId
+                const isPinnedAuthor = pinnedByCurrentUser && isOwnMessage
+                const bubbleBase =
+                  'inline-block max-w-full px-3 py-1.5 text-[13px] leading-tight rounded-2xl shadow-sm border'
+                const bubbleTail = isOwnMessage ? 'rounded-tr-sm' : 'rounded-tl-sm'
+                const bubbleColors = isOwnMessage
+                  ? isPinnedAuthor
+                    ? 'bg-[#FFBE5B] text-black border-amber-400'
+                    : 'bg-[#FFBE5B] text-black border-[#F9A825]/60'
+                  : 'bg-white text-black border-gray-200'
+                const bubbleClassName = `${bubbleBase} ${bubbleTail} ${bubbleColors} ${
+                  isPinnedAuthor ? 'relative pr-4' : ''
+                }`
+                const timeLabel = msg.createdAt.toLocaleTimeString('ko-KR', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true,
+                })
                 return (
                 <motion.div
                   key={msg.id}
@@ -1803,19 +1823,13 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.15 }}
                 >
-                  <div className={`flex items-end gap-1 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex items-end gap-1.5 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
                   <DotCharacter characterId={msg.authorCharacter} size={24} className="flex-shrink-0" />
                   <div className={`flex flex-col max-w-[85%] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
-                    {/* 말풍선 - 컴팩트 */}
-                    <div
-                      className={`inline-block rounded-2xl px-2.5 py-1 ${
-                        isOwnMessage
-                          ? 'bg-neon-orange/25 border border-neon-orange/40 text-white'
-                          : 'bg-white/10 border border-white/10 text-white/95'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1 flex-wrap">
-                        <span className="text-[11px] font-semibold text-white/90 flex items-center gap-0.5">
+                    {/* 상대방 메시지: 닉네임을 말풍선 위에 작게 표기 */}
+                    {!isOwnMessage && (
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <span className="text-[11px] font-semibold text-gray-700 flex items-center gap-0.5">
                           {msg.authorNickname}
                           {crownByDisplayName.get((msg.authorNickname ?? '').trim()) && (() => {
                             const r = crownByDisplayName.get((msg.authorNickname ?? '').trim())!.rank
@@ -1829,8 +1843,15 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                             )
                           })()}
                         </span>
-                        <span className="text-[9px] text-gray-400">{formatTimeAgo(msg.createdAt)}</span>
                       </div>
+                    )}
+                    {/* 말풍선 - 카카오톡 스타일 */}
+                    <div className={bubbleClassName}>
+                      {isPinnedAuthor && (
+                        <span className="absolute -top-2 -right-1 text-xs" aria-hidden>
+                          📌
+                        </span>
+                      )}
                       {editingMessageId === msg.id ? (
                         <div className="mt-1">
                           <textarea
@@ -1860,15 +1881,28 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                       ) : (
                         <>
                           {(msg.content?.trim() ?? '') !== '' && (
-                            <p className="text-xs leading-tight whitespace-pre-wrap break-words mt-0.5">{msg.content}</p>
+                            <p className="whitespace-pre-wrap break-words mt-0.5">{msg.content}</p>
                           )}
                           {msg.imageUrl && (
-                            <a href={msg.imageUrl} target="_blank" rel="noopener noreferrer" className="block mt-0.5 rounded-lg overflow-hidden border border-white/10 focus:ring-2 focus:ring-neon-orange/50">
+                            <a
+                              href={msg.imageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block mt-0.5 rounded-lg overflow-hidden border border-black/5 focus:ring-2 focus:ring-neon-orange/50"
+                            >
                               <img src={msg.imageUrl} alt="" className="max-h-[200px] max-w-full object-contain" />
                             </a>
                           )}
                         </>
                       )}
+                    </div>
+                    {/* 시간 메타데이터: 말풍선 옆 아주 작은 글씨로 표시 */}
+                    <div
+                      className={`mt-0.5 text-[10px] text-gray-600 ${
+                        isOwnMessage ? 'self-end pr-1' : 'self-start pl-1'
+                      }`}
+                    >
+                      {timeLabel}
                     </div>
                     {/* 액션: 하트 → 댓글 → 수정(본인) → 삭제(본인) */}
                     <div className="flex items-center gap-1 mt-0.5">
