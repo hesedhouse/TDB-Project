@@ -4,9 +4,41 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import SessionProvider from '@/components/SessionProvider'
 import KakaoInAppRedirect from '@/components/KakaoInAppRedirect'
 
+const baseUrl =
+  typeof process.env.NEXT_PUBLIC_APP_URL === 'string' && process.env.NEXT_PUBLIC_APP_URL
+    ? process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000'
+
 export const metadata: Metadata = {
-  title: 'POPPIN',
-  description: '7일 후 소멸하는 휘발성 커뮤니티',
+  metadataBase: new URL(baseUrl),
+  title: '팝핀(Poppin) | 지금 다들 뭐 봐? 실시간 핫플 🔥',
+  description:
+    '핫한 소식 찾아 헤매지 마! 지금 가장 힙한 정보만 모아서 다 같이 수다 떠는 중💬 모래시계 터지기 전에 막차 탑승 가보자고!',
+  openGraph: {
+    type: 'website',
+    siteName: '팝핀 (Poppin)',
+    title: '팝핀(Poppin) | 지금 다들 뭐 봐? 실시간 핫플 🔥',
+    description:
+      '핫한 소식 찾아 헤매지 마! 지금 가장 힙한 정보만 모아서 다 같이 수다 떠는 중💬 모래시계 터지기 전에 막차 탑승 가보자고!',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: '팝핀 - 실시간 정보와 수다',
+      },
+    ],
+    locale: 'ko_KR',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: '팝핀(Poppin) | 지금 다들 뭐 봐? 실시간 핫플 🔥',
+    description:
+      '핫한 소식 찾아 헤매지 마! 지금 가장 힙한 정보만 모아서 다 같이 수다 떠는 중💬 모래시계 터지기 전에 막차 탑승 가보자고!',
+    images: ['/og-image.png'],
+  },
 }
 
 export const viewport = {
