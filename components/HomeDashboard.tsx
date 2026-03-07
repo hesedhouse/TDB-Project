@@ -60,7 +60,6 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   )
   const [featuredKeywords, setFeaturedKeywords] = useState<Set<string>>(new Set(['맛집', '데이트', '카페']))
   const [userBoards] = useState<Board[]>(filterActiveBoards(mockBoards.slice(0, 2)))
-  const [liveBoards] = useState<Board[]>(filterActiveBoards(mockBoards))
   const [warpingBoardId, setWarpingBoardId] = useState<string | null>(null)
   const [warpingKeyword, setWarpingKeyword] = useState<string | null>(null)
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([])
@@ -937,156 +936,124 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
         </div>
       </section>
 
-      {/* Live Boards */}
-      <section>
-        <h2 className="text-xl font-black mb-4 flex items-center gap-2">
-          <span className="text-neon-orange animate-pulse">🔥</span>
-          Live Boards
-        </h2>
-        <div className="space-y-3">
-          {liveBoards.map((board) => {
-            const expiresAt = board.expiresAt instanceof Date ? board.expiresAt : new Date(board.expiresAt)
-            return (
-              <motion.div
-                key={board.id}
-                className="glass-strong rounded-2xl p-4 cursor-pointer border border-white/10 shadow-lg shadow-black/20 hover:border-amber-500/20 transition-colors"
-                onClick={() => {
-                  if (useSupabase) {
-                    router.push(`/board/${encodeURIComponent(getBoardKeyword(board))}`)
-                  } else {
-                    onEnterBoard(board.id)
-                  }
-                }}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
-                  <div className="flex-1 min-w-0 order-1">
-                    <h3 className="font-bold text-lg text-blue-400 truncate">{displayBoardName(board.name)}</h3>
-                    <p className="text-sm text-gray-400 mt-0.5 truncate">{board.description}</p>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm shrink-0 order-2">
-                    <span className="text-gray-400" title="하트">❤️ {board.heartCount}</span>
-                    <span className="text-gray-400" title="인원">👥 {board.memberCount}</span>
-                    <span className="text-xs sm:text-sm whitespace-nowrap">
-                      <BoardTimeLabel expiresAt={expiresAt} />
-                    </span>
-                  </div>
-                  {board.featured && (
-                    <span className="text-neon-orange text-xs px-2 py-1 glass rounded-full shrink-0 order-3">
-                      Featured
-                    </span>
-                  )}
-                </div>
-              </motion.div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* 명예의 전당 (Hall of Fame): 불멸의 방 + 핫플레이스, 1시간마다 갱신 */}
+      {/* 🏆 명예의 전당: 불멸의 방 Top 5 (남은 시간 가장 많은 방) */}
       {useSupabase && (
-        <section className="mt-8">
+        <section className="mb-7">
           <h2 className="text-xl font-black mb-4 flex items-center gap-2">
             <span className="text-amber-400">🏆</span>
-            명예의 전당 <span className="text-sm font-normal text-gray-400">(Hall of Fame)</span>
+            명예의 전당
           </h2>
-          {hallFameLoading && immortalBoards.length === 0 && hotPlaces.length === 0 ? (
+          {hallFameLoading && immortalBoards.length === 0 ? (
             <p className="text-gray-400 text-sm">로딩 중…</p>
           ) : (
-            <div className="space-y-6">
-              {/* 불멸의 방: expires_at 가장 많이 남은 상위 5개 */}
-              <div>
-                <h3 className="text-base font-bold mb-3 flex items-center gap-2 text-amber-200">
-                  <span aria-hidden>👑</span>
-                  불멸의 방
-                </h3>
-                <div className="space-y-2">
-                  {immortalBoards.map((row, idx) => {
-                    const rank = idx + 1
-                    const isFirst = rank === 1
-                    const expiresAt = new Date(row.expires_at)
-                    return (
-                      <motion.div
-                        key={row.id}
-                        className={`rounded-xl p-4 cursor-pointer border transition-colors ${
-                          isFirst
-                            ? 'border-amber-400/60 bg-amber-500/10 shadow-lg shadow-amber-500/20 scale-[1.02]'
-                            : 'glass-strong border-white/10 hover:border-amber-500/20'
+            <div className="space-y-3">
+              {immortalBoards.map((row, idx) => {
+                const rank = idx + 1
+                const isFirst = rank === 1
+                const expiresAt = new Date(row.expires_at)
+                return (
+                  <motion.div
+                    key={row.id}
+                    className={`flex-shrink-0 glass-strong rounded-2xl p-4 cursor-pointer border shadow-lg shadow-black/20 transition-colors ${
+                      isFirst ? 'border-amber-400/50 hover:border-amber-400/60' : 'border-white/10 hover:border-amber-500/20'
+                    }`}
+                    onClick={() => router.push(`/board/${encodeURIComponent(row.keyword)}`)}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span
+                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-black ${
+                          isFirst ? 'bg-amber-400/25 text-amber-300 ring-2 ring-amber-400/50' : 'bg-white/10 text-gray-300'
                         }`}
-                        onClick={() => router.push(`/board/${encodeURIComponent(row.keyword)}`)}
-                        whileHover={{ scale: isFirst ? 1.03 : 1.02 }}
-                        whileTap={{ scale: 0.98 }}
                       >
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-black ${isFirst ? 'bg-amber-400/30 text-amber-300' : 'bg-white/10 text-gray-300'}`}>
-                            {rank}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-bold text-white truncate">{displayBoardRowName(row)}</h4>
-                            <div className="flex items-center gap-3 mt-1 text-xs sm:text-sm flex-wrap">
-                              <span className="text-gray-400">남은 시간</span>
-                              <BoardTimeLabel expiresAt={expiresAt} />
-                              <span className="text-gray-500">· 오늘의 화력 —</span>
-                            </div>
-                          </div>
+                        {rank}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-base text-blue-400 truncate">{displayBoardRowName(row)}</h3>
+                        <div className="flex items-center gap-2 mt-1 text-xs sm:text-sm text-gray-400">
+                          <span>남은 시간</span>
+                          <BoardTimeLabel expiresAt={expiresAt} />
                         </div>
-                      </motion.div>
-                    )
-                  })}
-                  {immortalBoards.length === 0 && !hallFameLoading && (
-                    <p className="text-gray-500 text-sm py-2">아직 없습니다</p>
-                  )}
-                </div>
-              </div>
-
-              {/* 핫플레이스: 최근 24시간 충전 건수 상위 5개 */}
-              <div>
-                <h3 className="text-base font-bold mb-3 flex items-center gap-2 text-amber-200">
-                  <span aria-hidden>🥇</span>
-                  핫플레이스
-                </h3>
-                <div className="space-y-2">
-                  {hotPlaces.map((entry, idx) => {
-                    const rank = idx + 1
-                    const isFirst = rank === 1
-                    const { board: row, heatScoreP } = entry
-                    const expiresAt = new Date(row.expires_at)
-                    return (
-                      <motion.div
-                        key={row.id}
-                        className={`rounded-xl p-4 cursor-pointer border transition-colors ${
-                          isFirst
-                            ? 'border-amber-400/60 bg-amber-500/10 shadow-lg shadow-amber-500/20 scale-[1.02]'
-                            : 'glass-strong border-white/10 hover:border-amber-500/20'
-                        }`}
-                        onClick={() => router.push(`/board/${encodeURIComponent(row.keyword)}`)}
-                        whileHover={{ scale: isFirst ? 1.03 : 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-black ${isFirst ? 'bg-amber-400/30 text-amber-300' : 'bg-white/10 text-gray-300'}`}>
-                            {rank}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-bold text-white truncate">{displayBoardRowName(row)}</h4>
-                            <div className="flex items-center gap-3 mt-1 text-xs sm:text-sm flex-wrap">
-                              <span className="text-gray-400">남은 시간</span>
-                              <BoardTimeLabel expiresAt={expiresAt} />
-                              <span className="text-neon-orange font-semibold">🔥 화력: {heatScoreP.toLocaleString()}P</span>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )
-                  })}
-                  {hotPlaces.length === 0 && !hallFameLoading && (
-                    <p className="text-gray-500 text-sm py-2">아직 없습니다</p>
-                  )}
-                </div>
-              </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })}
+              {immortalBoards.length === 0 && !hallFameLoading && (
+                <p className="text-gray-500 text-sm py-3">아직 없습니다</p>
+              )}
             </div>
           )}
+        </section>
+      )}
+
+      {/* 🔥 오늘의 핫플레이스: 24시간 내 모래시계 소모 Top 5 */}
+      {useSupabase && (
+        <section className="mb-7">
+          <h2 className="text-xl font-black mb-4 flex items-center gap-2">
+            <span className="text-neon-orange">🔥</span>
+            오늘의 핫플레이스
+          </h2>
+          {hallFameLoading && hotPlaces.length === 0 ? (
+            <p className="text-gray-400 text-sm">로딩 중…</p>
+          ) : (
+            <div className="space-y-3">
+              {hotPlaces.map((entry, idx) => {
+                const rank = idx + 1
+                const isFirst = rank === 1
+                const { board: row } = entry
+                const expiresAt = new Date(row.expires_at)
+                return (
+                  <motion.div
+                    key={row.id}
+                    className={`flex-shrink-0 glass-strong rounded-2xl p-4 cursor-pointer border shadow-lg shadow-black/20 transition-colors ${
+                      isFirst ? 'border-amber-400/50 hover:border-amber-400/60' : 'border-white/10 hover:border-amber-500/20'
+                    }`}
+                    onClick={() => router.push(`/board/${encodeURIComponent(row.keyword)}`)}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span
+                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-black ${
+                          isFirst ? 'bg-amber-400/25 text-amber-300 ring-2 ring-amber-400/50' : 'bg-white/10 text-gray-300'
+                        }`}
+                      >
+                        {rank}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-base text-blue-400 truncate">{displayBoardRowName(row)}</h3>
+                        <div className="flex items-center gap-2 mt-1 text-xs sm:text-sm text-gray-400">
+                          <span>남은 시간</span>
+                          <BoardTimeLabel expiresAt={expiresAt} />
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })}
+              {hotPlaces.length === 0 && !hallFameLoading && (
+                <p className="text-gray-500 text-sm py-3">아직 없습니다</p>
+              )}
+            </div>
+          )}
+
+          {/* 전체 방 보러가기: 검색 포커스 */}
+          <div className="mt-4 flex justify-center">
+            <motion.button
+              type="button"
+              onClick={() => {
+                searchInputRef.current?.focus()
+                searchInputRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+              }}
+              className="text-xs sm:text-sm text-slate-400 hover:text-neon-orange border border-slate-600 hover:border-neon-orange/40 rounded-full px-4 py-2 transition-colors"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              전체 방 보러가기
+            </motion.button>
+          </div>
         </section>
       )}
 
