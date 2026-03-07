@@ -2,7 +2,7 @@ import { createClient } from './client'
 import { isValidUuid } from './client'
 
 export type PinnedContentPayload =
-  | { type: 'youtube'; url: string }
+  | { type: 'youtube'; url: string; start_seconds?: number; end_seconds?: number }
   | { type: 'image'; url: string }
 
 export type PinnedState = {
@@ -33,8 +33,14 @@ function parseRow(row: {
   const pinnedUntil = new Date(until)
   if (Number.isNaN(pinnedUntil.getTime())) return null
   const pinnedAt = row?.pinned_at ? new Date(row.pinned_at) : undefined
-  if (pinnedAt != null && Number.isNaN(pinnedAt.getTime())) return { content: { type: type as 'youtube' | 'image', url }, pinnedUntil }
-  return { content: { type: type as 'youtube' | 'image', url }, pinnedUntil, pinnedAt }
+  const startSec = typeof obj?.start_seconds === 'number' && obj.start_seconds >= 0 ? Math.floor(obj.start_seconds) : undefined
+  const endSec = typeof obj?.end_seconds === 'number' && obj.end_seconds >= 0 ? Math.floor(obj.end_seconds) : undefined
+  const content: PinnedContentPayload =
+    type === 'youtube'
+      ? { type: 'youtube', url, ...(startSec != null && { start_seconds: startSec }), ...(endSec != null && { end_seconds: endSec }) }
+      : { type: 'image', url }
+  if (pinnedAt != null && Number.isNaN(pinnedAt.getTime())) return { content, pinnedUntil }
+  return { content, pinnedUntil, pinnedAt }
 }
 
 /** 해당 방의 현재 고정 전광판 조회. 만료됐으면 null. */
@@ -161,6 +167,26 @@ export function inferPinContentType(url: string): 'youtube' | 'image' | null {
   if (isYouTubeUrl(url)) return 'youtube'
   if (isImageUrl(url)) return 'image'
   return null
+}
+
+/** mm:ss 또는 초 단위 문자열을 초( number )로. 빈 문자열/잘못된 형식은 undefined */
+export function parseMmSsToSeconds(input: string): number | undefined {
+  const s = (input ?? '').trim()
+  if (!s) return undefined
+  const parts = s.split(':').map((p) => parseInt(p, 10))
+  if (parts.some((n) => Number.isNaN(n) || n < 0)) return undefined
+  if (parts.length === 1) return parts[0]!
+  if (parts.length === 2) return parts[0]! * 60 + parts[1]!
+  if (parts.length === 3) return parts[0]! * 3600 + parts[1]! * 60 + parts[2]!
+  return undefined
+}
+
+/** 초( number )를 m:ss 형식 문자열로 */
+export function secondsToMmSs(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds))
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return m > 0 ? `${m}:${String(sec).padStart(2, '0')}` : String(sec)
 }
 
 /** 1분 릴레이 전광판: 모든 콘텐츠 동일 규칙 — 모래시계 1개 / 1분 고정·연장 */

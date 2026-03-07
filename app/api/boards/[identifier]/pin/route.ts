@@ -3,7 +3,13 @@ import { createClient } from '@/lib/supabase/client'
 import { isValidUuid } from '@/lib/supabase/client'
 import { inferPinContentType } from '@/lib/supabase/pinnedContent'
 
-type PinBody = { type?: 'youtube' | 'image'; url: string; duration_minutes?: number }
+type PinBody = {
+  type?: 'youtube' | 'image'
+  url: string
+  duration_minutes?: number
+  start_seconds?: number
+  end_seconds?: number
+}
 
 export async function POST(
   request: Request,
@@ -52,10 +58,17 @@ export async function POST(
     }
     const boardId = String((row as { id: string }).id)
 
+    const startSec = typeof body.start_seconds === 'number' && body.start_seconds >= 0 ? Math.floor(body.start_seconds) : undefined
+    const endSec = typeof body.end_seconds === 'number' && body.end_seconds >= 0 ? Math.floor(body.end_seconds) : undefined
+    const pinnedContent =
+      type === 'youtube'
+        ? { type, url, ...(startSec != null && { start_seconds: startSec }), ...(endSec != null && { end_seconds: endSec }) }
+        : { type, url }
+
     const now = new Date()
     const pinnedUntil = new Date(now.getTime() + pinDurationMs)
     const payload = {
-      pinned_content: { type, url },
+      pinned_content: pinnedContent,
       pinned_until: pinnedUntil.toISOString(),
       pinned_at: now.toISOString(),
     }

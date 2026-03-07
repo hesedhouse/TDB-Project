@@ -16,7 +16,8 @@ import { recordContribution, getTopContributors, subscribeToContributions, type 
 import { subscribeBoardPresence, type PresenceUser } from '@/lib/supabase/presence'
 import { joinRoom, leaveRoom, getActiveParticipants, getExistingParticipantForUser, subscribeToRoomParticipants, type RoomParticipant } from '@/lib/supabase/roomParticipants'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
-import { getPinnedContent, subscribePinnedContent, getYouTubeVideoId, getPinTier, inferPinContentType, type PinnedState } from '@/lib/supabase/pinnedContent'
+import { getPinnedContent, subscribePinnedContent, getYouTubeVideoId, getPinTier, inferPinContentType, parseMmSsToSeconds, type PinnedState } from '@/lib/supabase/pinnedContent'
+import { getQueueForBoard, subscribeBillboardQueue, type BillboardQueueItem } from '@/lib/supabase/billboardQueue'
 import PinnedYouTubePlayer from './PinnedYouTubePlayer'
 import { shareBoard } from '@/lib/shareBoard'
 import { addOrUpdateSession, findSession } from '@/lib/activeSessions'
@@ -123,6 +124,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [showPinModal, setShowPinModal] = useState(false)
   const [pinType, setPinType] = useState<'youtube' | 'image'>('youtube')
   const [pinInputUrl, setPinInputUrl] = useState('')
+  const [pinStartMmSs, setPinStartMmSs] = useState('')
+  const [pinEndMmSs, setPinEndMmSs] = useState('')
   const [pinImageFile, setPinImageFile] = useState<File | null>(null)
   const [pinPreviewUrl, setPinPreviewUrl] = useState<string | null>(null)
   const [pinSubmitting, setPinSubmitting] = useState(false)
@@ -152,6 +155,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [extendPinnedLoading, setExtendPinnedLoading] = useState(false)
   /** 유튜브 전광판 재생 종료 시 대기 상태 UI 표시 */
   const [pinnedVideoEnded, setPinnedVideoEnded] = useState(false)
+  /** 전광판 예약 대기열 (다음 대기 N건 인디케이터용) */
+  const [billboardQueueItems, setBillboardQueueItems] = useState<BillboardQueueItem[]>([])
+  /** 전광판 콘텐츠 종료 시 billboard-next 한 번만 호출하기 위한 ref */
+  const requestedNextForPinRef = useRef<string | null>(null)
   /** 실시간 접속자 (Supabase Presence). DB 참여자와 병합해 참여자 목록 표시 */
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
   /** Presence 기준 실시간 접속자 수 (presenceState 키 개수). 0이면 DB 참여자 수 사용 */
@@ -246,6 +253,45 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       }
     }
   }, [showBillboardPanel])
+
+  /** 전광판 예약 대기열 실시간 구독 (패널 열려 있을 때) */
+  useEffect(() => {
+    if (!useSupabaseWithUuid || !boardId || !showBillboardPanel) return
+    const unsub = subscribeBillboardQueue(boardId, setBillboardQueueItems)
+    return unsub
+  }, [useSupabaseWithUuid, boardId, showBillboardPanel])
+
+  /** 전광판 다음: 대기열에서 꺼내 전광판에 설정 (Realtime으로 갱신됨) */
+  const fetchNextFromQueue = useCallback(async () => {
+    if (!useSupabaseWithUuid || !boardId) return
+    const key = pinnedState?.pinnedUntil?.toISOString() ?? 'empty'
+    if (requestedNextForPinRef.current === key) return
+    requestedNextForPinRef.current = key
+    try {
+      const res = await fetch(`/api/boards/${boardId}/billboard-next`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (data?.ok) setPinnedVideoEnded(false)
+    } catch {
+      requestedNextForPinRef.current = null
+    }
+  }, [useSupabaseWithUuid, boardId, pinnedState?.pinnedUntil?.toISOString()])
+
+  /** 새 전광판 콘텐츠 시 다음 요청 ref 초기화 */
+  useEffect(() => {
+    if (pinnedState?.pinnedUntil) requestedNextForPinRef.current = null
+  }, [pinnedState?.pinnedUntil?.toISOString(), pinnedState?.content?.url])
+
+  /** 전광판 만료 시(이미지 노출 시간 등) 대기열에서 다음 자동 실행 */
+  useEffect(() => {
+    if (!useSupabaseWithUuid || !boardId || !pinnedState) return
+    const key = pinnedState.pinnedUntil.toISOString()
+    const interval = setInterval(() => {
+      if (pinnedState.pinnedUntil.getTime() <= Date.now() && requestedNextForPinRef.current !== key) {
+        fetchNextFromQueue()
+      }
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [useSupabaseWithUuid, boardId, pinnedState?.pinnedUntil?.toISOString(), pinnedState?.content?.url, fetchNextFromQueue])
 
   /** 전광판 남은 시간 실시간 갱신 (1초마다) */
   useEffect(() => {
@@ -732,10 +778,18 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     setPinSubmitting(true)
     setPinError(null)
     try {
+      const startSeconds = parseMmSsToSeconds(pinStartMmSs)
+      const endSeconds = parseMmSsToSeconds(pinEndMmSs)
       const res = await fetch(`/api/boards/${boardId}/pin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: pinType, url, duration_minutes: tier.durationMinutes }),
+        body: JSON.stringify({
+          type: pinType,
+          url,
+          duration_minutes: tier.durationMinutes,
+          ...(startSeconds != null && { start_seconds: startSeconds }),
+          ...(endSeconds != null && { end_seconds: endSeconds }),
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -747,6 +801,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setHourglassesState(next)
       setShowPinModal(false)
       setPinInputUrl('')
+      setPinStartMmSs('')
+      setPinEndMmSs('')
       setPinImageFile(null)
       setPinError(null)
       setPinnedByCurrentUser(true)
@@ -754,7 +810,77 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     } finally {
       setPinSubmitting(false)
     }
-  }, [pinSubmitting, useSupabaseWithUuid, boardId, pinType, pinInputUrl, pinImageFile])
+  }, [pinSubmitting, useSupabaseWithUuid, boardId, pinType, pinInputUrl, pinStartMmSs, pinEndMmSs, pinImageFile])
+
+  /** 전광판 예약: 비어 있으면 즉시 반영, 재생 중이면 대기열에 추가 (모래시계 없음) */
+  const [queueSubmitting, setQueueSubmitting] = useState(false)
+  const handleQueueSubmit = useCallback(async () => {
+    if (queueSubmitting || !useSupabaseWithUuid || !boardId) return
+    let url = ''
+    if (pinType === 'youtube') {
+      const u = pinInputUrl.trim()
+      if (!getYouTubeVideoId(u)) {
+        setPinError('유효한 유튜브 링크를 입력해 주세요.')
+        return
+      }
+      url = u
+    } else {
+      if (pinImageFile) {
+        setQueueSubmitting(true)
+        setPinError(null)
+        const uploaded = await uploadChatImage(pinImageFile, boardId)
+        if (!uploaded) {
+          setPinError('이미지 업로드에 실패했습니다.')
+          setQueueSubmitting(false)
+          return
+        }
+        url = uploaded
+      } else if (pinInputUrl.trim()) {
+        url = pinInputUrl.trim()
+      } else {
+        setPinError('사진을 선택하거나 이미지 주소를 입력해 주세요.')
+        return
+      }
+    }
+    const inferred = inferPinContentType(url)
+    const type = inferred ?? pinType
+    if (type !== 'youtube' && type !== 'image') {
+      setPinError('YouTube 또는 이미지 URL을 입력해 주세요.')
+      return
+    }
+    setQueueSubmitting(true)
+    setPinError(null)
+    try {
+      const startSeconds = parseMmSsToSeconds(pinStartMmSs)
+      const endSeconds = parseMmSsToSeconds(pinEndMmSs)
+      const res = await fetch(`/api/boards/${boardId}/billboard-queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          url,
+          creator_id: userId,
+          ...(startSeconds != null && { start_seconds: startSeconds }),
+          ...(endSeconds != null && { end_seconds: endSeconds }),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setPinError(data?.error ?? '예약에 실패했습니다.')
+        return
+      }
+      setShowPinModal(false)
+      setPinInputUrl('')
+      setPinStartMmSs('')
+      setPinEndMmSs('')
+      setPinImageFile(null)
+      setPinError(null)
+      if (data.queued) setPinnedByCurrentUser(true)
+      getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
+    } finally {
+      setQueueSubmitting(false)
+    }
+  }, [queueSubmitting, useSupabaseWithUuid, boardId, pinType, pinInputUrl, pinStartMmSs, pinEndMmSs, pinImageFile, userId])
 
   /** 전광판 신고 제출 (사유 선택 후). 30명 이상 시 자동 해제는 API에서 처리 */
   const handleReportPinned = useCallback(async () => {
@@ -1676,6 +1802,17 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       {/* 전광판: 아이콘 클릭 시에만 표시. 입장 시 닫힘/빈 화면, 전광판에 띄우기로만 콘텐츠 갱신 */}
       {useSupabaseWithUuid && showBillboardPanel && (
         <div className="relative z-40 flex-shrink-0 mx-1 mt-1 sm:mx-2 sm:mt-2 rounded-lg sm:rounded-xl overflow-hidden border border-neon-orange/30 bg-black/40">
+          {billboardQueueItems.length > 0 && (
+            <div className="flex items-center gap-2 px-2 py-1.5 border-b border-white/10 bg-black/30">
+              <span className="text-[10px] font-medium text-neon-orange/90">🍿 다음 대기</span>
+              <span className="text-[10px] text-white/80 tabular-nums">{billboardQueueItems.length}건</span>
+              {billboardQueueItems.length <= 3 && (
+                <span className="text-[9px] text-gray-500 truncate flex-1">
+                  {billboardQueueItems.map((q) => q.type === 'youtube' ? '🎬' : '🖼').join(' ')}
+                </span>
+              )}
+            </div>
+          )}
           {pinnedState && pinnedState.pinnedUntil.getTime() > Date.now() ? pinnedCollapsed ? (
             /* 접힌 상태: 최소화 바 + 펼치기 버튼 하단 중앙 */
             <div className="relative flex items-center justify-between gap-2 px-3 py-3 pb-14 flex-wrap">
@@ -1787,8 +1924,10 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                         <PinnedYouTubePlayer
                           key={`yt-${videoId}-${pinKey}`}
                           videoId={videoId}
+                          startSeconds={pinnedState.content.type === 'youtube' ? pinnedState.content.start_seconds : undefined}
+                          endSeconds={pinnedState.content.type === 'youtube' ? pinnedState.content.end_seconds : undefined}
                           pinnedAt={pinnedState.pinnedAt}
-                          onEnded={() => setPinnedVideoEnded(true)}
+                          onEnded={() => { setPinnedVideoEnded(true); fetchNextFromQueue() }}
                           className="w-full h-full aspect-video"
                         />
                       )}
@@ -2469,7 +2608,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 <h2 className="text-lg font-black text-white">전광판 고정</h2>
                 <button
                   type="button"
-                  onClick={() => { setShowPinModal(false); setPinError(null) }}
+                  onClick={() => { setShowPinModal(false); setPinError(null); setPinStartMmSs(''); setPinEndMmSs('') }}
                   className="text-gray-400 hover:text-white p-1"
                   aria-label="닫기"
                 >
@@ -2493,19 +2632,43 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 </motion.button>
               </div>
               {pinType === 'youtube' ? (
-                <input
-                  type="url"
-                  value={pinInputUrl}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setPinInputUrl(v)
-                    setPinError(null)
-                    const t = inferPinContentType(v)
-                    if (t) setPinType(t)
-                  }}
-                  placeholder="유튜브 링크 붙여넣기 (youtube.com / youtu.be)"
-                  className="w-full px-4 py-3 rounded-xl glass border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm"
-                />
+                <>
+                  <input
+                    type="url"
+                    value={pinInputUrl}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setPinInputUrl(v)
+                      setPinError(null)
+                      const t = inferPinContentType(v)
+                      if (t) setPinType(t)
+                    }}
+                    placeholder="유튜브 링크 붙여넣기 (youtube.com / youtu.be)"
+                    className="w-full px-4 py-3 rounded-xl glass border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-white/70">시작 시간 (mm:ss)</span>
+                      <input
+                        type="text"
+                        value={pinStartMmSs}
+                        onChange={(e) => { setPinStartMmSs(e.target.value); setPinError(null) }}
+                        placeholder="0:00"
+                        className="w-full px-3 py-2 rounded-lg glass border border-white/20 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm font-mono"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-white/70">종료 시간 (mm:ss)</span>
+                      <input
+                        type="text"
+                        value={pinEndMmSs}
+                        onChange={(e) => { setPinEndMmSs(e.target.value); setPinError(null) }}
+                        placeholder="0:00"
+                        className="w-full px-3 py-2 rounded-lg glass border border-white/20 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm font-mono"
+                      />
+                    </label>
+                  </div>
+                </>
               ) : (
                 <>
                   <input
@@ -2547,34 +2710,41 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 if (!hasContent) return null
                 const urlForTier = pinType === 'youtube' ? pinInputUrl : pinInputUrl.trim() || ' '
                 const tier = getPinTier(pinType, urlForTier)
-                if (!tier) return null
-                const insufficient = hourglasses < tier.hourglasses
+                const insufficient = !tier || hourglasses < tier.hourglasses
                 return (
-                  <div className="mt-4 space-y-2">
+                  <div className="mt-4 space-y-3">
                     <p className="text-sm text-white/90">
-                      이 콘텐츠를 고정하려면 모래시계 <strong className="text-neon-orange">{tier.hourglasses}개</strong>가 필요하며, <strong className="text-neon-orange">{tier.durationMinutes}분</strong> 동안 유지됩니다.
+                      고정 시 모래시계 <strong className="text-neon-orange">{tier?.hourglasses ?? 1}개</strong> · 예약은 무료로 대기열에 추가됩니다.
                     </p>
-                    {insufficient ? (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-sm text-amber-400">모래시계가 부족합니다.</p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      {tier && !insufficient && (
+                        <motion.button
+                          type="button"
+                          onClick={handlePinSubmit}
+                          disabled={pinSubmitting}
+                          className="flex-1 py-3 rounded-xl font-semibold bg-neon-orange text-white disabled:opacity-50"
+                        >
+                          {pinSubmitting ? '고정 중…' : '지금 고정 (모래시계)'}
+                        </motion.button>
+                      )}
+                      {tier && insufficient && (
                         <motion.button
                           type="button"
                           onClick={() => router.push(pathname ? `/store?returnUrl=${encodeURIComponent(pathname)}` : '/store')}
-                          className="w-full py-2.5 rounded-xl font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/50 hover:bg-amber-500/30"
+                          className="flex-1 py-2.5 rounded-xl font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/50 hover:bg-amber-500/30"
                         >
                           충전하러 가기
                         </motion.button>
-                      </div>
-                    ) : (
+                      )}
                       <motion.button
                         type="button"
-                        onClick={handlePinSubmit}
-                        disabled={pinSubmitting}
-                        className="w-full py-3 rounded-xl font-semibold bg-neon-orange text-white disabled:opacity-50"
+                        onClick={handleQueueSubmit}
+                        disabled={queueSubmitting}
+                        className="flex-1 py-3 rounded-xl font-semibold bg-white/10 text-white border border-white/30 hover:bg-white/20 disabled:opacity-50"
                       >
-                        {pinSubmitting ? '고정 중…' : '고정하기'}
+                        {queueSubmitting ? '예약 중…' : '전광판 예약 (대기열)'}
                       </motion.button>
-                    )}
+                    </div>
                   </div>
                 )
               })()}

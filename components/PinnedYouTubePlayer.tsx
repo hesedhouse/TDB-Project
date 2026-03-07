@@ -11,7 +11,7 @@ declare global {
         elementId: string,
         options: {
           videoId: string
-          playerVars?: { rel?: number; start?: number; autoplay?: number }
+          playerVars?: { rel?: number; start?: number; end?: number; autoplay?: number }
           events?: {
             onReady?: (e: { target: YTPlayerInstance }) => void
             onStateChange?: (e: { data: number; target: YTPlayerInstance }) => void
@@ -41,6 +41,10 @@ const SYNC_CHECK_INTERVAL_MS = 30000
 
 export interface PinnedYouTubePlayerProps {
   videoId: string
+  /** 영상 시작 시각(초). URL start 파라미터와 동일 */
+  startSeconds?: number
+  /** 영상 종료 시각(초). 이 시각 도달 시 onEnded 호출 */
+  endSeconds?: number
   /** 영상이 처음 고정된 시각(서버 기준). 동시 시청 싱크용. 없으면 0초부터 재생 */
   pinnedAt?: Date
   onEnded?: () => void
@@ -55,6 +59,8 @@ export interface PinnedYouTubePlayerProps {
  */
 const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedYouTubePlayer({
   videoId,
+  startSeconds: startSec = 0,
+  endSeconds: endSec,
   pinnedAt,
   onEnded,
   className = 'w-full h-full',
@@ -65,11 +71,13 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
   onEndedRef.current = onEnded
 
   const pinnedAtMs = pinnedAt?.getTime()
+  const startVal = startSec >= 0 ? Math.floor(startSec) : 0
 
   useEffect(() => {
     if (!videoId || typeof window === 'undefined') return
 
     let driftIntervalId: ReturnType<typeof setInterval> | null = null
+    let endCheckIntervalId: ReturnType<typeof setInterval> | null = null
 
     const mount = async () => {
       if (!window.YT?.Player) return
@@ -78,19 +86,34 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
 
       const player = new window.YT.Player(containerId, {
         videoId,
-        playerVars: { rel: 0, start: 0, autoplay: 0 },
+        playerVars: { rel: 0, start: startVal, autoplay: 0, ...(endSec != null && endSec > 0 && { end: Math.floor(endSec) }) },
         events: {
           onReady: async (e: { target: YTPlayerInstance }) => {
             const target = e.target
             playerRef.current = target
+
+            if (endSec != null && endSec > startVal) {
+              endCheckIntervalId = setInterval(() => {
+                const p = playerRef.current
+                if (!p) return
+                const t = p.getCurrentTime()
+                if (Number.isFinite(t) && t >= endSec) {
+                  if (endCheckIntervalId) clearInterval(endCheckIntervalId)
+                  endCheckIntervalId = null
+                  queueMicrotask(() => onEndedRef.current?.())
+                }
+              }, 500)
+            }
 
             // 자동 재생 없음: 썸네일/정지 화면만 표시, 유저가 재생 버튼을 눌러야 시작
             if (pinnedAtMs) {
               const serverMs = await getServerTimeMs()
               if (!isServerBeforePinStart(pinnedAtMs, serverMs)) {
                 const sec = getCurrentVideoTimeSeconds(pinnedAtMs, serverMs)
-                target.seekTo(sec, true)
+                target.seekTo(Math.max(startVal, sec), true)
               }
+            } else if (startVal > 0) {
+              target.seekTo(startVal, true)
             }
 
             driftIntervalId = setInterval(async () => {
@@ -154,6 +177,7 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
 
     return () => {
       if (driftIntervalId) clearInterval(driftIntervalId)
+      if (endCheckIntervalId) clearInterval(endCheckIntervalId)
       const p = playerRef.current
       playerRef.current = null
       if (!p?.destroy) return
@@ -165,7 +189,7 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
         // DOM may already be removed by React; ignore removeChild etc.
       }
     }
-  }, [videoId, containerId, pinnedAtMs])
+  }, [videoId, containerId, pinnedAtMs, startVal, endSec])
 
   return <div id={containerId} className={className} key={containerId} />
 }
