@@ -159,6 +159,8 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [billboardQueueItems, setBillboardQueueItems] = useState<BillboardQueueItem[]>([])
   /** 전광판 콘텐츠 종료 시 billboard-next 한 번만 호출하기 위한 ref */
   const requestedNextForPinRef = useRef<string | null>(null)
+  /** 새 콘텐츠 도착 시 자동 펼침용: 마지막으로 펼쳤던 content url (리셋 방지) */
+  const lastExpandedContentUrlRef = useRef<string | null>(null)
   /** 실시간 접속자 (Supabase Presence). DB 참여자와 병합해 참여자 목록 표시 */
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
   /** Presence 기준 실시간 접속자 수 (presenceState 키 개수). 0이면 DB 참여자 수 사용 */
@@ -227,19 +229,28 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [useSupabaseWithUuid, boardId])
 
-  /** 새 고정 콘텐츠 도착 시: 패널이 닫혀 있으면 아이콘 반짝임. (내용만 교체, 자동 펼침 없음) */
+  /** 새 고정 콘텐츠 도착 시: 패널이 닫혀 있으면 아이콘 반짝임. 콘텐츠가 바뀌면 전광판 펼침 유지/자동 펼침 */
   useEffect(() => {
-    if (!pinnedState || pinnedState.pinnedUntil.getTime() <= Date.now()) return
+    if (!pinnedState || pinnedState.pinnedUntil.getTime() <= Date.now()) {
+      lastExpandedContentUrlRef.current = null
+      return
+    }
+    const url = pinnedState.content.url
     const key = pinnedState.pinnedUntil.toISOString()
-    if (lastPinnedUntilRef.current === key) return
-    lastPinnedUntilRef.current = key
-    if (!showBillboardPanel) {
-      setBillboardNewContentSparkle(true)
-      if (billboardSparkleTimeoutRef.current) clearTimeout(billboardSparkleTimeoutRef.current)
-      billboardSparkleTimeoutRef.current = setTimeout(() => {
-        billboardSparkleTimeoutRef.current = null
-        setBillboardNewContentSparkle(false)
-      }, 6000)
+    if (lastPinnedUntilRef.current !== key) {
+      lastPinnedUntilRef.current = key
+      if (!showBillboardPanel) {
+        setBillboardNewContentSparkle(true)
+        if (billboardSparkleTimeoutRef.current) clearTimeout(billboardSparkleTimeoutRef.current)
+        billboardSparkleTimeoutRef.current = setTimeout(() => {
+          billboardSparkleTimeoutRef.current = null
+          setBillboardNewContentSparkle(false)
+        }, 6000)
+      }
+    }
+    if (showBillboardPanel && url && url !== lastExpandedContentUrlRef.current) {
+      lastExpandedContentUrlRef.current = url
+      setPinnedCollapsed(false)
     }
   }, [pinnedState?.pinnedUntil?.toISOString(), pinnedState?.content?.url, showBillboardPanel])
 
@@ -816,6 +827,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       if (data.queued) {
         getQueueForBoard(boardId).then(setBillboardQueueItems).catch(() => {})
       } else {
+        setPinnedCollapsed(false)
         getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
       }
     } finally {
@@ -887,6 +899,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setPinImageFile(null)
       setPinError(null)
       if (data.queued) setPinnedByCurrentUser(true)
+      if (!data.queued) setPinnedCollapsed(false)
       getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
     } finally {
       setQueueSubmitting(false)
