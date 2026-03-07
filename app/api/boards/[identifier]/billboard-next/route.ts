@@ -41,6 +41,10 @@ export async function POST(
       end_time?: number | null
     } | undefined
     if (!first || (first.type !== 'youtube' && first.type !== 'image')) {
+      await supabase
+        .from('boards')
+        .update({ pinned_content: null, pinned_until: null })
+        .eq('id', boardId)
       return NextResponse.json({ ok: false, reason: 'empty' }, { status: 200 })
     }
 

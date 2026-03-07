@@ -57,14 +57,18 @@ export async function POST(
     }
     const boardId = String((row as { id: string }).id)
     const until = (row as { pinned_until?: string | null }).pinned_until
-    const hasActiveContent = until && new Date(until).getTime() > Date.now()
+    const nowMs = Date.now()
+    const untilMs = until ? new Date(until).getTime() : 0
+    const isExpired = !until || untilMs <= nowMs
+    const isBoardEmpty = isExpired
+    const hasActiveContent = !isBoardEmpty
 
     const startSec = typeof body.start_seconds === 'number' && body.start_seconds >= 0 ? Math.floor(body.start_seconds) : undefined
     const endSec = typeof body.end_seconds === 'number' && body.end_seconds >= 0 ? Math.floor(body.end_seconds) : undefined
     const now = new Date()
     const pinnedUntil = new Date(now.getTime() + pinDurationMs)
 
-    // active_content가 있으면 대기열에만 추가, 없으면 즉시 전광판 노출
+    // pinned_until이 현재보다 이전(past)이면 만료된 데이터 → 비어있는 상태로 간주하고 덮어쓰기. 사용 중일 때만 대기열.
     // billboard_queue 컬럼: id, board_id, content_url, type, creator_id, created_at, start_time, end_time
     if (hasActiveContent) {
       const queueRow: {

@@ -827,6 +827,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       if (data.queued) {
         getQueueForBoard(boardId).then(setBillboardQueueItems).catch(() => {})
       } else {
+        setShowBillboardPanel(true)
         setPinnedCollapsed(false)
         getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
       }
