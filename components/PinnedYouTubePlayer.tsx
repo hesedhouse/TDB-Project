@@ -11,7 +11,7 @@ declare global {
         elementId: string,
         options: {
           videoId: string
-          playerVars?: { rel?: number; start?: number }
+          playerVars?: { rel?: number; start?: number; autoplay?: number }
           events?: {
             onReady?: (e: { target: YTPlayerInstance }) => void
             onStateChange?: (e: { data: number; target: YTPlayerInstance }) => void

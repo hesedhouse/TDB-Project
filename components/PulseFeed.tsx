@@ -1862,7 +1862,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 </div>
               </div>
             </>
-          ) ) : (
+          ) : (
             /* 대기 상태 / 키워드 배경: DB 영상 바로 안 띄움, 전광판에 띄우기로만 갱신 */
             <div className="aspect-video w-full flex flex-col items-center justify-center gap-3 px-4 py-6 bg-black/40 text-center">
               <span className="text-4xl opacity-70" aria-hidden>🍿</span>
