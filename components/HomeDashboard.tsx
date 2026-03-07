@@ -12,7 +12,6 @@ import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { createClient } from '@/lib/supabase/client'
 import { signOut as nextAuthSignOut, useSession } from 'next-auth/react'
 import { useAuth } from '@/lib/supabase/auth'
-import { getFloatingTags } from '@/lib/supabase/trendingKeywords'
 import { handleKeywordClickAction } from '@/app/actions/boardActions'
 
 /** API에서 오는 트렌드 키워드 한 건 (rank/platform으로 스타일링) */
@@ -196,31 +195,29 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     return () => clearInterval(id)
   }, [useSupabase, user?.id])
 
-  // 플로팅 태그: 앱 로드 시 API에서 최신 트렌드 15~20개 랜덤 로드 (실패 시 getFloatingTags 폴백)
+  // 플로팅 태그: Supabase trending_keywords 테이블에서만 로드 (실제 트렌드, 더미/보드 보충 없음)
   useEffect(() => {
     setFloatingTagsLoading(true)
     fetch('/api/trending-keywords?min=15&max=20')
       .then((res) => res.json())
       .then((data: { keywords?: TrendingTagItem[] }) => {
         const list = data?.keywords ?? []
-        if (Array.isArray(list) && list.length > 0) {
-          setFloatingTags(list.map((k) => ({
-            keyword: (k.keyword ?? '').trim(),
-            platform: k.platform ?? null,
-            rank: k.rank ?? null,
-            related_url: k.related_url ?? null,
-          })).filter((k) => k.keyword.length > 0))
-        } else {
-          getFloatingTags(20).then((tags) => {
-            setFloatingTags(tags.map((t) => ({ keyword: t.word, platform: null, rank: null, related_url: null })))
-          })
+        if (!Array.isArray(list) || list.length === 0) {
+          setFloatingTags([])
+          return
         }
+        setFloatingTags(
+          list
+            .map((k) => ({
+              keyword: (k.keyword ?? '').trim(),
+              platform: k.platform ?? null,
+              rank: k.rank ?? null,
+              related_url: k.related_url ?? null,
+            }))
+            .filter((k) => k.keyword.length > 0)
+        )
       })
-      .catch(() => {
-        getFloatingTags(20).then((tags) => {
-          setFloatingTags(tags.map((t) => ({ keyword: t.word, platform: null, rank: null, related_url: null })))
-        })
-      })
+      .catch(() => setFloatingTags([]))
       .finally(() => setFloatingTagsLoading(false))
   }, [])
 
