@@ -65,18 +65,30 @@ export async function POST(
     const pinnedUntil = new Date(now.getTime() + pinDurationMs)
 
     // active_content가 있으면 대기열에만 추가, 없으면 즉시 전광판 노출
+    // billboard_queue 컬럼: id, board_id, content_url, type, creator_id, created_at, start_time, end_time
     if (hasActiveContent) {
-      const { error: insertErr } = await supabase.from('billboard_queue').insert({
+      const queueRow: {
+        board_id: string
+        content_url: string
+        type: 'youtube' | 'image'
+        creator_id: null
+        start_time?: number
+        end_time?: number
+      } = {
         board_id: boardId,
         content_url: url,
-        type,
+        type: type as 'youtube' | 'image',
         creator_id: null,
-        ...(startSec != null && { start_time: startSec }),
-        ...(endSec != null && { end_time: endSec }),
-      })
+      }
+      if (startSec != null) queueRow.start_time = startSec
+      if (endSec != null) queueRow.end_time = endSec
+      const { error: insertErr } = await supabase.from('billboard_queue').insert(queueRow)
       if (insertErr) {
-        console.error('[api/boards/pin] queue insert failed', insertErr)
-        return NextResponse.json({ error: 'Failed to add to queue' }, { status: 500 })
+        console.error('[api/boards/pin] billboard_queue insert failed', insertErr.message, insertErr.details)
+        return NextResponse.json(
+          { error: 'Failed to add to queue', code: insertErr.code },
+          { status: 500 }
+        )
       }
       const hourglassesUsed = Math.max(1, body.duration_minutes ?? 1)
       await supabase

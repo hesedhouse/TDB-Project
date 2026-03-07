@@ -835,77 +835,6 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [pinSubmitting, useSupabaseWithUuid, boardId, pinType, pinInputUrl, pinStartMmSs, pinEndMmSs, pinImageFile])
 
-  /** 전광판 예약: 비어 있으면 즉시 반영, 재생 중이면 대기열에 추가 (모래시계 없음) */
-  const [queueSubmitting, setQueueSubmitting] = useState(false)
-  const handleQueueSubmit = useCallback(async () => {
-    if (queueSubmitting || !useSupabaseWithUuid || !boardId) return
-    let url = ''
-    if (pinType === 'youtube') {
-      const u = pinInputUrl.trim()
-      if (!getYouTubeVideoId(u)) {
-        setPinError('유효한 유튜브 링크를 입력해 주세요.')
-        return
-      }
-      url = u
-    } else {
-      if (pinImageFile) {
-        setQueueSubmitting(true)
-        setPinError(null)
-        const uploaded = await uploadChatImage(pinImageFile, boardId)
-        if (!uploaded) {
-          setPinError('이미지 업로드에 실패했습니다.')
-          setQueueSubmitting(false)
-          return
-        }
-        url = uploaded
-      } else if (pinInputUrl.trim()) {
-        url = pinInputUrl.trim()
-      } else {
-        setPinError('사진을 선택하거나 이미지 주소를 입력해 주세요.')
-        return
-      }
-    }
-    const inferred = inferPinContentType(url)
-    const type = inferred ?? pinType
-    if (type !== 'youtube' && type !== 'image') {
-      setPinError('YouTube 또는 이미지 URL을 입력해 주세요.')
-      return
-    }
-    setQueueSubmitting(true)
-    setPinError(null)
-    try {
-      const startSeconds = parseMmSsToSeconds(pinStartMmSs)
-      const endSeconds = parseMmSsToSeconds(pinEndMmSs)
-      const res = await fetch(`/api/boards/${boardId}/billboard-queue`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type,
-          url,
-          creator_id: userId,
-          ...(startSeconds != null && { start_seconds: startSeconds }),
-          ...(endSeconds != null && { end_seconds: endSeconds }),
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setPinError(data?.error ?? '예약에 실패했습니다.')
-        return
-      }
-      setShowPinModal(false)
-      setPinInputUrl('')
-      setPinStartMmSs('')
-      setPinEndMmSs('')
-      setPinImageFile(null)
-      setPinError(null)
-      if (data.queued) setPinnedByCurrentUser(true)
-      if (!data.queued) setPinnedCollapsed(false)
-      getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
-    } finally {
-      setQueueSubmitting(false)
-    }
-  }, [queueSubmitting, useSupabaseWithUuid, boardId, pinType, pinInputUrl, pinStartMmSs, pinEndMmSs, pinImageFile, userId])
-
   /** 전광판 신고 제출 (사유 선택 후). 30명 이상 시 자동 해제는 API에서 처리 */
   const handleReportPinned = useCallback(async () => {
     if (reportSubmitting || !reportReason.trim() || !useSupabaseWithUuid || !boardId || !pinnedState) return
@@ -2772,7 +2701,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 return (
                   <div className="mt-4 space-y-3">
                     <p className="text-sm text-white/90">
-                      고정 시 모래시계 <strong className="text-neon-orange">{tier?.hourglasses ?? 1}개</strong> · 예약은 무료로 대기열에 추가됩니다.
+                      모래시계 <strong className="text-neon-orange">{tier?.hourglasses ?? 1}개</strong> 사용. 전광판이 비어 있으면 즉시 고정되고, 사용 중이면 대기열에 추가됩니다.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-2">
                       {tier && !insufficient && (
@@ -2794,14 +2723,6 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                           충전하러 가기
                         </motion.button>
                       )}
-                      <motion.button
-                        type="button"
-                        onClick={handleQueueSubmit}
-                        disabled={queueSubmitting}
-                        className="flex-1 py-3 rounded-xl font-semibold bg-white/10 text-white border border-white/30 hover:bg-white/20 disabled:opacity-50"
-                      >
-                        {queueSubmitting ? '예약 중…' : '전광판 예약 (대기열)'}
-                      </motion.button>
                     </div>
                   </div>
                 )
