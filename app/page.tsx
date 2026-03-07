@@ -100,15 +100,15 @@ export default function Home() {
               <HomeDashboard onEnterBoard={handleEnterBoard} />
             </TickProvider>
           </div>
-          <footer className="flex-shrink-0 w-full bg-slate-100 text-slate-500 p-4 text-xs sm:text-sm text-center">
-            <div className="max-w-2xl mx-auto space-y-1 flex flex-col items-center">
-              <p><strong className="text-slate-600">상호</strong> 헤세드하우스</p>
-              <p><strong className="text-slate-600">대표자</strong> 이현우</p>
-              <p><strong className="text-slate-600">사업자등록번호</strong> 2019-고양일산서-</p>
-              <p><strong className="text-slate-600">통신판매업신고번호</strong> 제 202X-서울XX-0000호</p>
-              <p><strong className="text-slate-600">영업소 소재지</strong> 경기도 고양시 일산서구 덕이로 24</p>
-              <p><strong className="text-slate-600">이메일</strong> support@poppinapps.com</p>
-              <p><strong className="text-slate-600">전화번호</strong> 031-994-7740</p>
+          <footer className="flex-shrink-0 w-full bg-slate-900 border-t border-slate-800 text-slate-400 p-4 text-xs sm:text-sm text-center">
+            <div className="max-w-2xl mx-auto flex flex-col items-center divide-y divide-slate-800 leading-relaxed">
+              <p className="py-2 first:pt-0"><strong className="text-slate-300">상호</strong> 헤세드하우스</p>
+              <p className="py-2"><strong className="text-slate-300">대표자</strong> 이현우</p>
+              <p className="py-2"><strong className="text-slate-300">사업자등록번호</strong> 2019-고양일산서-</p>
+              <p className="py-2"><strong className="text-slate-300">통신판매업신고번호</strong> 제 202X-서울XX-0000호</p>
+              <p className="py-2"><strong className="text-slate-300">영업소 소재지</strong> 경기도 고양시 일산서구 덕이로 24</p>
+              <p className="py-2"><strong className="text-slate-300">이메일</strong> support@poppinapps.com</p>
+              <p className="py-2 last:pb-0"><strong className="text-slate-300">전화번호</strong> 031-994-7740</p>
             </div>
           </footer>
         </>
