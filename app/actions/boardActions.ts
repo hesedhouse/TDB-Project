@@ -2,7 +2,7 @@
 
 import { createServerClient } from '@/lib/supabase/server'
 
-const ONE_HOUR_MS = 60 * 60 * 1000
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
  * YouTube Data API: keyword로 검색 (서버에서만 실행, API 키는 클라이언트에 노출되지 않음).
@@ -48,7 +48,7 @@ export type HandleKeywordClickActionResult =
   | { ok: false; error: string }
 
 /**
- * 키워드 클릭 시: 활성 방 검색 → 없으면 새 방 생성(제목=키워드, expires_at=+1h, 전광판=YouTube 최적 영상).
+ * 키워드 클릭 시: 활성 방 검색 → 없으면 새 방 생성(제목=키워드, expires_at=+1주일, 전광판=YouTube 최적 영상).
  * 반환: 입장 경로용 boardId (public_id 또는 keyword).
  */
 export async function handleKeywordClickAction(
@@ -82,7 +82,7 @@ export async function handleKeywordClickAction(
   }
 
   const videoUrl = await getYouTubeBestVideoUrl(k)
-  const expiresAt = new Date(Date.now() + ONE_HOUR_MS).toISOString()
+  const expiresAt = new Date(Date.now() + ONE_WEEK_MS).toISOString()
   const name = `#${k}`
 
   const { data: inserted, error: insertErr } = await supabase

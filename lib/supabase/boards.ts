@@ -380,57 +380,13 @@ export async function getImmortalBoards(limit = 5): Promise<BoardRow[]> {
 export type HotPlaceEntry = { board: BoardRow; heatScoreP: number }
 
 /**
- * 명예의 전당 [핫플레이스]: 최근 24시간 화력 점수 상위 5개 방.
- * 화력 = 연장(extension) 1P/개 + 전광판(billboard) 2P/개.
- * RPC get_hot_places_24h_heat 사용, 없으면 get_hot_places_24h → total_recharged 폴백.
+ * 명예의 전당 [핫플레이스]: boards 테이블만 사용 (total_recharged 또는 최신순).
+ * RPC(get_hot_places_24h_heat, get_hot_places_24h) 미배포 시 404 방지를 위해 제거.
  */
 export async function getHotPlacesBoards(limit = 5): Promise<HotPlaceEntry[]> {
   const supabase = createClient()
   if (!supabase) return []
 
-  // 1) 화력 RPC (extension + billboard*2) 우선
-  const { data: heatData, error: heatErr } = await supabase.rpc('get_hot_places_24h_heat', { lim: limit })
-  if (!heatErr && heatData && Array.isArray(heatData) && heatData.length > 0) {
-    const entries = heatData as { board_id: string; heat_score: number }[]
-    const ids = entries.map((e) => e.board_id)
-    const cols = HALL_SELECT
-    const { data: rows, error: selErr } = await supabase.from('boards').select(cols).in('id', ids)
-    if (selErr) {
-      const { data: legacy } = await supabase.from('boards').select(HALL_SELECT_LEGACY).in('id', ids)
-      if (!legacy) return []
-      const byId = new Map((legacy as BoardRowSelected[]).map((r) => [String(r.id), normalizeBoardRow(r)]))
-      return entries
-        .map((e) => {
-          const board = byId.get(e.board_id)
-          return board ? { board, heatScoreP: Number(e.heat_score) || 0 } : null
-        })
-        .filter((x): x is HotPlaceEntry => x != null)
-    }
-    const byId = new Map((rows as BoardRowSelected[]).map((r) => [String(r.id), normalizeBoardRow(r)]))
-    return entries
-      .map((e) => {
-        const board = byId.get(e.board_id)
-        return board ? { board, heatScoreP: Number(e.heat_score) || 0 } : null
-      })
-      .filter((x): x is HotPlaceEntry => x != null)
-  }
-
-  // 2) 폴백: 구 RPC (연장만 집계)
-  const { data: rpcData, error: rpcErr } = await supabase.rpc('get_hot_places_24h', { lim: limit })
-  if (!rpcErr && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
-    const entries = rpcData as { board_id: string; recharge_count: number }[]
-    const ids = entries.map((e) => e.board_id)
-    const { data: rows } = await supabase.from('boards').select(HALL_SELECT).in('id', ids)
-    const byIdMap = new Map(((rows ?? []) as BoardRowSelected[]).map((r) => [String(r.id), normalizeBoardRow(r)] as const))
-    return entries
-      .map((e) => {
-        const board = byIdMap.get(e.board_id)
-        return board ? { board, heatScoreP: Number(e.recharge_count) || 0 } : null
-      })
-      .filter((x): x is HotPlaceEntry => x != null)
-  }
-
-  // 3) 폴백: total_recharged 기준
   const { data: fallback, error: fallbackErr } = await supabase
     .from('boards')
     .select(HALL_SELECT)

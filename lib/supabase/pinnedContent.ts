@@ -98,13 +98,17 @@ export function subscribePinnedContent(
         filter: `id=eq.${boardId}`,
       },
       (payload) => {
-        const row = payload.new as { pinned_content?: unknown; pinned_until?: string | null; pinned_at?: string | null }
-        const state = parseRow(row)
-        if (state && state.pinnedUntil.getTime() <= Date.now()) {
+        try {
+          const row = payload.new as { pinned_content?: unknown; pinned_until?: string | null; pinned_at?: string | null }
+          const state = parseRow(row)
+          if (state && state.pinnedUntil.getTime() <= Date.now()) {
+            onUpdate(null)
+            return
+          }
+          onUpdate(state)
+        } catch {
           onUpdate(null)
-          return
         }
-        onUpdate(state)
       }
     )
   channel.subscribe()

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 
-const ONE_HOUR_MS = 60 * 60 * 1000
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const MIN_DURATION_SEC = 3 * 60
 const MAX_DURATION_SEC = 10 * 60
 
@@ -57,7 +57,7 @@ async function findYouTubeVideoForKeyword(keyword: string): Promise<string | nul
 }
 
 /**
- * 플로팅 태그 클릭: 활성 방 검색 → 없으면 1시간 만료 방 생성 + 유튜브 자동 검색 후 전광판 세팅 → 입장 경로 반환.
+ * 플로팅 태그 클릭: 활성 방 검색 → 없으면 1주일 만료 방 생성 + 유튜브 자동 검색 후 전광판 세팅 → 입장 경로 반환.
  * POST body: { keyword: string }
  */
 export async function POST(request: Request) {
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, path, isNew: false })
     }
 
-    const expiresAt = new Date(Date.now() + ONE_HOUR_MS).toISOString()
+    const expiresAt = new Date(Date.now() + ONE_WEEK_MS).toISOString()
     const name = `#${keyword}`
     const { data: inserted, error: insertErr } = await supabase
       .from('boards')

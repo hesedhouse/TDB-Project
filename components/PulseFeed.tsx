@@ -196,8 +196,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   /** 5분 고정 전광판: 초기 조회 + Realtime 구독 + 만료 시 자동 해제 */
   useEffect(() => {
     if (!useSupabaseWithUuid || !boardId) return
-    getPinnedContent(boardId).then(setPinnedState)
-    const unsub = subscribePinnedContent(boardId, setPinnedState)
+    getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
+    const unsub = subscribePinnedContent(boardId, (s) => {
+      try {
+        setPinnedState(s)
+      } catch {
+        setPinnedState(null)
+      }
+    })
     const interval = setInterval(() => {
       setPinnedState((prev) => {
         if (!prev || prev.pinnedUntil.getTime() > Date.now()) return prev
@@ -248,7 +254,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       if (!res.ok) return
       persistHourglasses(Math.max(0, current - tier.hourglasses))
       setHourglassesState(getHourglasses())
-      getPinnedContent(boardId).then(setPinnedState)
+      getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
     } finally {
       setExtendPinnedLoading(false)
     }
@@ -726,7 +732,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setPinImageFile(null)
       setPinError(null)
       setPinnedByCurrentUser(true)
-      getPinnedContent(boardId).then(setPinnedState)
+      getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
     } finally {
       setPinSubmitting(false)
     }
@@ -762,7 +768,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       if (res.ok) {
         setShowReportPopover(false)
         setReportReason('')
-        if (data?.unpinned) getPinnedContent(boardId).then(setPinnedState)
+        if (data?.unpinned) getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
       }
     } finally {
       setReportSubmitting(false)

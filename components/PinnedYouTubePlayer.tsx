@@ -105,7 +105,7 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
               if (isServerBeforePinStart(pinnedAtMs, serverMs)) return
               const expectedSec = getCurrentVideoTimeSeconds(pinnedAtMs, serverMs)
               if (expectedSec >= duration) {
-                onEndedRef.current?.()
+                queueMicrotask(() => onEndedRef.current?.())
                 return
               }
               if (expectedSec <= 0) return
@@ -118,7 +118,7 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
           onStateChange: (e: { data: number; target: YTPlayerInstance }) => {
             const target = e.target
             if (e.data === YT_PLAYER_STATE_ENDED) {
-              onEndedRef.current?.()
+              queueMicrotask(() => onEndedRef.current?.())
               return
             }
             if (e.data !== YT_PLAYER_STATE_PLAYING || !pinnedAtMs) return
@@ -128,7 +128,7 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
               const expectedSec = getCurrentVideoTimeSeconds(pinnedAtMs, serverMs)
               const duration = target.getDuration()
               if (Number.isFinite(duration) && duration > 0 && expectedSec >= duration) {
-                onEndedRef.current?.()
+                queueMicrotask(() => onEndedRef.current?.())
                 return
               }
               if (expectedSec <= 0) return
@@ -158,11 +158,18 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
     return () => {
       if (driftIntervalId) clearInterval(driftIntervalId)
       const p = playerRef.current
-      if (p?.destroy) p.destroy()
       playerRef.current = null
+      if (!p?.destroy) return
+      const el = document.getElementById(containerId)
+      if (!el?.isConnected) return
+      try {
+        p.destroy()
+      } catch {
+        // DOM may already be removed by React; ignore removeChild etc.
+      }
     }
   }, [videoId, containerId, pinnedAtMs])
 
-  return <div id={containerId} className={className} />
+  return <div id={containerId} className={className} key={containerId} />
 }
 export default PinnedYouTubePlayer

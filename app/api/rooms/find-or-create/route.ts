@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 
-const ONE_HOUR_MS = 60 * 60 * 1000
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
  * YouTube Data API: keyword로 검색 → type=video, relevanceLanguage=ko, videoEmbeddable=true
@@ -50,7 +50,7 @@ async function searchYouTubeBestVideo(keyword: string): Promise<string | null> {
  * Find or Create (하이패스):
  * Step A: keyword로 활성(expires_at > now) 방 검색
  * Step B: 있으면 해당 방 ID 반환, 없으면 Step C
- * Step C: 새 방 생성(제목=키워드, expires_at=+1h, 전광판=YouTube 검색 영상) 후 새 방 ID 반환
+ * Step C: 새 방 생성(제목=키워드, expires_at=+1주일, 전광판=YouTube 검색 영상) 후 새 방 ID 반환
  * 응답: { boardId: string | number } — /board/${boardId} 로 이동용
  */
 export async function POST(request: Request) {
@@ -89,8 +89,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, boardId })
     }
 
-    // Step C: 새 방 생성 — 제목(키워드), 1시간 만료, 전광판=YouTube 최적 영상
-    const expiresAt = new Date(Date.now() + ONE_HOUR_MS).toISOString()
+    // Step C: 새 방 생성 — 제목(키워드), 1주일 만료, 전광판=YouTube 최적 영상
+    const expiresAt = new Date(Date.now() + ONE_WEEK_MS).toISOString()
     const name = `#${keyword}`
 
     const { data: inserted, error: insertErr } = await supabase

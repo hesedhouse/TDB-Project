@@ -12,8 +12,18 @@ interface State {
   error?: Error
 }
 
-/** 클라이언트 예외 발생 시 전체 화면이 죽지 않도록 안내 UI 표시 */
+function goHome() {
+  try {
+    if (typeof window !== 'undefined') window.location.href = '/'
+  } catch {
+    // ignore
+  }
+}
+
+/** 클라이언트 예외 발생 시 튕기지 않고 메인으로 부드럽게 보냄 */
 export default class ErrorBoundary extends Component<Props, State> {
+  private redirectTimer: ReturnType<typeof setTimeout> | null = null
+
   constructor(props: Props) {
     super(props)
     this.state = { hasError: false }
@@ -24,7 +34,24 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('[ErrorBoundary]', error, errorInfo)
+    try {
+      console.error('[ErrorBoundary]', error, errorInfo)
+    } catch {
+      // 로깅 실패해도 앱은 메인으로 보냄
+    }
+  }
+
+  componentDidUpdate(_prevProps: Props, prevState: State) {
+    if (this.state.hasError && !prevState.hasError && typeof window !== 'undefined') {
+      this.redirectTimer = setTimeout(() => {
+        this.redirectTimer = null
+        goHome()
+      }, 2000)
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.redirectTimer) clearTimeout(this.redirectTimer)
   }
 
   render() {
@@ -34,14 +61,14 @@ export default class ErrorBoundary extends Component<Props, State> {
         <div className="min-h-screen bg-midnight-black text-white flex flex-col items-center justify-center p-6 safe-bottom">
           <p className="text-lg font-semibold text-white mb-2">잠시 문제가 발생했습니다</p>
           <p className="text-gray-400 text-sm text-center mb-6">
-            페이지를 새로고침하거나, 잠시 후 다시 시도해 주세요.
+            메인으로 이동합니다.
           </p>
           <button
             type="button"
-            onClick={() => this.setState({ hasError: false })}
+            onClick={goHome}
             className="px-5 py-2.5 rounded-xl font-medium text-white bg-[#FF6B00] hover:opacity-90 transition-opacity"
           >
-            다시 시도
+            메인으로 가기
           </button>
         </div>
       )
