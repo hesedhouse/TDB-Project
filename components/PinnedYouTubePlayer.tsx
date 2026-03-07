@@ -49,8 +49,8 @@ export interface PinnedYouTubePlayerProps {
 
 /**
  * 전광판용 유튜브 플레이어. 서버 시간 기준 동시 시청(Watch Together):
- * - 초기 진입 시 딱 한 번만 seekTo, 이후 30초마다 미세 보정(오차 3초 초과 시에만 seek).
- * - 전광판 고정 시 자동 재생(playVideo). BUFFERING → PLAYING 시 서버 시간에 맞춰 워프(느슨한 3초 기준).
+ * - 자동 재생 없음: 로드 시 썸네일/정지 화면만 표시, 유저가 재생 버튼을 눌러야 시작.
+ * - pinned_at 있으면 진입 시 seekTo로 재생 위치만 맞춤, 이후 30초마다 미세 보정(오차 3초 초과 시에만 seek).
  * - pinned_at 미래/미입력 시 seekTo(0) 무한 반복 방지.
  */
 const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedYouTubePlayer({
@@ -78,23 +78,20 @@ const PinnedYouTubePlayer: React.FC<PinnedYouTubePlayerProps> = function PinnedY
 
       const player = new window.YT.Player(containerId, {
         videoId,
-        playerVars: { rel: 0, start: 0 },
+        playerVars: { rel: 0, start: 0, autoplay: 0 },
         events: {
           onReady: async (e: { target: YTPlayerInstance }) => {
             const target = e.target
             playerRef.current = target
 
-            if (!pinnedAtMs) {
-              target.playVideo?.()
-              return
+            // 자동 재생 없음: 썸네일/정지 화면만 표시, 유저가 재생 버튼을 눌러야 시작
+            if (pinnedAtMs) {
+              const serverMs = await getServerTimeMs()
+              if (!isServerBeforePinStart(pinnedAtMs, serverMs)) {
+                const sec = getCurrentVideoTimeSeconds(pinnedAtMs, serverMs)
+                target.seekTo(sec, true)
+              }
             }
-
-            const serverMs = await getServerTimeMs()
-            if (!isServerBeforePinStart(pinnedAtMs, serverMs)) {
-              const sec = getCurrentVideoTimeSeconds(pinnedAtMs, serverMs)
-              target.seekTo(sec, true)
-            }
-            target.playVideo?.()
 
             driftIntervalId = setInterval(async () => {
               const p = playerRef.current
