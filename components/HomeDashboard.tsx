@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 import { signOut as nextAuthSignOut, useSession } from 'next-auth/react'
 import { useAuth } from '@/lib/supabase/auth'
 import { getFloatingTags } from '@/lib/supabase/trendingKeywords'
-import { createBoardFromKeyword } from '@/app/actions/board'
+import { handleKeywordClickAction } from '@/app/actions/boardActions'
 
 /** API에서 오는 트렌드 키워드 한 건 (rank/platform으로 스타일링) */
 type TrendingTagItem = {
@@ -398,7 +398,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     }, 600)
   }
 
-  /** 하이패스: 태그 클릭 시 Server Action createBoardFromKeyword → "방으로 순간이동 중...🍿" 오버레이 → boardId로 즉시 입장 */
+  /** 하이패스: 태그 클릭 시 Server Action handleKeywordClickAction → "방으로 순간이동 중...🍿" 오버레이 → boardId로 즉시 입장 */
   const [roomResolvingLoading, setRoomResolvingLoading] = useState(false)
   const handleKeywordClick = useCallback(
     async (keyword: string, _relatedUrl?: string | null) => {
@@ -411,7 +411,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
       setWarpingKeyword(k)
       setRoomResolvingLoading(true)
       try {
-        const result = await createBoardFromKeyword(k)
+        const result = await handleKeywordClickAction(k)
         if (result.ok) {
           const path =
             typeof result.boardId === 'number'
