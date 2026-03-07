@@ -330,10 +330,11 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           const raw = (row?.keyword ?? row?.name ?? '').toString().trim().replace(/^#/, '')
           if (!raw) return
           setFloatingTags((prev) => {
-            if (prev.length === 0) return [{ word: raw, source: 'board' }]
+            if (prev.length === 0)
+              return [{ keyword: raw, platform: 'board', rank: 0, related_url: '' }]
             const next = [...prev]
             const idx = Math.floor(Math.random() * next.length)
-            next[idx] = { word: raw, source: 'board' }
+            next[idx] = { keyword: raw, platform: 'board', rank: 0, related_url: '' }
             return next
           })
         }
