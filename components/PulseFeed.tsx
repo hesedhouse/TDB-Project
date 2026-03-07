@@ -261,7 +261,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return unsub
   }, [useSupabaseWithUuid, boardId, showBillboardPanel])
 
-  /** 전광판 다음: 대기열에서 꺼내 전광판에 설정 (Realtime으로 갱신됨) */
+  /** 전광판 다음: 현재 active 완료 후 대기열 첫 항목을 전광판에 설정. Realtime으로 모든 유저 동기화 */
   const fetchNextFromQueue = useCallback(async () => {
     if (!useSupabaseWithUuid || !boardId) return
     const key = pinnedState?.pinnedUntil?.toISOString() ?? 'empty'
@@ -270,7 +270,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     try {
       const res = await fetch(`/api/boards/${boardId}/billboard-next`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
-      if (data?.ok) setPinnedVideoEnded(false)
+      if (data?.ok) {
+        setPinnedVideoEnded(false)
+        getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
+        getQueueForBoard(boardId).then(setBillboardQueueItems).catch(() => {})
+      } else if (data?.reason === 'empty') {
+        setPinnedState(null)
+        setBillboardQueueItems([])
+      }
     } catch {
       requestedNextForPinRef.current = null
     }
@@ -281,7 +288,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     if (pinnedState?.pinnedUntil) requestedNextForPinRef.current = null
   }, [pinnedState?.pinnedUntil?.toISOString(), pinnedState?.content?.url])
 
-  /** 전광판 만료 시(이미지 노출 시간 등) 대기열에서 다음 자동 실행 */
+  /** 전광판 만료 시(프로그레스 0 / 이미지 시간 종료) 대기열에서 다음 자동 호출(Handover) */
   useEffect(() => {
     if (!useSupabaseWithUuid || !boardId || !pinnedState) return
     const key = pinnedState.pinnedUntil.toISOString()
@@ -289,7 +296,7 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       if (pinnedState.pinnedUntil.getTime() <= Date.now() && requestedNextForPinRef.current !== key) {
         fetchNextFromQueue()
       }
-    }, 2000)
+    }, 1000)
     return () => clearInterval(interval)
   }, [useSupabaseWithUuid, boardId, pinnedState?.pinnedUntil?.toISOString(), pinnedState?.content?.url, fetchNextFromQueue])
 
@@ -806,7 +813,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
       setPinImageFile(null)
       setPinError(null)
       setPinnedByCurrentUser(true)
-      getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
+      if (data.queued) {
+        getQueueForBoard(boardId).then(setBillboardQueueItems).catch(() => {})
+      } else {
+        getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
+      }
     } finally {
       setPinSubmitting(false)
     }

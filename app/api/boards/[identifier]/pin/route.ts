@@ -46,8 +46,7 @@ export async function POST(
       return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 })
     }
 
-    const selectCols = 'id'
-    let q = supabase.from('boards').select(selectCols).limit(1)
+    let q = supabase.from('boards').select('id, pinned_until').limit(1)
     if (/^\d+$/.test(raw)) q = q.eq('public_id', Number(raw))
     else if (isValidUuid(raw)) q = q.eq('id', raw)
     else q = q.eq('keyword', decodeURIComponent(raw))
@@ -57,16 +56,44 @@ export async function POST(
       return NextResponse.json({ error: 'Board not found' }, { status: 404 })
     }
     const boardId = String((row as { id: string }).id)
+    const until = (row as { pinned_until?: string | null }).pinned_until
+    const hasActiveContent = until && new Date(until).getTime() > Date.now()
 
     const startSec = typeof body.start_seconds === 'number' && body.start_seconds >= 0 ? Math.floor(body.start_seconds) : undefined
     const endSec = typeof body.end_seconds === 'number' && body.end_seconds >= 0 ? Math.floor(body.end_seconds) : undefined
+    const now = new Date()
+    const pinnedUntil = new Date(now.getTime() + pinDurationMs)
+
+    // active_content가 있으면 대기열에만 추가, 없으면 즉시 전광판 노출
+    if (hasActiveContent) {
+      const { error: insertErr } = await supabase.from('billboard_queue').insert({
+        board_id: boardId,
+        content_url: url,
+        type,
+        creator_id: null,
+        ...(startSec != null && { start_time: startSec }),
+        ...(endSec != null && { end_time: endSec }),
+      })
+      if (insertErr) {
+        console.error('[api/boards/pin] queue insert failed', insertErr)
+        return NextResponse.json({ error: 'Failed to add to queue' }, { status: 500 })
+      }
+      const hourglassesUsed = Math.max(1, body.duration_minutes ?? 1)
+      await supabase
+        .from('hourglass_transactions')
+        .insert({ board_id: boardId, type: 'billboard', amount: hourglassesUsed })
+        .then((r) => {
+          if (r.error && process.env.NODE_ENV === 'development') {
+            console.warn('[api/boards/pin] hourglass_transactions insert skipped', r.error.code)
+          }
+        })
+      return NextResponse.json({ ok: true, queued: true })
+    }
+
     const pinnedContent =
       type === 'youtube'
         ? { type, url, ...(startSec != null && { start_seconds: startSec }), ...(endSec != null && { end_seconds: endSec }) }
         : { type, url }
-
-    const now = new Date()
-    const pinnedUntil = new Date(now.getTime() + pinDurationMs)
     const payload = {
       pinned_content: pinnedContent,
       pinned_until: pinnedUntil.toISOString(),
@@ -96,7 +123,6 @@ export async function POST(
       )
     }
 
-    // 명예의 전당 화력: 전광판(billboard) 사용 로그 (가중치 2배 적용용)
     const hourglassesUsed = Math.max(1, body.duration_minutes ?? 1)
     await supabase
       .from('hourglass_transactions')
@@ -109,6 +135,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
+      queued: false,
       pinned_until: pinnedUntil.toISOString(),
       pinned_at: now.toISOString(),
     })
