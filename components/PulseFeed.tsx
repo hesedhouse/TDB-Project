@@ -1851,6 +1851,23 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   </svg>
                 </motion.button>
               </div>
+              {/* 접힌 상태 모래시계 프로그레스 바 */}
+              {(() => {
+                const totalMs = 60 * 1000
+                const remainingMs = Math.max(0, pinnedState.pinnedUntil.getTime() - Date.now())
+                const progressRatio = Math.min(1, remainingMs / totalMs)
+                const isUrgent = remainingMs < 10 * 1000
+                return (
+                  <div className="w-full basis-full h-1.5 bg-white/10 rounded-full overflow-hidden shrink-0 mt-1" role="progressbar" aria-valuenow={Math.round(progressRatio * 100)} aria-valuemin={0} aria-valuemax={100} aria-label="전광판 남은 시간">
+                    <motion.div
+                      className={`h-full rounded-full ${isUrgent ? 'bg-red-500' : 'bg-yellow-400'}`}
+                      initial={false}
+                      animate={{ width: `${progressRatio * 100}%` }}
+                      transition={{ type: 'spring', stiffness: 220, damping: 26 }}
+                    />
+                  </div>
+                )
+              })()}
             </div>
           ) : (
             <>
@@ -2000,6 +2017,23 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   </motion.button>
                 </div>
               </div>
+              {/* 모래시계 프로그레스 바: 60초 기준, 남은 시간에 따라 왼쪽으로 줄어듦. 10초 미만 시 빨간색 */}
+              {(() => {
+                const totalMs = 60 * 1000
+                const remainingMs = Math.max(0, pinnedState.pinnedUntil.getTime() - Date.now())
+                const progressRatio = Math.min(1, remainingMs / totalMs)
+                const isUrgent = remainingMs < 10 * 1000
+                return (
+                  <div className="w-full h-1.5 mt-2 bg-white/10 rounded-full overflow-hidden shrink-0" role="progressbar" aria-valuenow={Math.round(progressRatio * 100)} aria-valuemin={0} aria-valuemax={100} aria-label="전광판 남은 시간">
+                    <motion.div
+                      className={`h-full rounded-full ${isUrgent ? 'bg-red-500' : 'bg-yellow-400'}`}
+                      initial={false}
+                      animate={{ width: `${progressRatio * 100}%` }}
+                      transition={{ type: 'spring', stiffness: 220, damping: 26 }}
+                    />
+                  </div>
+                )
+              })()}
             </>
           ) : (
             /* 대기 상태 / 키워드 배경: DB 영상 바로 안 띄움, 전광판에 띄우기로만 갱신 */
