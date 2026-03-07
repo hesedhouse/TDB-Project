@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/client'
 import { isValidUuid } from '@/lib/supabase/client'
+import { inferPinContentType } from '@/lib/supabase/pinnedContent'
 
-type PinBody = { type: 'youtube' | 'image'; url: string; duration_minutes?: number }
+type PinBody = { type?: 'youtube' | 'image'; url: string; duration_minutes?: number }
 
 export async function POST(
   request: Request,
@@ -21,13 +22,16 @@ export async function POST(
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-    const type = body?.type
+    let type = body?.type
     const url = typeof body?.url === 'string' ? body.url.trim() : ''
-    if (type !== 'youtube' && type !== 'image') {
-      return NextResponse.json({ error: 'type must be youtube or image' }, { status: 400 })
-    }
     if (!url) {
       return NextResponse.json({ error: 'url required' }, { status: 400 })
+    }
+    const inferred = inferPinContentType(url)
+    if (!type) type = inferred ?? undefined
+    else if (inferred && type !== inferred) type = inferred
+    if (type !== 'youtube' && type !== 'image') {
+      return NextResponse.json({ error: 'url must be a YouTube link or image URL (png, jpg, gif, webp, etc.)' }, { status: 400 })
     }
     const pinDurationMs = 60 * 1000
 

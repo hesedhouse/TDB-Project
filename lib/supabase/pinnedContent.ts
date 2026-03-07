@@ -23,9 +23,13 @@ function parseRow(row: {
   const until = row?.pinned_until
   if (!raw || typeof raw !== 'object' || !until) return null
   const obj = raw as Record<string, unknown>
-  const type = obj?.type
-  const url = typeof obj?.url === 'string' ? obj.url : ''
-  if ((type !== 'youtube' && type !== 'image') || !url) return null
+  let type = obj?.type
+  const url = typeof obj?.url === 'string' ? obj.url.trim() : ''
+  if (!url) return null
+  const inferred = inferPinContentType(url)
+  if (type !== 'youtube' && type !== 'image') type = inferred
+  else if (inferred && type !== inferred) type = inferred
+  if (type !== 'youtube' && type !== 'image') return null
   const pinnedUntil = new Date(until)
   if (Number.isNaN(pinnedUntil.getTime())) return null
   const pinnedAt = row?.pinned_at ? new Date(row.pinned_at) : undefined
@@ -78,7 +82,8 @@ export async function setPinnedContent(
   return true
 }
 
-/** 고정 전광판 변경 실시간 구독. 구독 해제 함수 반환. */
+/** 고정 전광판 변경 실시간 구독. 구독 해제 함수 반환.
+ * 누군가 '전광판에 띄우기'로 업데이트하면 boards UPDATE가 발생하고, 이 채널을 구독한 방 안 모든 유저의 onUpdate가 호출됨. */
 export function subscribePinnedContent(
   boardId: string,
   onUpdate: (state: PinnedState) => void
@@ -132,6 +137,29 @@ export function getYouTubeVideoId(url: string): string | null {
     const m = u.match(p)
     if (m?.[1]) return m[1]
   }
+  return null
+}
+
+/** URL이 YouTube 링크인지 (youtube.com / youtu.be 포함) */
+export function isYouTubeUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false
+  const u = url.trim().toLowerCase()
+  return u.includes('youtube.com') || u.includes('youtu.be')
+}
+
+/** URL이 이미지 확장자로 끝나거나 이미지 호스트인지 */
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|avif)(\?.*)?$/i
+export function isImageUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false
+  const u = url.trim()
+  return IMAGE_EXT.test(u) || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(u)
+}
+
+/** URL만 보고 전광판 콘텐츠 타입 추론 (youtube → 플레이어, 이미지 확장자 → 이미지) */
+export function inferPinContentType(url: string): 'youtube' | 'image' | null {
+  if (!url?.trim()) return null
+  if (isYouTubeUrl(url)) return 'youtube'
+  if (isImageUrl(url)) return 'image'
   return null
 }
 

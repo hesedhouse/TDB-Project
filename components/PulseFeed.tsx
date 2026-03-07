@@ -16,7 +16,7 @@ import { recordContribution, getTopContributors, subscribeToContributions, type 
 import { subscribeBoardPresence, type PresenceUser } from '@/lib/supabase/presence'
 import { joinRoom, leaveRoom, getActiveParticipants, getExistingParticipantForUser, subscribeToRoomParticipants, type RoomParticipant } from '@/lib/supabase/roomParticipants'
 import { getHourglasses, setHourglasses as persistHourglasses } from '@/lib/hourglass'
-import { getPinnedContent, subscribePinnedContent, getYouTubeVideoId, getPinTier, type PinnedState } from '@/lib/supabase/pinnedContent'
+import { getPinnedContent, subscribePinnedContent, getYouTubeVideoId, getPinTier, inferPinContentType, type PinnedState } from '@/lib/supabase/pinnedContent'
 import PinnedYouTubePlayer from './PinnedYouTubePlayer'
 import { shareBoard } from '@/lib/shareBoard'
 import { addOrUpdateSession, findSession } from '@/lib/activeSessions'
@@ -131,12 +131,16 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   const [showReportPopover, setShowReportPopover] = useState(false)
   const [reportReason, setReportReason] = useState<string>('')
   const [reportSubmitting, setReportSubmitting] = useState(false)
-  /** 전광판 접기 상태. 한 번 접으면 사용자가 펼치기 전까지 유지 */
-  const [pinnedCollapsed, setPinnedCollapsed] = useState(false)
+  /** 전광판 패널 표시 여부. 아이콘 클릭 시에만 열림, 초기값 닫힘 */
+  const [showBillboardPanel, setShowBillboardPanel] = useState(false)
+  /** 전광판 접기 상태(패널이 열려 있을 때). 초기값 접힘 */
+  const [pinnedCollapsed, setPinnedCollapsed] = useState(true)
   /** 이 클라이언트에서 전광판을 고정한 유저 여부 (카톡 스타일 강조용) */
   const [pinnedByCurrentUser, setPinnedByCurrentUser] = useState(false)
-  /** 새 고정 콘텐츠 시 자동 펼치기용: 마지막으로 본 pinned_until */
+  /** 새 고정 콘텐츠 도착 시 패널이 닫혀 있으면 아이콘 반짝임용 */
+  const [billboardNewContentSparkle, setBillboardNewContentSparkle] = useState(false)
   const lastPinnedUntilRef = useRef<string | null>(null)
+  const billboardSparkleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** 전광판 남은 시간 실시간 표시용 (1초마다 갱신) */
   const [pinnedTimerTick, setPinnedTimerTick] = useState(0)
   /** 유튜브 전광판: 새 영상/새 고정 시 재생 종료 플래그 초기화 */
@@ -193,10 +197,9 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return () => unsub()
   }, [useSupabaseWithUuid, boardId])
 
-  /** 5분 고정 전광판: 초기 조회 + Realtime 구독 + 만료 시 자동 해제 */
+  /** 전광판: 입장 시 DB에서 바로 안 가져옴(대기 상태). Realtime 구독만 해서 '전광판에 띄우기' 시에만 갱신 */
   useEffect(() => {
     if (!useSupabaseWithUuid || !boardId) return
-    getPinnedContent(boardId).then(setPinnedState).catch(() => setPinnedState(null))
     const unsub = subscribePinnedContent(boardId, (s) => {
       try {
         setPinnedState(s)
@@ -213,21 +216,36 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     return () => {
       unsub()
       clearInterval(interval)
+      if (billboardSparkleTimeoutRef.current) clearTimeout(billboardSparkleTimeoutRef.current)
     }
   }, [useSupabaseWithUuid, boardId])
 
-  /** 새 콘텐츠가 고정되면(pinned_until 갱신) 접혀 있던 전광판 자동 펼침 */
+  /** 새 고정 콘텐츠 도착 시: 패널이 닫혀 있으면 아이콘 반짝임. (내용만 교체, 자동 펼침 없음) */
   useEffect(() => {
-    if (!pinnedState || pinnedState.pinnedUntil.getTime() <= Date.now()) {
-      lastPinnedUntilRef.current = null
-      return
-    }
+    if (!pinnedState || pinnedState.pinnedUntil.getTime() <= Date.now()) return
     const key = pinnedState.pinnedUntil.toISOString()
-    if (lastPinnedUntilRef.current !== key) {
-      lastPinnedUntilRef.current = key
-      setPinnedCollapsed(false)
+    if (lastPinnedUntilRef.current === key) return
+    lastPinnedUntilRef.current = key
+    if (!showBillboardPanel) {
+      setBillboardNewContentSparkle(true)
+      if (billboardSparkleTimeoutRef.current) clearTimeout(billboardSparkleTimeoutRef.current)
+      billboardSparkleTimeoutRef.current = setTimeout(() => {
+        billboardSparkleTimeoutRef.current = null
+        setBillboardNewContentSparkle(false)
+      }, 6000)
     }
-  }, [pinnedState])
+  }, [pinnedState?.pinnedUntil?.toISOString(), pinnedState?.content?.url, showBillboardPanel])
+
+  /** 패널 열 때 반짝임 해제 */
+  useEffect(() => {
+    if (showBillboardPanel && billboardNewContentSparkle) {
+      setBillboardNewContentSparkle(false)
+      if (billboardSparkleTimeoutRef.current) {
+        clearTimeout(billboardSparkleTimeoutRef.current)
+        billboardSparkleTimeoutRef.current = null
+      }
+    }
+  }, [showBillboardPanel])
 
   /** 전광판 남은 시간 실시간 갱신 (1초마다) */
   useEffect(() => {
@@ -1424,17 +1442,25 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
               {useSupabaseWithUuid && (
                 <motion.button
                   type="button"
-                  onClick={() => setShowPinModal(true)}
+                  onClick={() => {
+                    setShowBillboardPanel((v) => !v)
+                    if (!showBillboardPanel) setBillboardNewContentSparkle(false)
+                  }}
                   className="relative flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border-2 border-neon-orange/60 bg-neon-orange/15 text-neon-orange hover:bg-neon-orange/25 hover:border-neon-orange/80 text-xs font-bold transition-colors flex items-center gap-1 sm:gap-1.5"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.98 }}
-                  title="전광판 고정"
-                  aria-label="전광판 고정"
+                  animate={billboardNewContentSparkle ? { boxShadow: ['0 0 0 0 rgba(255,107,0,0.4)', '0 0 20px 4px rgba(255,107,0,0.6)', '0 0 0 0 rgba(255,107,0,0.4)'], scale: [1, 1.08, 1] } : {}}
+                  transition={billboardNewContentSparkle ? { duration: 1.2, repeat: Infinity, repeatDelay: 0.5 } : undefined}
+                  title={showBillboardPanel ? '전광판 닫기' : '전광판 보기'}
+                  aria-label={showBillboardPanel ? '전광판 닫기' : '전광판 보기'}
                 >
                   <span aria-hidden>📌</span>
                   <span className="sm:hidden">전광판</span>
                   <Pin className="hidden sm:block w-3.5 h-3.5 flex-shrink-0" aria-hidden />
-                  <span className="hidden sm:inline">전광판 고정</span>
+                  <span className="hidden sm:inline">{showBillboardPanel ? '전광판 닫기' : '전광판'}</span>
+                  {pinnedState && pinnedState.pinnedUntil.getTime() > Date.now() && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 border border-neon-orange shadow-[0_0_6px_rgba(255,107,0,0.8)]" aria-hidden />
+                  )}
                 </motion.button>
               )}
               <motion.button
@@ -1647,14 +1673,22 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
         </motion.div>
       )}
 
-      {/* 5분 전광판: 영상/사진. flex-shrink-0으로 높이 고정, 헤더 아래 순서 유지 */}
-      {useSupabaseWithUuid && pinnedState && pinnedState.pinnedUntil.getTime() > Date.now() && (
+      {/* 전광판: 아이콘 클릭 시에만 표시. 입장 시 닫힘/빈 화면, 전광판에 띄우기로만 콘텐츠 갱신 */}
+      {useSupabaseWithUuid && showBillboardPanel && (
         <div className="relative z-40 flex-shrink-0 mx-1 mt-1 sm:mx-2 sm:mt-2 rounded-lg sm:rounded-xl overflow-hidden border border-neon-orange/30 bg-black/40">
-          {pinnedCollapsed ? (
+          {pinnedState && pinnedState.pinnedUntil.getTime() > Date.now() ? pinnedCollapsed ? (
             /* 접힌 상태: 최소화 바 + 펼치기 버튼 하단 중앙 */
             <div className="relative flex items-center justify-between gap-2 px-3 py-3 pb-14 flex-wrap">
               <span className="text-xs text-gray-400">현재 고정된 콘텐츠가 있습니다</span>
               <div className="flex items-center gap-1.5">
+                <motion.button
+                  type="button"
+                  onClick={() => setShowPinModal(true)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-neon-orange/20 text-neon-orange border border-neon-orange/40 hover:bg-neon-orange/30"
+                  aria-label="전광판에 띄우기"
+                >
+                  전광판에 띄우기
+                </motion.button>
                 <motion.button
                   type="button"
                   onClick={handleExtendPinned}
@@ -1735,9 +1769,11 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   </div>
                 )}
               </div>
-              {pinnedState.content.type === 'youtube' ? (
-                (() => {
-                  const videoId = getYouTubeVideoId(pinnedState.content.url)
+              {(() => {
+                const url = pinnedState.content.url
+                const displayType = inferPinContentType(url) ?? pinnedState.content.type
+                if (displayType === 'youtube') {
+                  const videoId = getYouTubeVideoId(url)
                   const pinKey = pinnedState.pinnedAt?.getTime() ?? pinnedState.pinnedUntil.getTime()
                   return videoId ? (
                     <div className="aspect-video w-full relative bg-black/60">
@@ -1758,16 +1794,30 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                       )}
                     </div>
                   ) : null
-                })()
-              ) : (
-                <img
-                  src={pinnedState.content.url}
-                  alt="고정 사진"
-                  className="w-full max-h-[280px] object-cover aspect-video"
-                />
-              )}
+                }
+                if (displayType === 'image') {
+                  return (
+                    <div className="aspect-video w-full min-h-[180px] flex items-center justify-center bg-black/40">
+                      <img
+                        src={url}
+                        alt="고정 사진"
+                        className="max-w-full max-h-[280px] w-auto h-auto object-contain"
+                      />
+                    </div>
+                  )
+                }
+                return null
+              })()}
               <div className="relative flex items-center gap-2 px-2 py-1.5 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <motion.button
+                    type="button"
+                    onClick={() => setShowPinModal(true)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-neon-orange/20 text-neon-orange border border-neon-orange/40 hover:bg-neon-orange/30"
+                    aria-label="전광판에 띄우기"
+                  >
+                    전광판에 띄우기
+                  </motion.button>
                   {(() => {
                     const rem = Math.max(0, pinnedState.pinnedUntil.getTime() - Date.now())
                     const m = Math.floor(rem / 60000)
@@ -1812,6 +1862,24 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 </div>
               </div>
             </>
+          ) ) : (
+            /* 대기 상태 / 키워드 배경: DB 영상 바로 안 띄움, 전광판에 띄우기로만 갱신 */
+            <div className="aspect-video w-full flex flex-col items-center justify-center gap-3 px-4 py-6 bg-black/40 text-center">
+              <span className="text-4xl opacity-70" aria-hidden>🍿</span>
+              <p className="text-sm font-medium text-white/80">전광판 대기 중</p>
+              <p className="text-xs text-gray-400">
+                {initialBoardName ?? (roomIdFromUrl ? `#${roomIdFromUrl}` : null) ?? '링크·사진을 전광판에 띄워 보세요'}
+              </p>
+              <motion.button
+                type="button"
+                onClick={() => setShowPinModal(true)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-neon-orange/20 text-neon-orange border border-neon-orange/50 hover:bg-neon-orange/30 transition-colors"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                전광판에 띄우기
+              </motion.button>
+            </div>
           )}
         </div>
       )}
@@ -2428,8 +2496,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                 <input
                   type="url"
                   value={pinInputUrl}
-                  onChange={(e) => { setPinInputUrl(e.target.value); setPinError(null) }}
-                  placeholder="유튜브 링크 붙여넣기"
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setPinInputUrl(v)
+                    setPinError(null)
+                    const t = inferPinContentType(v)
+                    if (t) setPinType(t)
+                  }}
+                  placeholder="유튜브 링크 붙여넣기 (youtube.com / youtu.be)"
                   className="w-full px-4 py-3 rounded-xl glass border border-neon-orange/30 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-sm"
                 />
               ) : (
@@ -2451,8 +2525,14 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
                   <input
                     type="url"
                     value={pinInputUrl}
-                    onChange={(e) => { setPinInputUrl(e.target.value); setPinError(null) }}
-                    placeholder="또는 이미지 주소 입력"
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setPinInputUrl(v)
+                      setPinError(null)
+                      const t = inferPinContentType(v)
+                      if (t) setPinType(t)
+                    }}
+                    placeholder="또는 이미지 주소 (png, jpg, gif, webp 등)"
                     className="w-full mt-2 px-4 py-2 rounded-xl glass border border-white/20 focus:border-neon-orange focus:outline-none text-white placeholder-gray-500 text-xs"
                   />
                   {pinPreviewUrl && (
