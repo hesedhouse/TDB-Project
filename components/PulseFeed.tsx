@@ -41,6 +41,8 @@ interface PulseFeedProps {
   initialCreatedAt?: Date | null
   /** 방 표시명 (예: #키워드) */
   initialBoardName?: string | null
+  /** 트렌드 태그에서 입장 시 전달된 관련 영상 URL (전광판 고정 추천용) */
+  suggestUrl?: string | null
 }
 
 /** 포스트/메시지별 댓글 (로컬 상태, image_c91edc 스타일) */
@@ -53,7 +55,7 @@ export interface Comment {
   createdAt: Date
 }
 
-export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFromUrl, userCharacter: rawUserCharacter, userNickname: rawUserNickname, userId, onBack, initialExpiresAt, initialCreatedAt, initialBoardName }: PulseFeedProps) {
+export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFromUrl, userCharacter: rawUserCharacter, userNickname: rawUserNickname, userId, onBack, initialExpiresAt, initialCreatedAt, initialBoardName, suggestUrl }: PulseFeedProps) {
   const router = useRouter()
   const pathname = usePathname()
   /** 방/유저 정보가 아직 준비되지 않았을 때를 대비한 안전한 기본값 (클라이언트 에러 방지) */
@@ -1614,6 +1616,30 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
           </div>
         </div>
       </header>
+
+      {/* 트렌드 태그에서 입장 시: 관련 영상 전광판 고정 추천 */}
+      {suggestUrl && getYouTubeVideoId(suggestUrl) && (
+        <motion.div
+          className="flex-shrink-0 mx-2 mt-1 flex justify-center"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.button
+            type="button"
+            onClick={() => {
+              setPinType('youtube')
+              setPinInputUrl(suggestUrl!)
+              setShowPinModal(true)
+            }}
+            className="px-4 py-2 rounded-xl text-xs font-semibold bg-neon-orange/20 text-neon-orange border border-neon-orange/40 hover:bg-neon-orange/30"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            🎬 이 영상 전광판에 고정하기
+          </motion.button>
+        </motion.div>
+      )}
 
       {/* 5분 전광판: 영상/사진. flex-shrink-0으로 높이 고정, 헤더 아래 순서 유지 */}
       {useSupabaseWithUuid && pinnedState && pinnedState.pinnedUntil.getTime() > Date.now() && (

@@ -156,6 +156,66 @@ export async function getOrCreateBoardByKeyword(keyword: string): Promise<BoardR
 }
 
 /**
+ * 키워드로 활성 방 1개 조회 (남은 시간이 있는 방만). 없으면 null.
+ */
+export async function getActiveBoardByKeyword(keyword: string): Promise<BoardRow | null> {
+  const supabase = createClient()
+  if (!supabase) return null
+  const normalized = keyword.trim()
+  if (!normalized) return null
+
+  const now = new Date().toISOString()
+  const cols = 'id, keyword, name, expires_at, created_at, public_id, is_active, exploded_at'
+  const { data, error } = await supabase
+    .from('boards')
+    .select(cols)
+    .eq('keyword', normalized)
+    .gt('expires_at', now)
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    const legacy = await supabase.from('boards').select('id, keyword, name, expires_at, created_at, public_id').eq('keyword', normalized).gt('expires_at', now).order('expires_at', { ascending: false }).limit(1).maybeSingle()
+    if (legacy.error || !legacy.data) return null
+    return normalizeBoardRow(legacy.data as BoardRowSelected)
+  }
+  if (!data) return null
+  const row = data as BoardRowSelected
+  if (row.is_active === false) return null
+  return normalizeBoardRow(row)
+}
+
+/**
+ * 방 새로 생성 (키워드·표시명·만료 시각 지정). 서버 전용.
+ */
+export async function createBoard(keyword: string, options: { expiresInMs?: number; name?: string }): Promise<BoardRow | null> {
+  const supabase = createClient()
+  if (!supabase) return null
+  const normalized = keyword.trim()
+  if (!normalized) return null
+
+  const expiresInMs = options?.expiresInMs ?? 7 * 24 * 60 * 60 * 1000
+  const expiresAt = new Date(Date.now() + expiresInMs).toISOString()
+  const name = options?.name ?? `#${normalized}`
+
+  const insertPayload = {
+    keyword: normalized,
+    name,
+    title: name,
+    expires_at: expiresAt,
+  }
+  const selectCols = 'id, keyword, name, expires_at, created_at, public_id'
+  const { data, error } = await supabase.from('boards').insert(insertPayload).select(selectCols).single()
+  if (error) {
+    const fallback = await supabase.from('boards').insert(insertPayload).select('id, keyword, name, expires_at, created_at').single()
+    if (fallback.error || !fallback.data) return null
+    return normalizeBoardRow(fallback.data as BoardRowSelected)
+  }
+  return normalizeBoardRow((data as BoardRowSelected))
+}
+
+/**
  * UUID로 방을 조회합니다. (URL이 /board/[uuid] 일 때 사용). 반환: Board | null
  */
 export async function getBoardById(id: string): Promise<BoardRow | null> {

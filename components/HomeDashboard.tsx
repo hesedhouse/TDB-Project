@@ -6,13 +6,22 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import DotCharacter from './DotCharacter'
-import { mockBoards, getTrendKeywords, filterActiveBoards, formatRemainingTimer } from '@/lib/mockData'
+import { mockBoards, filterActiveBoards, formatRemainingTimer } from '@/lib/mockData'
 import { getHourglasses } from '@/lib/hourglass'
 import { isSupabaseConfigured } from '@/lib/supabase/client'
 import { createClient } from '@/lib/supabase/client'
 import { signOut as nextAuthSignOut, useSession } from 'next-auth/react'
 import { useAuth } from '@/lib/supabase/auth'
-import { getFloatingTags, type FloatingTag } from '@/lib/supabase/trendingKeywords'
+import { getFloatingTags } from '@/lib/supabase/trendingKeywords'
+import { createBoardFromKeyword } from '@/app/actions/board'
+
+/** API에서 오는 트렌드 키워드 한 건 (rank/platform으로 스타일링) */
+type TrendingTagItem = {
+  keyword: string
+  platform: string | null
+  rank: number | null
+  related_url: string | null
+}
 import { searchBoards, getImmortalBoards, getHotPlacesBoards, type BoardRow, type HotPlaceEntry } from '@/lib/supabase/boards'
 import { getActiveParticipants, getExistingParticipantForUser, subscribeToRoomParticipants } from '@/lib/supabase/roomParticipants'
 import { useTick } from '@/lib/TickContext'
@@ -55,10 +64,9 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
   const displayName = (user?.user_metadata as { full_name?: string } | undefined)?.full_name ?? nextSession?.user?.name ?? null
   const isNextAuthUser = !user && !!nextSession?.user
   const [searchQuery, setSearchQuery] = useState('')
-  const [floatingTags, setFloatingTags] = useState<FloatingTag[]>(() =>
-    getTrendKeywords().map((word) => ({ word, source: 'board' as const }))
-  )
-  const [featuredKeywords, setFeaturedKeywords] = useState<Set<string>>(new Set(['맛집', '데이트', '카페']))
+  /** 플로팅 태그: API에서 15~20개 랜덤 로드 (rank/platform으로 스타일링) */
+  const [floatingTags, setFloatingTags] = useState<TrendingTagItem[]>([])
+  const [floatingTagsLoading, setFloatingTagsLoading] = useState(true)
   const [userBoards] = useState<Board[]>(filterActiveBoards(mockBoards.slice(0, 2)))
   const [warpingBoardId, setWarpingBoardId] = useState<string | null>(null)
   const [warpingKeyword, setWarpingKeyword] = useState<string | null>(null)
@@ -188,13 +196,33 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     return () => clearInterval(id)
   }, [useSupabase, user?.id])
 
-  // 초기 플로팅 태그: boards + trending_keywords 혼합 (Supabase 사용 시)
+  // 플로팅 태그: 앱 로드 시 API에서 최신 트렌드 15~20개 랜덤 로드 (실패 시 getFloatingTags 폴백)
   useEffect(() => {
-    if (!useSupabase) return
-    getFloatingTags().then((tags) => {
-      if (tags.length > 0) setFloatingTags(tags)
-    })
-  }, [useSupabase])
+    setFloatingTagsLoading(true)
+    fetch('/api/trending-keywords?min=15&max=20')
+      .then((res) => res.json())
+      .then((data: { keywords?: TrendingTagItem[] }) => {
+        const list = data?.keywords ?? []
+        if (Array.isArray(list) && list.length > 0) {
+          setFloatingTags(list.map((k) => ({
+            keyword: (k.keyword ?? '').trim(),
+            platform: k.platform ?? null,
+            rank: k.rank ?? null,
+            related_url: k.related_url ?? null,
+          })).filter((k) => k.keyword.length > 0))
+        } else {
+          getFloatingTags(20).then((tags) => {
+            setFloatingTags(tags.map((t) => ({ keyword: t.word, platform: null, rank: null, related_url: null })))
+          })
+        }
+      })
+      .catch(() => {
+        getFloatingTags(20).then((tags) => {
+          setFloatingTags(tags.map((t) => ({ keyword: t.word, platform: null, rank: null, related_url: null })))
+        })
+      })
+      .finally(() => setFloatingTagsLoading(false))
+  }, [])
 
   /** 명예의 전당: 초기 로드 + 1시간마다 갱신 */
   const fetchHallOfFame = useCallback(async () => {
@@ -337,7 +365,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
   useEffect(() => {
     if (!mounted || floatingTags.length === 0) return
-    const seed = floatingTags.map((t) => t.word).join('|').length
+    const seed = floatingTags.map((t) => t.keyword).join('|').length
     const rnd = (s: number) => ((Math.sin(s) * 10000) % 1 + 1) % 1
     const MIN_GAP = 7
     const positions: { left: number; top: number }[] = []
@@ -370,14 +398,39 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
     }, 600)
   }
 
-  /** 유행어/방 태그 클릭 → 해당 검색어로 방 만들기(입장) 페이지로 이동 */
-  const handleKeywordClick = (keyword: string) => {
-    setWarpingKeyword(keyword)
-    setTimeout(() => {
-      router.push(`/board/${encodeURIComponent(keyword)}`)
-      setWarpingKeyword(null)
-    }, 500)
-  }
+  /** 하이패스: 태그 클릭 시 Server Action createBoardFromKeyword → "방으로 순간이동 중...🍿" 오버레이 → boardId로 즉시 입장 */
+  const [roomResolvingLoading, setRoomResolvingLoading] = useState(false)
+  const handleKeywordClick = useCallback(
+    async (keyword: string, _relatedUrl?: string | null) => {
+      if (roomResolvingLoading) return
+      const k = keyword.trim()
+      if (!useSupabase) {
+        router.push(`/board/${encodeURIComponent(k)}`)
+        return
+      }
+      setWarpingKeyword(k)
+      setRoomResolvingLoading(true)
+      try {
+        const result = await createBoardFromKeyword(k)
+        if (result.ok) {
+          const path =
+            typeof result.boardId === 'number'
+              ? `/board/${result.boardId}`
+              : `/board/${encodeURIComponent(String(result.boardId))}`
+          router.push(path)
+        } else {
+          if (typeof window !== 'undefined') window.alert(result.error ?? '방을 만들 수 없습니다.')
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '방을 만들 수 없습니다.'
+        if (typeof window !== 'undefined') window.alert(message)
+      } finally {
+        setRoomResolvingLoading(false)
+        setWarpingKeyword(null)
+      }
+    },
+    [roomResolvingLoading, router, useSupabase]
+  )
 
   /** 검색 결과에서 방 선택: 기존 참여자면 저장된 닉네임으로 즉시 입장, 신규면 닉네임 모달 후 입장 */
   const handleSelectSearchResult = useCallback(
@@ -569,6 +622,26 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
 
   return (
     <div className="min-h-screen bg-midnight-black text-white pb-20 safe-bottom pt-14 md:pt-6 px-6 max-w-7xl mx-auto">
+      {/* 플로팅 태그 클릭 시: 방 검색/생성 중 로딩 오버레이 */}
+      <AnimatePresence>
+        {roomResolvingLoading && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-black/70 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <motion.div
+              className="w-12 h-12 border-4 border-neon-orange/50 border-t-neon-orange rounded-full"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            />
+            <p className="text-white font-bold text-lg">방으로 순간이동 중...🍿</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header: 좌측 로고(홈 링크), 우측 이메일·로그아웃·모래시계 */}
       <header className="flex justify-between items-center flex-wrap gap-2 mb-6 pt-4 sm:pt-8 safe-top">
         <div className="flex items-center min-w-0 flex-shrink-0">
@@ -766,7 +839,7 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
           </div>
         </div>
         
-        {/* 플로팅 태그: 너비 100%, overflow visible로 우측 잘림 없이 가로폭 전체 유영 */}
+        {/* 플로팅 태그: API에서 로드한 트렌드 15~20개 (rank/platform 스타일), 클릭 시 해당 키워드 방으로 이동 */}
         <div
           className="relative min-h-[300px] h-56 sm:h-64 rounded-2xl overflow-visible floating-tags-container w-full"
           style={{
@@ -776,15 +849,20 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
             filter: 'none',
           }}
         >
+          {floatingTagsLoading && floatingTags.length === 0 && (
+            <p className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-500 text-sm">트렌드 키워드 불러오는 중…</p>
+          )}
           <AnimatePresence initial={false}>
             {floatingTags.map((tag, index) => {
-              const { word } = tag
+              const { keyword, platform, rank, related_url } = tag
               const pos = tagPositions[index] ?? { left: 10 + (index % 5) * 18, top: 10 + Math.floor(index / 5) * 20 }
-              const isFeatured = featuredKeywords.has(word)
+              const isFeatured = rank != null && rank <= 3
               const delay = index * 0.15
+              const platformStyle = platform === 'youtube' ? 'text-red-300/90' : platform === 'google' ? 'text-amber-300/90' : 'text-neon-orange/90'
+              const sizeClass = rank != null && rank <= 5 ? 'text-xs sm:text-base' : 'text-xs sm:text-sm'
               return (
                 <motion.div
-                  key={`tag-${index}-${word}`}
+                  key={`tag-${index}-${keyword}`}
                   className="absolute w-0 h-0 overflow-visible"
                   style={{
                     left: `${pos.left}%`,
@@ -796,12 +874,12 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                   transition={{ duration: 2.5 }}
                 >
                   <motion.div
-                    className={`floating-tag-pill rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none whitespace-nowrap ${
+                    className={`floating-tag-pill rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer select-none whitespace-nowrap ${platformStyle} ${sizeClass} ${
                       isFeatured ? 'floating-tag-glow' : 'floating-tag-soft'
                     }`}
                     style={{ willChange: 'transform', transform: 'translate3d(0,0,0)' }}
                     initial={{ opacity: 0, scale: 0 }}
-                    onClick={() => handleKeywordClick(word)}
+                    onClick={() => handleKeywordClick(keyword, related_url)}
                     animate={{
                       opacity: isFeatured ? [0.8, 1, 0.8] : [0.5, 0.7, 0.5],
                       scale: isFeatured ? [1, 1.15, 1] : [1, 1.05, 1],
@@ -832,12 +910,12 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                       transition: { duration: 0.18 },
                     }}
                   >
-                <span className="floating-tag-text text-xs sm:text-sm font-black">
-                  #{word}
+                <span className="floating-tag-text font-black">
+                  #{keyword}
                 </span>
                 {/* 클릭 시 픽셀 파티클 효과 */}
                 <AnimatePresence>
-                  {warpingKeyword === word && (
+                  {warpingKeyword === keyword && (
                     <>
                       {Array.from({ length: 6 }).map((_, i) => (
                         <motion.span

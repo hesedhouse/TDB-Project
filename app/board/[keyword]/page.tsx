@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSession } from 'next-auth/react'
 import PulseFeed from '@/components/PulseFeed'
@@ -40,6 +40,8 @@ function safeDecodeKeyword(raw: string): string {
 export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) {
   // ——— 훅은 항상 최상단, 조건/return 이전에 모두 호출 ———
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const suggestUrl = searchParams?.get('suggestUrl') ?? null
   const decodedKeyword = safeDecodeKeyword(params.keyword ?? '')
   const { user: authUser, loading: authLoading } = useAuth()
   const { data: nextSession, status: nextAuthStatus } = useSession()
@@ -300,6 +302,7 @@ export default function BoardByKeywordPage({ params }: BoardByKeywordPageProps) 
             initialExpiresAt={new Date(supabaseBoard.expires_at)}
             initialCreatedAt={new Date(supabaseBoard.created_at)}
             initialBoardName={supabaseBoard.name ?? `#${decodedKeyword}`}
+            suggestUrl={suggestUrl}
           />
           </div>
         )}
