@@ -1,6 +1,13 @@
-# 실시간 트렌드 키워드 수집 — 1시간마다 실행 (Cron)
+# 실시간 트렌드 키워드 수집 — 스케줄 설정 (Cron)
 
-`fetch-google-trends` Edge Function을 1시간마다 자동 실행하려면 아래 중 하나를 사용하세요.
+**메인 화면 키워드가 갱신되지 않을 때** 확인할 것:
+
+1. **스케줄러 동작 여부** — 아래 방법 2(cron-job.org 등)에서 `fetch-trending-keywords` URL을 **30분마다** 호출하고 있는지 확인.
+2. **수동 실행** — 아래 "로컬/수동 테스트"로 한 번 호출 후, Supabase Dashboard → Table Editor → `trending_keywords` 에 새 행이 들어오는지 확인.
+3. **Edge Function 로그** — Dashboard → Edge Functions → `fetch-trending-keywords` → Logs 에서 Google Trends 실패(4xx/5xx) 또는 Insert 실패 로그 확인.
+
+주 사용 함수: **`fetch-trending-keywords`** (Google Trends RSS + YouTube 인기 영상 → `trending_keywords` 테이블).  
+예전 단일 함수 `fetch-google-trends` 를 1시간마다 쓰는 경우 아래 방법 1 참고.
 
 ---
 
@@ -89,4 +96,16 @@ Google Trends RSS와 YouTube 인기 영상 제목을 한 번에 수집하는 Edg
 ### 30분마다 실행
 
 - **cron-job.org**: `*/30 * * * *` (30분 간격)으로 위 URL POST 호출.
-- **로컬 테스트**: `supabase functions invoke fetch-trending-keywords --no-verify-jwt`
+- **로컬/수동 테스트**:
+  ```bash
+  # CLI (배포된 프로젝트 대상)
+  supabase functions invoke fetch-trending-keywords --no-verify-jwt
+  ```
+  ```powershell
+  # PowerShell curl (배포된 URL에 직접 호출 — SERVICE_ROLE_KEY 또는 ANON_KEY 사용)
+  $url = "https://nkicvcmctysrewwherak.supabase.co/functions/v1/fetch-trending-keywords"
+  $key = "YOUR_SUPABASE_ANON_OR_SERVICE_ROLE_KEY"
+  Invoke-RestMethod -Uri $url -Method Post -Headers @{ Authorization = "Bearer $key" } -ContentType "application/json"
+  ```
+  성공 시 응답 예: `{"ok":true,"count":50,"google":50,"youtube":0}`.  
+  DB 확인: Supabase Dashboard → Table Editor → `trending_keywords` → 최신 `created_at` 갱신 여부.

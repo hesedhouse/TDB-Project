@@ -67,7 +67,11 @@ async function fetchGoogleTrends(): Promise<Row[]> {
       'Accept': 'application/rss+xml, application/xml, text/xml',
     },
   })
-  if (!res.ok) return []
+  if (!res.ok) {
+    const body = await res.text()
+    console.error('Google Trends RSS failed', res.status, res.statusText, body.slice(0, 500))
+    return []
+  }
   const xml = await res.text()
   const items = parseGoogleRss(xml).slice(0, 50)
   const now = new Date().toISOString()
