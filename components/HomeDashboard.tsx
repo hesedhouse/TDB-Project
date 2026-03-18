@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowRight, Eye, EyeOff } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, TrendingUp, Youtube } from 'lucide-react'
 import DotCharacter from './DotCharacter'
 import { mockBoards, filterActiveBoards, formatRemainingTimer } from '@/lib/mockData'
 import { getHourglasses } from '@/lib/hourglass'
@@ -856,8 +856,14 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
               const pos = tagPositions[index] ?? { left: 10 + (index % 5) * 18, top: 10 + Math.floor(index / 5) * 20 }
               const isFeatured = rank != null && rank <= 3
               const delay = index * 0.15
-              const platformStyle = platform === 'youtube' ? 'text-red-300/90' : platform === 'google' ? 'text-amber-300/90' : 'text-neon-orange/90'
+              const platformStyle =
+                platform === 'youtube'
+                  ? 'text-red-100 bg-red-500/15 border border-red-500/25'
+                  : platform === 'google'
+                    ? 'text-sky-100 bg-sky-500/15 border border-sky-500/25'
+                    : 'text-neon-orange/90 bg-neon-orange/10 border border-neon-orange/20'
               const sizeClass = rank != null && rank <= 5 ? 'text-xs sm:text-base' : 'text-xs sm:text-sm'
+              const PlatformIcon = platform === 'youtube' ? Youtube : platform === 'google' ? TrendingUp : null
               return (
                 <motion.div
                   key={`tag-${index}-${keyword}`}
@@ -908,8 +914,9 @@ function HomeDashboardInner({ onEnterBoard }: HomeDashboardProps) {
                       transition: { duration: 0.18 },
                     }}
                   >
-                <span className="floating-tag-text font-black">
-                  #{keyword}
+                <span className="floating-tag-text font-black inline-flex items-center gap-1.5">
+                  {PlatformIcon && <PlatformIcon size={14} className="opacity-90" aria-hidden />}
+                  <span>#{keyword}</span>
                 </span>
                 {/* 클릭 시 픽셀 파티클 효과 */}
                 <AnimatePresence>

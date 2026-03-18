@@ -15,6 +15,45 @@ type Row = {
   created_at: string
 }
 
+function toMaxChars(input: string, maxChars: number): string {
+  if (maxChars <= 0) return ''
+  return Array.from(input).slice(0, maxChars).join('')
+}
+
+function stripSpecialChars(input: string): string {
+  // keep letters/numbers/spaces only (unicode-safe)
+  return input.replace(/[^\p{L}\p{N}\s]/gu, ' ')
+}
+
+function normalizeSpaces(input: string): string {
+  return input.replace(/\s+/g, ' ').trim()
+}
+
+function sanitizeYouTubeTitleToKeyword(title: string): string {
+  let t = (title ?? '').trim()
+  if (!t) return ''
+
+  // Prefer leading [...] or (...) label if present
+  const leadingBracket = t.match(/^\[([^\]]+)\]/)
+  if (leadingBracket?.[1]) t = leadingBracket[1].trim()
+  const leadingParen = t.match(/^\(([^)]+)\)/)
+  if (!leadingBracket?.[1] && leadingParen?.[1]) t = leadingParen[1].trim()
+
+  // Drop everything after first pipe
+  const pipeIdx = t.indexOf('|')
+  if (pipeIdx >= 0) t = t.slice(0, pipeIdx).trim()
+
+  // Remove any remaining bracket/paren segments anywhere
+  t = t.replace(/\[[^\]]*?\]/g, ' ')
+  t = t.replace(/\([^)]*?\)/g, ' ')
+
+  // Remove special chars, normalize spaces
+  t = normalizeSpaces(stripSpecialChars(t))
+
+  // Final max 10 characters
+  return toMaxChars(t, 10)
+}
+
 function parseGoogleRss(xml: string): { keyword: string; related_url: string | null }[] {
   const out: { keyword: string; related_url: string | null }[] = []
   const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi
@@ -102,13 +141,20 @@ async function fetchYouTubeTrends(apiKey: string): Promise<Row[]> {
   const json = await res.json()
   const items = (json.items ?? []) as { id: string; snippet?: { title?: string } }[]
   const now = new Date().toISOString()
-  return items.map((item, i) => ({
-    platform: 'youtube',
-    keyword: (item.snippet?.title ?? '').trim() || `Video ${item.id}`,
-    related_url: `https://www.youtube.com/watch?v=${item.id}`,
-    rank: i + 1,
-    created_at: now,
-  })).filter((r) => r.keyword.length > 0 && r.keyword.length < 300)
+  return items
+    .map((item, i) => {
+      const rawTitle = (item.snippet?.title ?? '').trim()
+      const keyword = sanitizeYouTubeTitleToKeyword(rawTitle)
+      return {
+        platform: 'youtube',
+        keyword: keyword || `Video${String(item.id).slice(0, 6)}`,
+        related_url: `https://www.youtube.com/watch?v=${item.id}`,
+        rank: i + 1,
+        created_at: now,
+      }
+    })
+    // 유튜브 키워드는 1~10글자까지만 허용
+    .filter((r) => r.keyword.length > 0 && r.keyword.length <= 10)
 }
 
 Deno.serve(async (req: Request) => {
