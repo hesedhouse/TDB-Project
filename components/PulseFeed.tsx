@@ -1136,10 +1136,12 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
   /** 전광판 전용 공유: Web Share API (모바일 기본 공유창) */
   const handleBillboardShare = useCallback(async () => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return
-    const url = window.location.href
     const keyword = headerTitle
     const title = '🍿 지금 Poppin 전광판은 내가 접수함!'
     const text = `실시간 트렌드 전광판 Poppin에서 ${keyword} 방을 구경해보세요!`
+    // OG 크롤러를 위해 공유는 "전용 SSR 페이지"로 유도 (캐시 회피용 타임스탬프 포함)
+    const base = window.location.origin.replace(/\/$/, '')
+    const url = `${base}/rooms/${encodeURIComponent(boardId)}?t=${Date.now()}`
 
     if (navigator.share) {
       try {
