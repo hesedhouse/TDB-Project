@@ -46,6 +46,10 @@ async function fetchYouTubeOEmbed(url: string): Promise<{ title?: string; thumbn
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+const OG_MAIN_URL = 'https://poppinapps.com/og-main.png'
+const OG_TITLE = '🍿 지금 Poppin 전광판은 내가 접수함!'
+const OG_DESCRIPTION_BASE = '실시간 트렌드 전광판 Poppin에서 '
+
 /**
  * 공유 전용 SSR 페이지.
  * - 서버에서 boards의 pinned_content(전광판 active 콘텐츠)를 직접 조회
@@ -54,13 +58,17 @@ export const revalidate = 0
  * 공유 URL: /rooms/[id]?t=timestamp
  */
 export async function generateMetadata(
-  { params }: { params: { id: string } }
+  {
+    params,
+    searchParams,
+  }: { params: { id: string }; searchParams?: { v?: string } }
 ): Promise<Metadata> {
   const baseUrl = getBaseUrl()
   const id = (params?.id ?? '').trim()
+  const v = searchParams?.v ?? ''
+  const pageUrl = `${baseUrl}/rooms/${encodeURIComponent(id)}${v ? `?v=${encodeURIComponent(v)}` : ''}`
 
-  const title = '🍿 지금 Poppin 전광판은 내가 접수함!'
-  const fallbackImage = `${baseUrl}/og-image.png`
+  const title = OG_TITLE
 
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim()
   const key =
@@ -72,8 +80,8 @@ export async function generateMetadata(
     return {
       title,
       description,
-      openGraph: { title, description, images: [{ url: fallbackImage, width: 1200, height: 630 }] },
-      twitter: { card: 'summary_large_image', title, description, images: [fallbackImage] },
+      openGraph: { title, description, images: [{ url: OG_MAIN_URL, width: 1200, height: 630 }] },
+      twitter: { card: 'summary_large_image', title, description, images: [OG_MAIN_URL] },
     }
   }
 
@@ -89,54 +97,39 @@ export async function generateMetadata(
 
   const keyword = (data?.keyword ?? '').toString().trim()
   const description = keyword
-    ? `실시간 트렌드 전광판 Poppin에서 ${keyword} 방을 구경해보세요!`
+    ? `${OG_DESCRIPTION_BASE}${keyword} 방을 구경해보세요!`
     : '실시간 트렌드 전광판 Poppin을 구경해보세요!'
 
-  // 기본은 서버 OG 이미지 API를 사용 (요청 시점 최신 전광판을 반영)
-  let ogImage = `${baseUrl}/api/og/billboard?keyword=${encodeURIComponent(keyword)}`
-  let ogTitle = title
-
-  // pinned_content가 유효하면, 크롤러 호환성을 위해 og:image를 “직접 이미지 URL”로도 세팅
-  const until = data?.pinned_until ? new Date(String(data.pinned_until)) : null
-  const isActive = until != null && !Number.isNaN(until.getTime()) && until.getTime() > Date.now()
-  const content = (data?.pinned_content ?? null) as PinnedContent | null
-  const contentUrl = typeof content?.url === 'string' ? content.url.trim() : ''
-
-  if (isActive && contentUrl) {
-    if (content?.type === 'image') {
-      ogImage = contentUrl
-    } else {
-      // YouTube: oEmbed로 제목/썸네일을 서버에서 직접 가져와 head에 주입
-      const oembed = await fetchYouTubeOEmbed(contentUrl)
-      if (oembed?.title) ogTitle = oembed.title
-      if (oembed?.thumbnail_url) ogImage = oembed.thumbnail_url
-      else {
-        const vid = getYouTubeVideoId(contentUrl)
-        if (vid) ogImage = `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`
-      }
-    }
-  }
-
   return {
-    title: ogTitle,
+    title,
     description,
     openGraph: {
-      title: ogTitle,
+      title,
       description,
-      images: [{ url: ogImage, width: 1200, height: 630, alt: keyword ? `Poppin 전광판 - ${keyword}` : 'Poppin 전광판' }],
+      images: [{ url: OG_MAIN_URL, width: 1200, height: 630, alt: keyword ? `Poppin 전광판 - ${keyword}` : 'Poppin 전광판' }],
+      url: pageUrl,
     },
     twitter: {
       card: 'summary_large_image',
-      title: ogTitle,
+      title,
       description,
-      images: [ogImage],
+      images: [OG_MAIN_URL],
     },
+    alternates: { canonical: pageUrl },
   }
 }
 
-export default async function RoomSharePage({ params }: { params: { id: string } }) {
+export default async function RoomSharePage({
+  params,
+  searchParams,
+}: {
+  params: { id: string }
+  searchParams?: { v?: string }
+}) {
   const baseUrl = getBaseUrl()
   const id = (params?.id ?? '').trim()
+  const v = searchParams?.v ?? ''
+  const pageUrl = `${baseUrl}/rooms/${encodeURIComponent(id)}${v ? `?v=${encodeURIComponent(v)}` : ''}`
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim()
   const key =
     (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim() ||
@@ -168,7 +161,7 @@ export default async function RoomSharePage({ params }: { params: { id: string }
         </p>
       </div>
       {/* metadataBase가 없을 때도 안전하도록 baseUrl을 한번 사용 */}
-      <link rel="canonical" href={`${baseUrl}/rooms/${encodeURIComponent(id)}`} />
+      <link rel="canonical" href={pageUrl} />
     </div>
   )
 }

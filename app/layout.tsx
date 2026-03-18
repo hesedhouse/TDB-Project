@@ -24,7 +24,7 @@ export const metadata: Metadata = {
       '핫한 소식 찾아 헤매지 마! 지금 가장 힙한 정보만 모아서 다 같이 수다 떠는 중💬 모래시계 터지기 전에 막차 탑승 가보자고!',
     images: [
       {
-        url: '/og-image.png',
+        url: 'https://poppinapps.com/og-main.png',
         width: 1200,
         height: 630,
         alt: '팝핀 - 실시간 정보와 수다',
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
     title: '팝핀(Poppin) | 지금 다들 뭐 봐? 실시간 핫플 🔥',
     description:
       '핫한 소식 찾아 헤매지 마! 지금 가장 힙한 정보만 모아서 다 같이 수다 떠는 중💬 모래시계 터지기 전에 막차 탑승 가보자고!',
-    images: ['/og-image.png'],
+    images: ['https://poppinapps.com/og-main.png'],
   },
 }
 
