@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LogOut, Pin, ShoppingBag } from 'lucide-react'
+import { LogOut, Pin, Share2, ShoppingBag } from 'lucide-react'
 import DotCharacter from './DotCharacter'
 import { mockBoards, mockPosts, extendBoardLifespan, formatRemainingTimer } from '@/lib/mockData'
 import type { Post, Board } from '@/lib/mockData'
@@ -1133,6 +1133,32 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
     }
   }, [boardId, displayBoard.name])
 
+  /** 전광판 전용 공유: Web Share API (모바일 기본 공유창) */
+  const handleBillboardShare = useCallback(async () => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') return
+    const url = window.location.href
+    const keyword = headerTitle
+    const title = '🍿 지금 Poppin 전광판은 내가 접수함!'
+    const text = `실시간 트렌드 전광판 Poppin에서 ${keyword} 방을 구경해보세요!`
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url })
+        return
+      } catch {
+        // AbortError 등은 무시하고 fallback
+      }
+    }
+    // fallback: 링크 복사 토스트 재사용
+    try {
+      await navigator.clipboard.writeText(url)
+      setShowShareToast(true)
+      setTimeout(() => setShowShareToast(false), 2500)
+    } catch {
+      setNoCopyToast('복사 실패')
+    }
+  }, [headerTitle])
+
   /** 방 번호 클릭 시 전체 방 URL 복사 + 토스트 */
   const handleCopyRoomLink = useCallback(async () => {
     try {
@@ -1825,7 +1851,19 @@ export default function PulseFeed({ boardId: rawBoardId, boardPublicId, roomIdFr
             </div>
           ) : (
             <>
-              <div className="absolute top-2 right-2 z-10">
+              <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+                {/* 전광판 공유 버튼 (우측 상단) */}
+                <motion.button
+                  type="button"
+                  onClick={handleBillboardShare}
+                  className="px-2 py-1 rounded-lg text-xs font-medium bg-white/10 text-white/90 border border-white/20 hover:bg-white/15"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  aria-label="전광판 공유하기"
+                  title="전광판 공유하기"
+                >
+                  <Share2 className="w-4 h-4" aria-hidden />
+                </motion.button>
                 <motion.button
                   type="button"
                   onClick={() => setShowReportPopover((v) => !v)}
